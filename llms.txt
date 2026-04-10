@@ -1,0 +1,52 @@
+# Mnemoverse MCP Memory Server
+
+> Persistent AI memory via Model Context Protocol. Store and recall memories across sessions.
+
+## Tools
+
+### memory_write
+Store a memory — insight, pattern, preference, or fact. Persists across sessions.
+
+Parameters:
+- content (string, required): The memory to store — what happened, what was learned. 1-10000 chars.
+- concepts (string[], optional): Key concepts for linking related memories. Example: ["deploy", "friday", "staging"]
+- domain (string, optional): Namespace to organize memories. Example: "engineering", "user:alice"
+
+Returns: {stored: boolean, atom_id: string|null, importance: number, reason: string}
+
+### memory_read
+Search memories by natural language query. Returns most relevant stored memories ranked by relevance.
+
+Parameters:
+- query (string, required): Natural language query — what are you looking for? 1-5000 chars.
+- top_k (integer, optional, default 5): Max results to return. Range: 1-50.
+- domain (string, optional): Filter by domain namespace.
+
+Returns: List of memories with relevance scores, concepts, and domain.
+
+### memory_feedback
+Report whether a retrieved memory was helpful. Positive feedback strengthens recall. Negative lets memories fade.
+
+Parameters:
+- atom_ids (string[], required): IDs of memories to give feedback on.
+- outcome (number, required): How helpful? Range: -1.0 (harmful) to 1.0 (very helpful).
+
+Returns: {updated_count: number}
+
+### memory_stats
+Get memory statistics — count, domains, quality scores.
+
+Parameters: none
+
+Returns: {total_atoms, episodes, prototypes, hebbian_edges, domains, avg_valence, avg_importance}
+
+## Setup
+Environment: MNEMOVERSE_API_KEY (required), MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
+Transport: stdio
+Command: npx @mnemoverse/mcp-memory-server
+
+## Links
+- Docs: https://mnemoverse.com/docs/api/mcp-server
+- API Reference: https://mnemoverse.com/docs/api/reference
+- Console: https://console.mnemoverse.com
+- Source: https://github.com/mnemoverse/mcp-memory-server
