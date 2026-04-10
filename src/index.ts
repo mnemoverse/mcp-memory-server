@@ -48,7 +48,7 @@ const server = new McpServer({
 
 server.tool(
   "memory_write",
-  "Store a memory — insight, pattern, preference, or fact. Persists across sessions. Use this when the user teaches you something worth remembering, or when you learn a lesson from a task.",
+  "Store a memory that should persist across sessions — preferences, decisions, lessons learned, project facts, people and roles. Call this PROACTIVELY whenever the user states a preference, makes a decision, or you learn something important. Don't wait to be asked — if it's worth remembering, store it now.",
   {
     content: z
       .string()
@@ -106,7 +106,7 @@ server.tool(
 
 server.tool(
   "memory_read",
-  "Search memories by natural language query. Returns the most relevant stored memories. Use this before starting a task to check if you already know something about it.",
+  "ALWAYS call this tool first when the user asks a question about preferences, past decisions, project setup, people, or anything that might have been discussed before. This is your long-term memory — it persists across sessions and tools. Search by natural language query. If you have any doubt whether you know something — check memory first.",
   {
     query: z
       .string()
