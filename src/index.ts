@@ -28,10 +28,23 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-async function apiFetch(
+/**
+ * Fetch from the Mnemoverse core API with authentication.
+ *
+ * Generic so call sites can declare the expected response shape:
+ *
+ *     const r = await apiFetch<{ stored: boolean; atom_id: string }>("/memory/write", { ... });
+ *
+ * Handles 204 No Content and empty bodies defensively — FastAPI DELETE
+ * handlers may switch to 204 in the future even though today they return
+ * a JSON body.
+ *
+ * @throws Error with message `Mnemoverse API error {status}: {body}` on non-2xx.
+ */
+async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
-): Promise<unknown> {
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -46,16 +59,31 @@ async function apiFetch(
     throw new Error(`Mnemoverse API error ${res.status}: ${text}`);
   }
 
-  return res.json();
+  // 204 No Content or empty body — return an empty object cast as T so
+  // call sites using optional chaining still work without crashing.
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return {} as T;
+  }
+
+  return (await res.json()) as T;
 }
 
 /**
  * Truncate a result string to MAX_RESULT_CHARS, appending a notice if truncated.
  * Required by Claude Connectors Directory submission policy.
+ *
+ * Defensive against splitting UTF-16 surrogate pairs: if the character right
+ * before the cut point is a high surrogate (U+D800–U+DBFF), drop it so the
+ * result stays well-formed. Otherwise an emoji or non-BMP character at the
+ * boundary can produce a lone surrogate and corrupt downstream JSON encoding.
  */
 function capResult(text: string): string {
   if (text.length <= MAX_RESULT_CHARS) return text;
-  const truncated = text.slice(0, MAX_RESULT_CHARS - 200);
+  let truncated = text.slice(0, MAX_RESULT_CHARS - 200);
+  const lastCode = truncated.charCodeAt(truncated.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    truncated = truncated.slice(0, -1);
+  }
   return (
     truncated +
     `\n\n[…truncated to fit 25K token limit. Use a more specific query or smaller top_k to see all results.]`
@@ -104,7 +132,12 @@ server.registerTool(
     },
   },
   async ({ content, concepts, domain }) => {
-    const result = await apiFetch("/memory/write", {
+    const r = await apiFetch<{
+      stored?: boolean;
+      atom_id?: string | null;
+      importance?: number;
+      reason?: string;
+    }>("/memory/write", {
       method: "POST",
       body: JSON.stringify({
         content,
@@ -113,19 +146,14 @@ server.registerTool(
       }),
     });
 
-    const r = result as {
-      stored: boolean;
-      atom_id: string | null;
-      importance: number;
-      reason: string;
-    };
+    const importance = (r?.importance ?? 0).toFixed(2);
 
-    if (r.stored) {
+    if (r?.stored) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `Stored (importance: ${r.importance.toFixed(2)}). ID: ${r.atom_id}`,
+            text: `Stored (importance: ${importance}). ID: ${r.atom_id ?? "unknown"}`,
           },
         ],
       };
@@ -134,7 +162,7 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: `Filtered — ${r.reason} (importance: ${r.importance.toFixed(2)})`,
+          text: `Filtered — ${r?.reason ?? "unknown reason"} (importance: ${importance})`,
         },
       ],
     };
@@ -175,7 +203,15 @@ server.registerTool(
     },
   },
   async ({ query, top_k, domain }) => {
-    const result = await apiFetch("/memory/read", {
+    const r = await apiFetch<{
+      items?: Array<{
+        content?: string;
+        relevance?: number;
+        concepts?: string[];
+        domain?: string;
+      }>;
+      search_time_ms?: number;
+    }>("/memory/read", {
       method: "POST",
       body: JSON.stringify({
         query,
@@ -185,17 +221,9 @@ server.registerTool(
       }),
     });
 
-    const r = result as {
-      items: Array<{
-        content: string;
-        relevance: number;
-        concepts: string[];
-        domain: string;
-      }>;
-      search_time_ms: number;
-    };
+    const items = Array.isArray(r?.items) ? r.items : [];
 
-    if (r.items.length === 0) {
+    if (items.length === 0) {
       return {
         content: [
           { type: "text" as const, text: "No memories found for this query." },
@@ -203,15 +231,17 @@ server.registerTool(
       };
     }
 
-    const lines = r.items.map(
-      (item, i) =>
-        `${i + 1}. [${(item.relevance * 100).toFixed(0)}%] ${item.content}` +
-        (item.concepts.length > 0
-          ? ` (${item.concepts.join(", ")})`
-          : ""),
-    );
+    const lines = items.map((item, i) => {
+      const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
+      const content = item?.content ?? "(empty)";
+      const concepts = Array.isArray(item?.concepts) && item.concepts.length > 0
+        ? ` (${item.concepts.join(", ")})`
+        : "";
+      return `${i + 1}. [${relevance}%] ${content}${concepts}`;
+    });
 
-    const text = lines.join("\n\n") + `\n\n(${r.search_time_ms.toFixed(0)}ms)`;
+    const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
+    const text = lines.join("\n\n") + `\n\n(${searchMs}ms)`;
 
     return {
       content: [
@@ -245,24 +275,28 @@ server.registerTool(
     annotations: {
       title: "Rate Memory Helpfulness",
       readOnlyHint: false,
-      destructiveHint: false,
+      // Feedback permanently mutates the memory's valence and importance
+      // scores on the backend — per MCP spec, that is a destructive update
+      // to the stored state (cf. ToolAnnotations.destructiveHint), even
+      // though the caller intends it as quality signal rather than delete.
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
   },
   async ({ atom_ids, outcome }) => {
-    const result = await apiFetch("/memory/feedback", {
+    const r = await apiFetch<{ updated_count?: number }>("/memory/feedback", {
       method: "POST",
       body: JSON.stringify({ atom_ids, outcome }),
     });
 
-    const r = result as { updated_count: number };
+    const count = r?.updated_count ?? 0;
 
     return {
       content: [
         {
           type: "text" as const,
-          text: `Feedback recorded for ${r.updated_count} memor${r.updated_count === 1 ? "y" : "ies"}.`,
+          text: `Feedback recorded for ${count} memor${count === 1 ? "y" : "ies"}.`,
         },
       ],
     };
@@ -286,23 +320,25 @@ server.registerTool(
     },
   },
   async () => {
-    const result = await apiFetch("/memory/stats");
+    const r = await apiFetch<{
+      total_atoms?: number;
+      episodes?: number;
+      prototypes?: number;
+      hebbian_edges?: number;
+      domains?: string[];
+      avg_valence?: number;
+      avg_importance?: number;
+    }>("/memory/stats");
 
-    const r = result as {
-      total_atoms: number;
-      episodes: number;
-      prototypes: number;
-      hebbian_edges: number;
-      domains: string[];
-      avg_valence: number;
-      avg_importance: number;
-    };
+    const domains = Array.isArray(r?.domains) && r.domains.length > 0
+      ? r.domains.join(", ")
+      : "general";
 
     const text = [
-      `Memories: ${r.total_atoms} (${r.episodes} episodes, ${r.prototypes} prototypes)`,
-      `Associations: ${r.hebbian_edges} Hebbian edges`,
-      `Domains: ${r.domains.length > 0 ? r.domains.join(", ") : "general"}`,
-      `Avg quality: valence ${r.avg_valence.toFixed(2)}, importance ${r.avg_importance.toFixed(2)}`,
+      `Memories: ${r?.total_atoms ?? 0} (${r?.episodes ?? 0} episodes, ${r?.prototypes ?? 0} prototypes)`,
+      `Associations: ${r?.hebbian_edges ?? 0} Hebbian edges`,
+      `Domains: ${domains}`,
+      `Avg quality: valence ${(r?.avg_valence ?? 0).toFixed(2)}, importance ${(r?.avg_importance ?? 0).toFixed(2)}`,
     ].join("\n");
 
     return { content: [{ type: "text" as const, text }] };
@@ -333,15 +369,15 @@ server.registerTool(
     },
   },
   async ({ atom_id }) => {
-    const result = await apiFetch(`/memory/atoms/${encodeURIComponent(atom_id)}`, {
-      method: "DELETE",
-    });
-
     // Core API returns { deleted: <count>, atom_id }. count == 0 means
-    // the atom didn't exist (or was already removed). count >= 1 means it was deleted.
-    const r = result as { deleted: number; atom_id?: string };
+    // the atom didn't exist (or was already removed). count >= 1 means
+    // it was deleted.
+    const r = await apiFetch<{ deleted?: number; atom_id?: string }>(
+      `/memory/atoms/${encodeURIComponent(atom_id)}`,
+      { method: "DELETE" },
+    );
 
-    if (!r.deleted) {
+    if (!r?.deleted) {
       return {
         content: [
           {
@@ -392,24 +428,23 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ domain, confirm }) => {
-    if (confirm !== true) {
-      throw new Error(
-        "memory_delete_domain requires confirm=true as a safety interlock.",
-      );
-    }
+  // The `confirm: z.literal(true)` in the input schema is the safety
+  // interlock — Zod rejects any call without confirm === true before it
+  // reaches this handler, so no runtime re-check is needed here.
+  async ({ domain }) => {
+    const r = await apiFetch<{ deleted?: number; domain?: string }>(
+      `/memory/domain/${encodeURIComponent(domain)}`,
+      { method: "DELETE" },
+    );
 
-    const result = await apiFetch(`/memory/domain/${encodeURIComponent(domain)}`, {
-      method: "DELETE",
-    });
-
-    const r = result as { deleted: number; domain: string };
+    const count = r?.deleted ?? 0;
+    const domainName = r?.domain ?? domain;
 
     return {
       content: [
         {
           type: "text" as const,
-          text: `Deleted ${r.deleted} ${r.deleted === 1 ? "memory" : "memories"} from domain "${r.domain}".`,
+          text: `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain "${domainName}".`,
         },
       ],
     };
