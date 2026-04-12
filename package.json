@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "MCP server for Mnemoverse Memory API — persistent AI memory across Claude Code, Cursor, VS Code, and any MCP client",
   "type": "module",
   "bin": {
@@ -8,6 +8,12 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -23,10 +29,15 @@
     "mcp",
     "memory",
     "ai",
+    "ai-agent",
     "claude",
     "cursor",
+    "vscode",
+    "chatgpt",
     "mnemoverse",
     "persistent-memory",
+    "shared-memory",
+    "cross-tool",
     "model-context-protocol"
   ],
   "author": "Mnemoverse <hello@mnemoverse.com>",

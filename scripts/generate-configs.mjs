@@ -310,14 +310,45 @@ function rewriteReadme(currentReadme, freshBlock) {
  * them.
  */
 function genServerJson() {
+  // Build env vars, conditionally including `default` so absence stays absent
+  // (registry schema validates types strictly — sending "default": undefined
+  // in JSON is different from omitting the key).
+  const environmentVariables = Object.entries(source.env).map(([key, meta]) => {
+    const entry = {
+      name: key,
+      description: meta.description,
+      isRequired: meta.required ?? false,
+      format: "string",
+      isSecret: meta.secret ?? false,
+    };
+    if (meta.placeholder) {
+      // `default` is the 2025-12-11 field for an example/placeholder value
+      // that clients can surface in their config UI.
+      entry.default = meta.placeholder;
+    }
+    return entry;
+  });
+
   return {
     $schema:
       "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
     name: "io.github.mnemoverse/mcp-memory-server",
+    // `title` is the human-friendly display label shown in registry UIs —
+    // without it the UI falls back to the reverse-DNS name which is unreadable.
+    title: source.title || source.displayName,
     description: source.description,
+    // `websiteUrl` surfaces separately from `repository.url` in registry UIs,
+    // giving a second, distinct clickthrough (landing page vs source code).
+    ...(source.websiteUrl ? { websiteUrl: source.websiteUrl } : {}),
     repository: {
       url: source.metadata.repository,
       source: "github",
+      // `id` is GitHub's numeric repository ID — an anti-resurrection trust
+      // marker. Even if the repo is deleted and recreated at the same URL,
+      // the new id would differ and clients can detect the swap.
+      ...(source.metadata.repositoryId
+        ? { id: String(source.metadata.repositoryId) }
+        : {}),
     },
     version: PACKAGE_VERSION,
     packages: [
@@ -328,13 +359,7 @@ function genServerJson() {
         transport: {
           type: "stdio",
         },
-        environmentVariables: Object.entries(source.env).map(([key, meta]) => ({
-          name: key,
-          description: meta.description,
-          isRequired: meta.required ?? false,
-          format: "string",
-          isSecret: meta.secret ?? false,
-        })),
+        environmentVariables,
       },
     ],
   };

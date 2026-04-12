@@ -154,7 +154,10 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 - [API Reference](https://mnemoverse.com/docs/api/reference)
 - [Console (get API key)](https://console.mnemoverse.com)
 - [GitHub](https://github.com/mnemoverse/mcp-memory-server)
+- [Releases](https://github.com/mnemoverse/mcp-memory-server/releases)
+- [MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 
-MIT
+[MIT](LICENSE) © Mnemoverse
