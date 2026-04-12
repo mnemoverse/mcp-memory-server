@@ -293,12 +293,26 @@ function rewriteReadme(currentReadme, freshBlock) {
  * Official MCP Registry server.json.
  *
  * https://registry.modelcontextprotocol.io/
- * Schema: https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json
+ * Schema: https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json
+ *
+ * The canonical shape was verified empirically by running `mcp-publisher init`
+ * in a sandbox and matching its output. Key differences vs the older
+ * 2025-09-29 schema: registryName → registryType, packages[0].name →
+ * packages[0].identifier, new required `transport` object, dropped
+ * runtimeArguments (the registry runtime builds its own launch command
+ * from identifier + version), and environmentVariables entries gained a
+ * `format` field.
+ *
+ * The `@latest` pin we use in docs/configs/* does NOT belong here — that
+ * is for direct JSON-snippet installs where users stay on the bleeding
+ * edge. Registry-installed clients get the exact pinned version from
+ * server.json.version and we re-publish on each npm release to advance
+ * them.
  */
 function genServerJson() {
   return {
     $schema:
-      "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+      "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
     name: "io.github.mnemoverse/mcp-memory-server",
     description: source.description,
     repository: {
@@ -308,14 +322,17 @@ function genServerJson() {
     version: PACKAGE_VERSION,
     packages: [
       {
-        registryName: source.package.registry,
-        name: source.package.name,
+        registryType: source.package.registry,
+        identifier: source.package.name,
         version: PACKAGE_VERSION,
-        runtimeArguments: source.args.slice(1), // skip "-y"
+        transport: {
+          type: "stdio",
+        },
         environmentVariables: Object.entries(source.env).map(([key, meta]) => ({
           name: key,
           description: meta.description,
           isRequired: meta.required ?? false,
+          format: "string",
           isSecret: meta.secret ?? false,
         })),
       },
