@@ -330,9 +330,11 @@ server.registerTool(
       method: "DELETE",
     });
 
-    const r = result as { deleted?: boolean; atom_id?: string };
+    // Core API returns { deleted: <count>, atom_id }. count == 0 means
+    // the atom didn't exist (or was already removed). count >= 1 means it was deleted.
+    const r = result as { deleted: number; atom_id?: string };
 
-    if (r.deleted === false) {
+    if (!r.deleted) {
       return {
         content: [
           {
