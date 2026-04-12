@@ -103,9 +103,13 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 
 `package.json#version` → `src/index.ts#version` (server name reported to MCP clients) → `server.json#version` (Official MCP Registry).
 
-Today these are bumped manually and kept in sync by hand. If they drift, the generator's drift check on `server.json` will catch it (because `server.json` is generated from `package.json#version`).
+These are bumped manually in the first two files and propagated by the generator to the third. If they drift, the drift check on `server.json` catches it on every PR.
 
-When releasing:
+### Automated release pipeline
+
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). You bump the version on `main`, push a semver tag, and the workflow does the rest: npm publish, MCP Registry publish (via GitHub OIDC — no stored PAT), GitHub release.
+
+The workflow is triggered by any tag matching `v*` pushed to the repo. To release:
 
 ```bash
 # 1. Bump version in package.json
@@ -117,19 +121,55 @@ $EDITOR src/index.ts
 # 3. Regenerate (this updates server.json to match)
 npm run generate:configs
 
-# 4. Build and run e2e
+# 4. Build and run any local checks you want before tagging
 npm run build
-# ... live e2e against production ...
+npm run verify:configs
 
-# 5. Commit, tag, push, publish
-git add -A && git commit -m "chore: release vX.Y.Z"
-git tag -a vX.Y.Z -m "..."
-git push origin main vX.Y.Z
-npm publish
-gh release create vX.Y.Z --notes "..."
+# 5. PR + squash-merge to main (drift CI runs on the PR)
+git checkout -b release/vX.Y.Z
+git add -A && git commit -m "release: vX.Y.Z"
+git push -u origin release/vX.Y.Z
+gh pr create --fill && gh pr merge --squash --delete-branch
+git checkout main && git pull --ff-only
+
+# 6. Tag main and push the tag
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-A future PR will templatize `src/index.ts#version` so `package.json` is the only place to edit it.
+That push fires [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
+
+1. Verifies the tag matches `package.json#version` (belt and suspenders).
+2. Runs `npm ci && npm run build` (which also runs `generate:configs` via `prebuild`).
+3. Runs `npm run verify:configs` for drift.
+4. `npm publish` using the `NPM_TOKEN` secret.
+5. Installs `mcp-publisher` from its Linux amd64 release bottle.
+6. Authenticates to the Registry via `mcp-publisher login github-oidc` — this uses GitHub Actions' OIDC identity token. **No long-lived PAT is stored anywhere.** The prerequisite is that the authenticating GitHub account's membership in the `mnemoverse` org be **public** (already the case for `izgorodin`).
+7. `mcp-publisher publish` uploads the freshly-generated `server.json`.
+8. Verifies the registry entry via a direct curl against the public API.
+9. Creates a GitHub release with auto-generated notes.
+
+If any step fails, the release is aborted — nothing partial gets published. You can re-push the same tag after fixing the issue.
+
+### One-time setup for the workflow
+
+A single secret must be added at [Settings → Secrets → Actions](https://github.com/mnemoverse/mcp-memory-server/settings/secrets/actions):
+
+| Secret | How to get it |
+| ------ | ------------- |
+| `NPM_TOKEN` | [npmjs.com → Settings → Access Tokens → Generate New Token](https://www.npmjs.com/settings/mnemoverse/tokens/granular-access-tokens/new) → **Automation** token, scope: publish to `@mnemoverse/mcp-memory-server`. |
+
+Nothing else. GitHub OIDC provides the MCP Registry credential at run time, so we do not store an `MCP_GITHUB_TOKEN` secret at all.
+
+### Manual trigger
+
+If you need to re-run the pipeline for a tag that was already pushed (e.g. the workflow was added after the tag), use `workflow_dispatch`:
+
+```bash
+gh workflow run release.yml -f tag=v0.3.1
+```
+
+Or click **Run workflow** on the Actions tab and enter the tag.
 
 ## Testing changes locally
 
