@@ -13,7 +13,7 @@
       "name": "@mnemoverse/mcp-memory-server",
       "version": "0.3.0",
       "runtimeArguments": [
-        "@mnemoverse/mcp-memory-server"
+        "@mnemoverse/mcp-memory-server@latest"
       ],
       "environmentVariables": [
         {

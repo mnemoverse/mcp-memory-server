@@ -17,7 +17,7 @@ startCommand:
     |-
     (config) => ({
       command: 'npx',
-      args: ["-y","@mnemoverse/mcp-memory-server"],
+      args: ["-y","@mnemoverse/mcp-memory-server@latest"],
       env: {
         MNEMOVERSE_API_KEY: config.mnemoverseApiKey,
       }
