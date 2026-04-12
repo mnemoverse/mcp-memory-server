@@ -12,10 +12,14 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com) — takes 30
 
 ### 2. Connect to your AI tool
 
+<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
+
 **Claude Code:**
 
 ```bash
-claude mcp add mnemoverse -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -- npx @mnemoverse/mcp-memory-server
+claude mcp add mnemoverse \
+  -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY \
+  -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
 **Cursor** — add to `.cursor/mcp.json`:
@@ -25,7 +29,10 @@ claude mcp add mnemoverse -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -- npx @mnemove
   "mcpServers": {
     "mnemoverse": {
       "command": "npx",
-      "args": ["@mnemoverse/mcp-memory-server"],
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
       "env": {
         "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
       }
@@ -34,18 +41,20 @@ claude mcp add mnemoverse -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -- npx @mnemove
 }
 ```
 
-**VS Code** — add to settings.json:
+**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`):
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "mnemoverse": {
-        "command": "npx",
-        "args": ["@mnemoverse/mcp-memory-server"],
-        "env": {
-          "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
-        }
+  "servers": {
+    "mnemoverse": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
       }
     }
   }
@@ -59,7 +68,10 @@ claude mcp add mnemoverse -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -- npx @mnemove
   "mcpServers": {
     "mnemoverse": {
       "command": "npx",
-      "args": ["@mnemoverse/mcp-memory-server"],
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
       "env": {
         "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
       }
@@ -67,6 +79,10 @@ claude mcp add mnemoverse -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -- npx @mnemove
   }
 }
 ```
+
+> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.
+
+<!-- INSTALL_SNIPPETS_END -->
 
 ### 3. Done
 
@@ -88,6 +104,8 @@ It remembers.
 | `memory_read` | Search memories by natural language query |
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
+| `memory_delete` | Permanently delete a single memory by `atom_id` |
+| `memory_delete_domain` | Wipe an entire domain (requires `confirm: true` safety interlock) |
 
 ## Ideas: What to Remember
 
