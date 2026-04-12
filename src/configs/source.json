@@ -2,7 +2,7 @@
   "$comment": "SINGLE SOURCE OF TRUTH for all distribution channel configs. Edit this file → run `npm run generate:configs` → all 9+ artifacts regenerate. CI verifies committed artifacts match source.",
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
-  "description": "Persistent memory for AI agents — write once, recall anywhere across all your AI tools",
+  "description": "Shared AI memory across Claude, Cursor, VS Code, ChatGPT. Write once, recall anywhere.",
   "type": "stdio",
   "command": "npx",
   "args": ["-y", "@mnemoverse/mcp-memory-server@latest"],

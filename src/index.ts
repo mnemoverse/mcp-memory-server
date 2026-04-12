@@ -59,7 +59,7 @@ function capResult(text: string): string {
 
 const server = new McpServer({
   name: "mnemoverse-memory",
-  version: "0.3.0",
+  version: "0.3.1",
 });
 
 // --- Tool: memory_write ---

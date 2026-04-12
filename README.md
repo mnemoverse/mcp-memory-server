@@ -1,8 +1,13 @@
 # @mnemoverse/mcp-memory-server
 
-Persistent AI memory for Claude Code, Cursor, VS Code, and any MCP client.
+[![npm version](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
+[![npm downloads](https://img.shields.io/npm/dm/@mnemoverse/mcp-memory-server.svg?color=blue&label=downloads)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-Your agent remembers everything — across sessions, projects, and tools. One memory, everywhere.
+Shared AI memory across Claude, Cursor, VS Code, ChatGPT, and any MCP client. Write once, recall anywhere.
+
+Your agent remembers everything — across sessions, projects, and tools. One API key, one memory, everywhere.
 
 ## Quick Start
 
@@ -84,17 +89,23 @@ claude mcp add mnemoverse \
 
 <!-- INSTALL_SNIPPETS_END -->
 
-### 3. Done
+> ⚠️ **Restart your AI client** after editing the config. MCP servers are only picked up on client startup.
 
-Your AI now has persistent memory. Try:
+### 3. Try it — 30 seconds to verify it works
 
-> "Remember that I prefer Railway for deployments"
+Paste this in your AI chat:
 
-Then in a new session:
+> **"Remember that my favourite TypeScript framework is Hono, and please call `memory_write` to save it."**
 
-> "Where should I deploy this?"
+Your agent should call `memory_write` and confirm the memory was stored.
 
-It remembers.
+Then open a **new chat / new session** (this is the whole point — memory survives restarts), and ask:
+
+> **"What's my favourite TypeScript framework?"**
+
+Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
+
+If it doesn't remember: check that the client was fully restarted and the config has your real `mk_live_...` key, not the placeholder.
 
 ## Tools
 

@@ -1,3 +1,12 @@
 node_modules/
 dist/
 .env
+
+# mcp-publisher CLI stores JWTs for the Official MCP Registry in the
+# current working directory. NEVER commit these — they are live
+# credentials that grant publish rights to io.github.mnemoverse/*.
+.mcpregistry_github_token
+.mcpregistry_registry_token
+
+# Local test artifacts
+*.tgz
