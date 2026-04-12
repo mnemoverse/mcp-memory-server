@@ -14,7 +14,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com) — takes 30
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
-**Claude Code:**
+**Claude Code** — add via CLI:
 
 ```bash
 claude mcp add mnemoverse \

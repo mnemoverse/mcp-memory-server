@@ -191,6 +191,104 @@ ${envAssignments}
   return yaml;
 }
 
+// ─── Markdown partials ────────────────────────────────────────────────────────
+//
+// These are the SAME install snippets that ship to:
+//   - mcp-memory-server/README.md (assembled into the INSTALL_SNIPPETS block)
+//   - mnemoverse-docs (synced via cross-repo workflow → docs/.snippets/)
+//
+// One channel = one partial = one place to edit (source.json). The README's
+// install block is rebuilt from these partials in-place — never edit it by hand.
+
+const PARTIAL_HEADER =
+  "<!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->\n\n";
+
+function snippetClaudeCodeCli() {
+  // shell command, multiline with backslash continuations
+  return (
+    "**Claude Code** — add via CLI:\n\n" +
+    "```bash\n" +
+    genClaudeCodeCli().trim() +
+    "\n```\n"
+  );
+}
+
+function snippetMcpServersJson(label, configPath) {
+  // Cursor / Claude Desktop / Windsurf — shared mcpServers shape
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  return (
+    `**${label}** — add to \`${configPath}\`:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+function snippetVscode() {
+  // VS Code uses `servers` (not `mcpServers`) and requires `type: "stdio"`
+  const json = JSON.stringify(genVscodeFormat(), null, 2);
+  return (
+    "**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`):\n\n" +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+const WHY_LATEST_NOTE =
+  "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
+
+/**
+ * Build the README install block contents (without the START/END markers).
+ * The order here matches the README — change here, README rewrites itself.
+ */
+function readmeInstallBlock() {
+  return [
+    snippetClaudeCodeCli(),
+    snippetMcpServersJson("Cursor", ".cursor/mcp.json"),
+    snippetVscode(),
+    snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
+    WHY_LATEST_NOTE,
+  ].join("\n");
+}
+
+// ─── README in-place rewriter ─────────────────────────────────────────────────
+
+const README_START =
+  "<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->";
+const README_END = "<!-- INSTALL_SNIPPETS_END -->";
+
+/**
+ * Take current README content + the freshly assembled install block and return
+ * the rewritten README content. Idempotent.
+ *
+ * Throws if the markers are missing — that means a contributor stripped them
+ * out and we don't know where to inject the snippets, so we fail loudly
+ * instead of silently doing the wrong thing.
+ */
+function rewriteReadme(currentReadme, freshBlock) {
+  const startIdx = currentReadme.indexOf("<!-- INSTALL_SNIPPETS_START");
+  const endIdx = currentReadme.indexOf("<!-- INSTALL_SNIPPETS_END -->");
+
+  if (startIdx === -1 || endIdx === -1) {
+    throw new Error(
+      "README.md is missing the INSTALL_SNIPPETS_START / INSTALL_SNIPPETS_END markers.\n" +
+        "These markers tell the generator where to inject the install snippets.\n" +
+        "Restore them around the install section and re-run `npm run generate:configs`.",
+    );
+  }
+  if (startIdx >= endIdx) {
+    throw new Error(
+      "README.md INSTALL_SNIPPETS_END marker appears before INSTALL_SNIPPETS_START.",
+    );
+  }
+
+  const before = currentReadme.slice(0, startIdx);
+  const after = currentReadme.slice(endIdx + README_END.length);
+
+  return `${before}${README_START}\n\n${freshBlock}\n\n${README_END}${after}`;
+}
+
 /**
  * Official MCP Registry server.json.
  *
@@ -264,6 +362,35 @@ const OUTPUTS = [
     path: "server.json",
     content: JSON.stringify(genServerJson(), null, 2) + "\n",
   },
+  // ─── Markdown partials (consumed by README + mnemoverse-docs) ──────────────
+  {
+    path: "docs/snippets/claude-code.md",
+    content: PARTIAL_HEADER + snippetClaudeCodeCli(),
+  },
+  {
+    path: "docs/snippets/cursor.md",
+    content:
+      PARTIAL_HEADER + snippetMcpServersJson("Cursor", ".cursor/mcp.json"),
+  },
+  {
+    path: "docs/snippets/claude-desktop.md",
+    content:
+      PARTIAL_HEADER +
+      snippetMcpServersJson("Claude Desktop", "claude_desktop_config.json"),
+  },
+  {
+    path: "docs/snippets/vscode.md",
+    content: PARTIAL_HEADER + snippetVscode(),
+  },
+  {
+    path: "docs/snippets/windsurf.md",
+    content:
+      PARTIAL_HEADER +
+      snippetMcpServersJson(
+        "Windsurf",
+        "~/.codeium/windsurf/mcp_config.json",
+      ),
+  },
 ];
 
 // ─── Write files ─────────────────────────────────────────────────────────────
@@ -297,10 +424,55 @@ for (const { path, content } of OUTPUTS) {
   written++;
 }
 
+// ─── README install block (in-place rewrite) ────────────────────────────────
+//
+// Special-cased because README is read-modify-write — we can only update the
+// region between the INSTALL_SNIPPETS markers, the rest of the file is human-
+// authored prose.
+
+const README_PATH = resolve(ROOT, "README.md");
+
+if (!existsSync(README_PATH)) {
+  console.error(`✗ README.md not found at ${README_PATH}`);
+  process.exit(1);
+}
+
+const currentReadme = readFileSync(README_PATH, "utf8");
+let freshReadme;
+try {
+  freshReadme = rewriteReadme(currentReadme, readmeInstallBlock());
+} catch (err) {
+  console.error("✗ Cannot rewrite README.md install block:");
+  console.error("  " + (err.message || err).split("\n").join("\n  "));
+  process.exit(1);
+}
+
+if (currentReadme === freshReadme) {
+  unchanged++;
+} else if (checkMode) {
+  console.error("✗ Drift detected: README.md install block is stale");
+  console.error(
+    "  The INSTALL_SNIPPETS_START/END region in README.md does not match",
+  );
+  console.error(
+    "  what the generator would emit from src/configs/source.json.",
+  );
+  console.error("  Run `npm run generate:configs` and commit the result.");
+  process.exit(1);
+} else {
+  writeFileSync(README_PATH, freshReadme, "utf8");
+  console.log("✓ Generated README.md (install block)");
+  written++;
+}
+
+const totalArtifacts = OUTPUTS.length + 1; // +1 for README
+
 if (checkMode) {
-  console.log(`✓ All ${OUTPUTS.length} configs in sync with source.json`);
+  console.log(
+    `✓ All ${totalArtifacts} artifacts in sync with source.json`,
+  );
 } else {
   console.log(
-    `\nDone: ${written} written, ${unchanged} unchanged (${OUTPUTS.length} total)`,
+    `\nDone: ${written} written, ${unchanged} unchanged (${totalArtifacts} total)`,
   );
 }

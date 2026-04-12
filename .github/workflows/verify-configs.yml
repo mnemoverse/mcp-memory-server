@@ -1,0 +1,55 @@
+name: verify-configs
+
+# Mechanical drift detection for the single-source-of-truth distribution
+# config pipeline. See CONTRIBUTING.md for the design.
+#
+# This workflow MUST pass before any PR can merge into main. It runs the
+# generator in --check mode, which:
+#   1. Re-emits all 14 generated artifacts from src/configs/source.json
+#   2. Re-rewrites the README.md install block from the same source
+#   3. Compares each result to what is committed
+#   4. Exits 1 if anything differs
+#
+# If you see this job fail in your PR, run `npm run generate:configs` locally
+# and commit the regenerated files. Do NOT bypass — the whole point is that
+# bypassing leaves the README/snippets/marketplace listings drifting from
+# the actual npm package.
+
+on:
+  pull_request:
+    paths:
+      - "src/configs/source.json"
+      - "scripts/generate-configs.mjs"
+      - "package.json"
+      - "README.md"
+      - "docs/configs/**"
+      - "docs/snippets/**"
+      - "smithery.yaml"
+      - "server.json"
+      - ".github/workflows/verify-configs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/configs/source.json"
+      - "scripts/generate-configs.mjs"
+      - "package.json"
+      - "README.md"
+      - "docs/configs/**"
+      - "docs/snippets/**"
+      - "smithery.yaml"
+      - "server.json"
+      - ".github/workflows/verify-configs.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify all 15 distribution artifacts are in sync with source.json
+        run: node scripts/generate-configs.mjs --check
