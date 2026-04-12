@@ -8,17 +8,22 @@ const API_URL =
   process.env.MNEMOVERSE_API_URL || "https://core.mnemoverse.com/api/v1";
 const API_KEY = process.env.MNEMOVERSE_API_KEY || "";
 
+// Hard cap on tool result size — required by Claude Connectors Directory
+// (https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide).
+// Approximate token count = chars / 4. Cap at 24,000 tokens to leave headroom under the 25K limit.
+const MAX_RESULT_CHARS = 24_000 * 4;
+
 if (!API_KEY) {
   console.error(
     "Error: MNEMOVERSE_API_KEY environment variable is required.\n" +
-      "Get your free key at https://console.mnemoverse.com"
+      "Get your free key at https://console.mnemoverse.com",
   );
   process.exit(1);
 }
 
 async function apiFetch(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<unknown> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -37,32 +42,59 @@ async function apiFetch(
   return res.json();
 }
 
+/**
+ * Truncate a result string to MAX_RESULT_CHARS, appending a notice if truncated.
+ * Required by Claude Connectors Directory submission policy.
+ */
+function capResult(text: string): string {
+  if (text.length <= MAX_RESULT_CHARS) return text;
+  const truncated = text.slice(0, MAX_RESULT_CHARS - 200);
+  return (
+    truncated +
+    `\n\n[…truncated to fit 25K token limit. Use a more specific query or smaller top_k to see all results.]`
+  );
+}
+
 // --- Server setup ---
 
 const server = new McpServer({
   name: "mnemoverse-memory",
-  version: "0.1.0",
+  version: "0.1.1",
 });
 
 // --- Tool: memory_write ---
 
-server.tool(
+server.registerTool(
   "memory_write",
-  "Store a memory that should persist across sessions — preferences, decisions, lessons learned, project facts, people and roles. Call this PROACTIVELY whenever the user states a preference, makes a decision, or you learn something important. Don't wait to be asked — if it's worth remembering, store it now.",
   {
-    content: z
-      .string()
-      .min(1)
-      .max(10000)
-      .describe("The memory to store — what happened, what was learned"),
-    concepts: z
-      .array(z.string())
-      .optional()
-      .describe("Key concepts for linking related memories (e.g. ['deploy', 'friday', 'staging'])"),
-    domain: z
-      .string()
-      .optional()
-      .describe("Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')"),
+    description:
+      "Store a memory that should persist across sessions — preferences, decisions, lessons learned, project facts, people and roles. Memories you store are also accessible from Claude, ChatGPT, Cursor, VS Code, and any other AI tool the user connects to Mnemoverse — write once, recall everywhere. Call this PROACTIVELY whenever the user states a preference, makes a decision, or you learn something important. Don't wait to be asked — if it's worth remembering, store it now.",
+    inputSchema: {
+      content: z
+        .string()
+        .min(1)
+        .max(10000)
+        .describe("The memory to store — what happened, what was learned"),
+      concepts: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Key concepts for linking related memories (e.g. ['deploy', 'friday', 'staging'])",
+        ),
+      domain: z
+        .string()
+        .optional()
+        .describe(
+          "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')",
+        ),
+    },
+    annotations: {
+      title: "Store Memory",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
   },
   async ({ content, concepts, domain }) => {
     const result = await apiFetch("/memory/write", {
@@ -99,31 +131,41 @@ server.tool(
         },
       ],
     };
-  }
+  },
 );
 
 // --- Tool: memory_read ---
 
-server.tool(
+server.registerTool(
   "memory_read",
-  "ALWAYS call this tool first when the user asks a question about preferences, past decisions, project setup, people, or anything that might have been discussed before. This is your long-term memory — it persists across sessions and tools. Search by natural language query. If you have any doubt whether you know something — check memory first.",
   {
-    query: z
-      .string()
-      .min(1)
-      .max(5000)
-      .describe("Natural language query — what are you looking for?"),
-    top_k: z
-      .number()
-      .int()
-      .min(1)
-      .max(50)
-      .optional()
-      .describe("Max results to return (default: 5)"),
-    domain: z
-      .string()
-      .optional()
-      .describe("Filter by domain namespace"),
+    description:
+      "ALWAYS call this tool first when the user asks a question about preferences, past decisions, project setup, people, or anything that might have been discussed before. This is your long-term memory — it persists across sessions and tools (Claude, ChatGPT, Cursor, VS Code, and any other AI tool the user connects). Search by natural language query. If you have any doubt whether you know something — check memory first.",
+    inputSchema: {
+      query: z
+        .string()
+        .min(1)
+        .max(5000)
+        .describe("Natural language query — what are you looking for?"),
+      top_k: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("Max results to return (default: 5)"),
+      domain: z
+        .string()
+        .optional()
+        .describe("Filter by domain namespace"),
+    },
+    annotations: {
+      title: "Search Memories",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ query, top_k, domain }) => {
     const result = await apiFetch("/memory/read", {
@@ -159,35 +201,47 @@ server.tool(
         `${i + 1}. [${(item.relevance * 100).toFixed(0)}%] ${item.content}` +
         (item.concepts.length > 0
           ? ` (${item.concepts.join(", ")})`
-          : "")
+          : ""),
     );
+
+    const text = lines.join("\n\n") + `\n\n(${r.search_time_ms.toFixed(0)}ms)`;
 
     return {
       content: [
         {
           type: "text" as const,
-          text: lines.join("\n\n") + `\n\n(${r.search_time_ms.toFixed(0)}ms)`,
+          text: capResult(text),
         },
       ],
     };
-  }
+  },
 );
 
 // --- Tool: memory_feedback ---
 
-server.tool(
+server.registerTool(
   "memory_feedback",
-  "Report whether a retrieved memory was helpful. Positive feedback makes memories easier to find next time. Negative feedback lets them fade. Call this after using memories from memory_read.",
   {
-    atom_ids: z
-      .array(z.string())
-      .min(1)
-      .describe("IDs of memories to give feedback on (from memory_read results)"),
-    outcome: z
-      .number()
-      .min(-1)
-      .max(1)
-      .describe("How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong"),
+    description:
+      "Report whether a retrieved memory was helpful. Positive feedback makes memories easier to find next time across all tools. Negative feedback lets them fade. Call this after using memories from memory_read.",
+    inputSchema: {
+      atom_ids: z
+        .array(z.string())
+        .min(1)
+        .describe("IDs of memories to give feedback on (from memory_read results)"),
+      outcome: z
+        .number()
+        .min(-1)
+        .max(1)
+        .describe("How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong"),
+    },
+    annotations: {
+      title: "Rate Memory Helpfulness",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
   },
   async ({ atom_ids, outcome }) => {
     const result = await apiFetch("/memory/feedback", {
@@ -205,15 +259,25 @@ server.tool(
         },
       ],
     };
-  }
+  },
 );
 
 // --- Tool: memory_stats ---
 
-server.tool(
+server.registerTool(
   "memory_stats",
-  "Get memory statistics — how many memories are stored, which domains exist, average quality scores. Useful for understanding the current state of memory.",
-  {},
+  {
+    description:
+      "Get memory statistics — how many memories are stored, which domains exist, average quality scores. These memories are shared with all AI tools the user has connected to Mnemoverse. Useful for understanding the current state of memory.",
+    inputSchema: {},
+    annotations: {
+      title: "Memory Statistics",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
   async () => {
     const result = await apiFetch("/memory/stats");
 
@@ -235,7 +299,7 @@ server.tool(
     ].join("\n");
 
     return { content: [{ type: "text" as const, text }] };
-  }
+  },
 );
 
 // --- Start ---

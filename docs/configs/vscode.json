@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "mnemoverse": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+      }
+    }
+  }
+}
