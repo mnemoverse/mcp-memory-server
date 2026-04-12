@@ -5,7 +5,7 @@
  * Single source of truth → all distribution channel configs.
  *
  * Reads: src/configs/source.json
- * Writes: docs/configs/*, smithery.yaml, server.json
+ * Writes: docs/configs/*, docs/snippets/*, server.json, README.md install block
  *
  * Usage:
  *   node scripts/generate-configs.mjs            # generate
@@ -124,72 +124,21 @@ function genClaudeCodeCli() {
   return `claude mcp add ${source.name} \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
-/**
- * Smithery.ai config — custom yaml with configSchema + commandFunction.
- *
- * Smithery shows configSchema fields to user as form, then calls commandFunction(config)
- * to build the launch command.
- */
-function genSmitheryYaml() {
-  // Build configSchema properties from source.env
-  const schemaProperties = {};
-  const required = [];
-  const camelCaseEnvMap = {}; // Smithery uses camelCase keys, then we map back to ENV_VAR
-
-  for (const [envKey, meta] of Object.entries(source.env)) {
-    // Convert MNEMOVERSE_API_KEY → mnemoverseApiKey
-    const camelKey = envKey
-      .toLowerCase()
-      .split("_")
-      .map((part, i) =>
-        i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
-      )
-      .join("");
-
-    camelCaseEnvMap[camelKey] = envKey;
-    schemaProperties[camelKey] = {
-      type: "string",
-      description: meta.description,
-    };
-    if (meta.required) required.push(camelKey);
-  }
-
-  // Build commandFunction body
-  const envAssignments = Object.entries(camelCaseEnvMap)
-    .map(([camel, envVar]) => `        ${envVar}: config.${camel},`)
-    .join("\n");
-
-  const yaml = `# Smithery configuration — AUTO-GENERATED from src/configs/source.json
-# Do not edit by hand. Run \`npm run generate:configs\` to regenerate.
-# Docs: https://smithery.ai/docs/build/project-config/smithery.yaml
-
-startCommand:
-  type: ${source.type}
-  configSchema:
-    type: object
-    required:
-${required.map((k) => `      - ${k}`).join("\n")}
-    properties:
-${Object.entries(schemaProperties)
-  .map(
-    ([key, prop]) => `      ${key}:
-        type: ${prop.type}
-        description: |
-          ${prop.description}`,
-  )
-  .join("\n")}
-  commandFunction:
-    |-
-    (config) => ({
-      command: '${source.command}',
-      args: ${JSON.stringify(source.args)},
-      env: {
-${envAssignments}
-      }
-    })
-`;
-  return yaml;
-}
+// NOTE: genSmitheryYaml() was removed on 2026-04-12 after an empirical
+// check showed that Smithery's current CLI (@smithery/cli 4.7.4) entirely
+// ignores the legacy `startCommand` / `configSchema` / `commandFunction`
+// shape and requires instead either (a) a Streamable HTTP MCP endpoint
+// URL or (b) a TypeScript source tree built with their @smithery/sdk
+// framework via `smithery build`. Our stdio + raw @modelcontextprotocol/sdk
+// server matches neither. Shipping a fake smithery.yaml in the repo was
+// misleading (suggested compatibility we don't have) and polluted the
+// drift pipeline with a no-op artifact.
+//
+// When Phase 2 (Remote MCP server at mcp.mnemoverse.com) lands, Smithery
+// publishing becomes a one-liner:
+//   smithery mcp publish https://mcp.mnemoverse.com/mcp -n mnemoverse/mcp-memory-server
+// No smithery.yaml file required at that point either — the CLI reads
+// the endpoint directly. So we don't need to re-introduce the generator.
 
 // ─── Markdown partials ────────────────────────────────────────────────────────
 //
@@ -395,10 +344,6 @@ const OUTPUTS = [
   {
     path: "docs/configs/claude-code-cli.sh",
     content: "#!/usr/bin/env bash\n" + genClaudeCodeCli(),
-  },
-  {
-    path: "smithery.yaml",
-    content: genSmitheryYaml(),
   },
   {
     path: "server.json",

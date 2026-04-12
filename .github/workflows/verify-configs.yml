@@ -24,7 +24,6 @@ on:
       - "README.md"
       - "docs/configs/**"
       - "docs/snippets/**"
-      - "smithery.yaml"
       - "server.json"
       - ".github/workflows/verify-configs.yml"
   push:
@@ -36,7 +35,6 @@ on:
       - "README.md"
       - "docs/configs/**"
       - "docs/snippets/**"
-      - "smithery.yaml"
       - "server.json"
       - ".github/workflows/verify-configs.yml"
 
@@ -51,5 +49,5 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Verify all 15 distribution artifacts are in sync with source.json
+      - name: Verify all 14 distribution artifacts are in sync with source.json
         run: node scripts/generate-configs.mjs --check
