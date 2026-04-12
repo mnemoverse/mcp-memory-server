@@ -1,5 +1,5 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
   "description": "Persistent memory for AI agents — write once, recall anywhere across all your AI tools",
   "repository": {
@@ -9,17 +9,18 @@
   "version": "0.3.0",
   "packages": [
     {
-      "registryName": "npm",
-      "name": "@mnemoverse/mcp-memory-server",
+      "registryType": "npm",
+      "identifier": "@mnemoverse/mcp-memory-server",
       "version": "0.3.0",
-      "runtimeArguments": [
-        "@mnemoverse/mcp-memory-server@latest"
-      ],
+      "transport": {
+        "type": "stdio"
+      },
       "environmentVariables": [
         {
           "name": "MNEMOVERSE_API_KEY",
           "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
           "isRequired": true,
+          "format": "string",
           "isSecret": true
         }
       ]
