@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
-  "description": "Persistent memory for AI agents — write once, recall anywhere across all your AI tools",
+  "description": "Shared AI memory across Claude, Cursor, VS Code, ChatGPT. Write once, recall anywhere.",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.3.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "transport": {
         "type": "stdio"
       },
