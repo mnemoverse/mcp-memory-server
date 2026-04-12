@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+
+// Version is read at runtime from package.json so there is exactly one place
+// to bump on each release. Works both from `dist/` during local dev and from
+// `node_modules/@mnemoverse/mcp-memory-server/dist/` after an npm install.
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
 
 const API_URL =
   process.env.MNEMOVERSE_API_URL || "https://core.mnemoverse.com/api/v1";
@@ -59,7 +66,7 @@ function capResult(text: string): string {
 
 const server = new McpServer({
   name: "mnemoverse-memory",
-  version: "0.3.1",
+  version: pkg.version,
 });
 
 // --- Tool: memory_write ---
