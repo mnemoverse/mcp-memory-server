@@ -5,7 +5,7 @@
   "description": "Persistent memory for AI agents — write once, recall anywhere across all your AI tools",
   "type": "stdio",
   "command": "npx",
-  "args": ["-y", "@mnemoverse/mcp-memory-server"],
+  "args": ["-y", "@mnemoverse/mcp-memory-server@latest"],
   "env": {
     "MNEMOVERSE_API_KEY": {
       "value": "mk_live_YOUR_KEY",
