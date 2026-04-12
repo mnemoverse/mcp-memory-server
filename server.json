@@ -1,17 +1,20 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
-  "description": "Shared AI memory across Claude, Cursor, VS Code, ChatGPT. Write once, recall anywhere.",
+  "title": "Mnemoverse Memory",
+  "description": "Persistent memory across Claude, Cursor, ChatGPT, VS Code. Importance scoring, linked recall.",
+  "websiteUrl": "https://mnemoverse.com",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
-    "source": "github"
+    "source": "github",
+    "id": "1207193530"
   },
-  "version": "0.3.2",
+  "version": "0.3.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "transport": {
         "type": "stdio"
       },
@@ -21,7 +24,8 @@
           "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
           "isRequired": true,
           "format": "string",
-          "isSecret": true
+          "isSecret": true,
+          "default": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         }
       ]
     }

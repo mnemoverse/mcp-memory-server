@@ -2,13 +2,16 @@
   "$comment": "SINGLE SOURCE OF TRUTH for all distribution channel configs. Edit this file → run `npm run generate:configs` → all 9+ artifacts regenerate. CI verifies committed artifacts match source.",
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
-  "description": "Shared AI memory across Claude, Cursor, VS Code, ChatGPT. Write once, recall anywhere.",
+  "title": "Mnemoverse Memory",
+  "description": "Persistent memory across Claude, Cursor, ChatGPT, VS Code. Importance scoring, linked recall.",
+  "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",
   "args": ["-y", "@mnemoverse/mcp-memory-server@latest"],
   "env": {
     "MNEMOVERSE_API_KEY": {
       "value": "mk_live_YOUR_KEY",
+      "placeholder": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
       "required": true,
       "secret": true
@@ -21,6 +24,7 @@
   "metadata": {
     "homepage": "https://mnemoverse.com/docs/api/mcp-server",
     "repository": "https://github.com/mnemoverse/mcp-memory-server",
+    "repositoryId": 1207193530,
     "license": "MIT",
     "author": "Mnemoverse",
     "tags": ["memory", "persistent", "ai-agents", "cross-tool", "oauth"]
