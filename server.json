@@ -6,12 +6,12 @@
     "url": "https://github.com/mnemoverse/mcp-memory-server",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryName": "npm",
       "name": "@mnemoverse/mcp-memory-server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "runtimeArguments": [
         "@mnemoverse/mcp-memory-server"
       ],

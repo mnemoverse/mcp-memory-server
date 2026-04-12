@@ -59,7 +59,7 @@ function capResult(text: string): string {
 
 const server = new McpServer({
   name: "mnemoverse-memory",
-  version: "0.2.0",
+  version: "0.3.0",
 });
 
 // --- Tool: memory_write ---
@@ -299,6 +299,111 @@ server.registerTool(
     ].join("\n");
 
     return { content: [{ type: "text" as const, text }] };
+  },
+);
+
+// --- Tool: memory_delete ---
+
+server.registerTool(
+  "memory_delete",
+  {
+    description:
+      "Permanently delete a single memory by its atom_id. Use when the user explicitly asks to forget something specific, or when you stored a wrong fact that needs correcting. The deletion is irreversible — the memory is gone for good. For broad cleanup of an entire topic, prefer memory_delete_domain.",
+    inputSchema: {
+      atom_id: z
+        .string()
+        .min(1)
+        .describe(
+          "The atom_id of the memory to delete (from memory_read results — each item has an id)",
+        ),
+    },
+    annotations: {
+      title: "Delete a Memory",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ atom_id }) => {
+    const result = await apiFetch(`/memory/atoms/${encodeURIComponent(atom_id)}`, {
+      method: "DELETE",
+    });
+
+    const r = result as { deleted?: boolean; atom_id?: string };
+
+    if (r.deleted === false) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `No memory found with id ${atom_id}.`,
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Deleted memory ${atom_id}.`,
+        },
+      ],
+    };
+  },
+);
+
+// --- Tool: memory_delete_domain ---
+
+server.registerTool(
+  "memory_delete_domain",
+  {
+    description:
+      "Permanently delete ALL memories in a given domain. Use when the user wants to clean up an entire topic — e.g., 'forget everything about project X' or 'wipe my benchmark experiments'. The deletion is irreversible. List domains first with memory_stats to confirm the exact name. Refuse to call this without an explicit user request — it is much more destructive than memory_delete.",
+    inputSchema: {
+      domain: z
+        .string()
+        .min(1)
+        .max(200)
+        .describe(
+          "The domain namespace to wipe (e.g., 'project:old', 'experiments-2025'). Must match exactly.",
+        ),
+      confirm: z
+        .literal(true)
+        .describe(
+          "Must be exactly true to proceed. Acts as a safety interlock against accidental invocation.",
+        ),
+    },
+    annotations: {
+      title: "Delete an Entire Memory Domain",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ domain, confirm }) => {
+    if (confirm !== true) {
+      throw new Error(
+        "memory_delete_domain requires confirm=true as a safety interlock.",
+      );
+    }
+
+    const result = await apiFetch(`/memory/domain/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
+    });
+
+    const r = result as { deleted: number; domain: string };
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Deleted ${r.deleted} ${r.deleted === 1 ? "memory" : "memories"} from domain "${r.domain}".`,
+        },
+      ],
+    };
   },
 );
 
