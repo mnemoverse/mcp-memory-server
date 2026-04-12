@@ -1,0 +1,1 @@
+cursor://anysphere.cursor-deeplink/mcp/install?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyIl0sImVudiI6eyJNTkVNT1ZFUlNFX0FQSV9LRVkiOiJta19saXZlX1lPVVJfS0VZIn19
