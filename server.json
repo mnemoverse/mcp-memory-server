@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
   "title": "Mnemoverse Memory",
-  "description": "Persistent memory across Claude, Cursor, ChatGPT, VS Code. Importance scoring, linked recall.",
+  "description": "Store and recall long-term memory for AI agents. Persistent memory across Claude, Cursor, ChatGPT — semantic search retrieves the right context across sessions, projects, and tools.",
   "websiteUrl": "https://mnemoverse.com",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
