@@ -3,7 +3,7 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Persistent memory across Claude, Cursor, ChatGPT, VS Code. Importance scoring, linked recall.",
+  "description": "Store and recall long-term memory for AI agents. Persistent memory across Claude, Cursor, ChatGPT — semantic search retrieves the right context across sessions, projects, and tools.",
   "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",
