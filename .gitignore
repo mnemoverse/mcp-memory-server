@@ -10,3 +10,7 @@ dist/
 
 # Local test artifacts
 *.tgz
+
+# MCPB build output
+dist-mcpb/
+*.mcpb
