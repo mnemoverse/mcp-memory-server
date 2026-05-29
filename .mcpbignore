@@ -1,0 +1,21 @@
+# Files excluded from the packed .mcpb Claude Desktop Extension bundle.
+# `mcpb pack` respects this like .npmignore.
+#
+# KEPT at runtime (do NOT add here): manifest.json, dist/, node_modules/,
+# icon.png, package.json, README.md, LICENSE.
+.git/
+.github/
+.gitignore
+.gitattributes
+.mcpbignore
+src/
+scripts/
+docs/
+*.ts
+tsconfig.json
+package-lock.json
+server.json
+llms.txt
+CONTRIBUTING.md
+dist-mcpb/
+*.mcpb
