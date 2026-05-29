@@ -96,6 +96,28 @@ function genCursorDeepLink() {
 }
 
 /**
+ * "Add to Cursor" one-click install button (official badge).
+ *
+ * Badge: https://cursor.com/deeplink/mcp-install-dark.svg (verified 200, image/svg+xml).
+ * Link:  https://cursor.com/en/install-mcp?name=NAME&config=BASE64 — the web form.
+ * The bare /install-mcp path 404s; /en/install-mcp 307-redirects into the
+ * cursor:// deep link, so the button is clickable straight from a rendered
+ * README/browser. The base64 payload is the SAME inner server object as
+ * genCursorDeepLink() (command + args + env, NOT wrapped in mcpServers).
+ */
+function genCursorInstallButton() {
+  const inner = {
+    command: source.command,
+    args: source.args,
+    env: ENV_VALUES,
+  };
+  const config = Buffer.from(JSON.stringify(inner)).toString("base64");
+  return `[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=${encodeURIComponent(
+    source.name,
+  )}&config=${config})`;
+}
+
+/**
  * VS Code deep link.
  *
  * Format: vscode:mcp/install?{URL_ENCODED_JSON}
@@ -184,6 +206,19 @@ function snippetVscode() {
   );
 }
 
+function snippetCursor() {
+  // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
+  // manual JSON fallback. The button and the JSON encode the same config.
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  return (
+    "**Cursor** — click to install, or add to `.cursor/mcp.json`:\n\n" +
+    genCursorInstallButton() +
+    "\n\n```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
 const WHY_LATEST_NOTE =
   "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
 
@@ -194,7 +229,7 @@ const WHY_LATEST_NOTE =
 function readmeInstallBlock() {
   return [
     snippetClaudeCodeCli(),
-    snippetMcpServersJson("Cursor", ".cursor/mcp.json"),
+    snippetCursor(),
     snippetVscode(),
     snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
     WHY_LATEST_NOTE,
@@ -356,8 +391,7 @@ const OUTPUTS = [
   },
   {
     path: "docs/snippets/cursor.md",
-    content:
-      PARTIAL_HEADER + snippetMcpServersJson("Cursor", ".cursor/mcp.json"),
+    content: PARTIAL_HEADER + snippetCursor(),
   },
   {
     path: "docs/snippets/claude-desktop.md",
