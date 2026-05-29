@@ -1,0 +1,90 @@
+{
+  "manifest_version": "0.3",
+  "name": "mnemoverse-memory",
+  "display_name": "Mnemoverse Memory",
+  "version": "0.3.3",
+  "description": "Store and recall long-term memory for AI agents. Persistent memory across Claude, Cursor, ChatGPT — semantic search retrieves the right context across sessions, projects, and tools.",
+  "long_description": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read. The same memory is shared everywhere you use your Mnemoverse API key — Claude, Cursor, VS Code, and any MCP client. Requires a free API key from https://console.mnemoverse.com.",
+  "author": {
+    "name": "Mnemoverse",
+    "url": "https://mnemoverse.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemoverse/mcp-memory-server.git"
+  },
+  "homepage": "https://mnemoverse.com/docs/api/mcp-server",
+  "documentation": "https://mnemoverse.com/docs/api/mcp-server",
+  "support": "https://github.com/mnemoverse/mcp-memory-server/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "persistent",
+    "ai-agents",
+    "cross-tool",
+    "oauth"
+  ],
+  "privacy_policies": [
+    "https://mnemoverse.com/privacy.html"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "memory_write",
+      "description": "Store a memory that should persist across sessions and tools — preferences, decisions, lessons, project facts."
+    },
+    {
+      "name": "memory_read",
+      "description": "Search your long-term memory by natural-language query before answering or starting a task."
+    },
+    {
+      "name": "memory_feedback",
+      "description": "Report whether a recalled memory was helpful so good memories surface faster next time."
+    },
+    {
+      "name": "memory_stats",
+      "description": "Show how many memories are stored, which domains exist, and average quality scores."
+    },
+    {
+      "name": "memory_delete",
+      "description": "Permanently delete a single memory by its atom_id."
+    },
+    {
+      "name": "memory_delete_domain",
+      "description": "Permanently delete every memory in a domain (requires an explicit confirm)."
+    }
+  ],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Mnemoverse API Key",
+      "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}
