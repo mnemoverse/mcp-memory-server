@@ -78,6 +78,47 @@ function genVscodeFormat() {
 }
 
 /**
+ * Zed format — Zed uses `context_servers` (NOT `mcpServers`), and a custom
+ * command server MUST set `"source": "custom"` so Zed treats it as a raw stdio
+ * command rather than an extension. Flat command/args/env (per Zed PR #33539,
+ * which replaced the older nested `command: { path, args, env }` shape).
+ */
+function genZedFormat() {
+  return {
+    context_servers: {
+      [source.name]: {
+        source: "custom",
+        command: source.command,
+        args: source.args,
+        env: ENV_VALUES,
+      },
+    },
+  };
+}
+
+/**
+ * Continue format — YAML, an `mcpServers` list. stdio is inferred from the
+ * presence of `command` (only sse/http need an explicit transport). The legacy
+ * config.json `experimental.modelContextProtocolServers` shape is deprecated.
+ */
+function genContinueYaml() {
+  const argsLines = source.args.map((a) => `      - "${a}"`).join("\n");
+  const envLines = Object.entries(ENV_VALUES)
+    .map(([k, v]) => `      ${k}: ${v}`)
+    .join("\n");
+  return (
+    "mcpServers:\n" +
+    `  - name: ${source.name}\n` +
+    `    command: ${source.command}\n` +
+    "    args:\n" +
+    argsLines +
+    "\n    env:\n" +
+    envLines +
+    "\n"
+  );
+}
+
+/**
  * Cursor deep link.
  *
  * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
@@ -219,6 +260,45 @@ function snippetCursor() {
   );
 }
 
+function snippetZed() {
+  const json = JSON.stringify(genZedFormat(), null, 2);
+  return (
+    '**Zed** — add to `~/.config/zed/settings.json` (Zed uses `context_servers`, and `"source": "custom"` is required):\n\n' +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+function snippetJetBrains() {
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  return (
+    "**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste:\n\n" +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+function snippetCline() {
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  return (
+    "**Cline** — *MCP Servers → Configure* (or edit `cline_mcp_settings.json`). Cline reads `env` values literally, so paste your real key — not a `${VAR}` reference:\n\n" +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+function snippetContinue() {
+  return (
+    "**Continue** — add `~/.continue/mcpServers/mnemoverse.yaml` (Continue uses YAML):\n\n" +
+    "```yaml\n" +
+    genContinueYaml() +
+    "```\n"
+  );
+}
+
 const WHY_LATEST_NOTE =
   "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
 
@@ -232,6 +312,11 @@ function readmeInstallBlock() {
     snippetCursor(),
     snippetVscode(),
     snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
+    "**More MCP clients** — same server, different config file:",
+    snippetZed(),
+    snippetJetBrains(),
+    snippetCline(),
+    snippetContinue(),
     WHY_LATEST_NOTE,
   ].join("\n");
 }
@@ -411,6 +496,22 @@ const OUTPUTS = [
         "Windsurf",
         "~/.codeium/windsurf/mcp_config.json",
       ),
+  },
+  {
+    path: "docs/snippets/zed.md",
+    content: PARTIAL_HEADER + snippetZed(),
+  },
+  {
+    path: "docs/snippets/jetbrains.md",
+    content: PARTIAL_HEADER + snippetJetBrains(),
+  },
+  {
+    path: "docs/snippets/cline.md",
+    content: PARTIAL_HEADER + snippetCline(),
+  },
+  {
+    path: "docs/snippets/continue.md",
+    content: PARTIAL_HEADER + snippetContinue(),
   },
 ];
 

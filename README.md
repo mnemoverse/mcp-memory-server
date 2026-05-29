@@ -88,6 +88,78 @@ claude mcp add mnemoverse \
 }
 ```
 
+**More MCP clients** — same server, different config file:
+**Zed** — add to `~/.config/zed/settings.json` (Zed uses `context_servers`, and `"source": "custom"` is required):
+
+```json
+{
+  "context_servers": {
+    "mnemoverse": {
+      "source": "custom",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+**Cline** — *MCP Servers → Configure* (or edit `cline_mcp_settings.json`). Cline reads `env` values literally, so paste your real key — not a `${VAR}` reference:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+**Continue** — add `~/.continue/mcpServers/mnemoverse.yaml` (Continue uses YAML):
+
+```yaml
+mcpServers:
+  - name: mnemoverse
+    command: npx
+    args:
+      - "-y"
+      - "@mnemoverse/mcp-memory-server@latest"
+    env:
+      MNEMOVERSE_API_KEY: mk_live_YOUR_KEY
+```
+
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.
 
 <!-- INSTALL_SNIPPETS_END -->
