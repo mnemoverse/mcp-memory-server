@@ -3,7 +3,7 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Store and recall long-term memory for AI agents. Persistent memory across Claude, Cursor, ChatGPT — semantic search retrieves the right context across sessions, projects, and tools.",
+  "description": "Persistent long-term memory for AI agents — semantic recall across Claude, Cursor, ChatGPT & MCP.",
   "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",
