@@ -314,6 +314,69 @@ function genServerJson() {
   };
 }
 
+/**
+ * Claude Desktop Extension (MCPB) manifest.json.
+ *
+ * Spec: https://github.com/anthropics/mcpb (manifest_version 0.3). Packages the
+ * local stdio server as a one-click Desktop Extension that can be submitted to
+ * the Claude Connectors Directory WITHOUT a hosted remote server or OAuth.
+ *
+ * The API key is collected from the user via `user_config` (sensitive) and
+ * injected into the server env as ${user_config.api_key} at runtime — never
+ * hardcoded into the bundle. `version` is taken from package.json so the .mcpb
+ * always matches the npm release; identity fields reuse source.metadata; the
+ * MCPB-specific extras (privacy policy, user_config, tools, icon, compatibility)
+ * live under source.mcpb.
+ */
+function genMcpbManifest() {
+  const m = source.mcpb;
+  return {
+    manifest_version: "0.3",
+    name: m.name,
+    display_name: source.displayName,
+    version: PACKAGE_VERSION,
+    description: source.description,
+    long_description: m.longDescription,
+    // The MCPB directory submission requires `author` to point at a GitHub
+    // profile — so this comes from source.mcpb.author (a github.com URL), not
+    // the marketing websiteUrl.
+    author: m.author,
+    repository: {
+      type: "git",
+      url: `${source.metadata.repository}.git`,
+    },
+    homepage: source.metadata.homepage,
+    documentation: source.metadata.homepage,
+    support: `${source.metadata.repository}/issues`,
+    icon: m.icon,
+    license: source.metadata.license,
+    keywords: source.metadata.tags,
+    // Required for MCPB directory review — "missing or incomplete privacy
+    // policies result in immediate rejection".
+    privacy_policies: m.privacyPolicies,
+    server: {
+      type: "node",
+      entry_point: "dist/index.js",
+      mcp_config: {
+        command: "node",
+        args: ["${__dirname}/dist/index.js"],
+        env: {
+          MNEMOVERSE_API_KEY: "${user_config.api_key}",
+        },
+      },
+    },
+    tools: m.tools,
+    user_config: m.userConfig,
+    compatibility: {
+      claude_desktop: m.compatibility.claudeDesktop,
+      platforms: m.compatibility.platforms,
+      runtimes: {
+        node: m.compatibility.node,
+      },
+    },
+  };
+}
+
 // ─── Output ──────────────────────────────────────────────────────────────────
 
 const OUTPUTS = [
@@ -348,6 +411,11 @@ const OUTPUTS = [
   {
     path: "server.json",
     content: JSON.stringify(genServerJson(), null, 2) + "\n",
+  },
+  {
+    // Claude Desktop Extension manifest — see genMcpbManifest() above.
+    path: "manifest.json",
+    content: JSON.stringify(genMcpbManifest(), null, 2) + "\n",
   },
   // ─── Markdown partials (consumed by README + mnemoverse-docs) ──────────────
   {
