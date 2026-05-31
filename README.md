@@ -30,7 +30,7 @@ claude mcp add mnemoverse \
 
 **Cursor** — click to install, or add to `.cursor/mcp.json`:
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSJ9fQ==)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSJ9fQ%3D%3D)
 
 ```json
 {
@@ -89,6 +89,7 @@ claude mcp add mnemoverse \
 ```
 
 **More MCP clients** — same server, different config file:
+
 **Zed** — add to `~/.config/zed/settings.json` (Zed uses `context_servers`, and `"source": "custom"` is required):
 
 ```json
@@ -157,7 +158,7 @@ mcpServers:
       - "-y"
       - "@mnemoverse/mcp-memory-server@latest"
     env:
-      MNEMOVERSE_API_KEY: mk_live_YOUR_KEY
+      MNEMOVERSE_API_KEY: "mk_live_YOUR_KEY"
 ```
 
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.

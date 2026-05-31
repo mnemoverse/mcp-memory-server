@@ -104,7 +104,7 @@ function genZedFormat() {
 function genContinueYaml() {
   const argsLines = source.args.map((a) => `      - "${a}"`).join("\n");
   const envLines = Object.entries(ENV_VALUES)
-    .map(([k, v]) => `      ${k}: ${v}`)
+    .map(([k, v]) => `      ${k}: "${v}"`)
     .join("\n");
   return (
     "mcpServers:\n" +
@@ -155,7 +155,7 @@ function genCursorInstallButton() {
   const config = Buffer.from(JSON.stringify(inner)).toString("base64");
   return `[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=${encodeURIComponent(
     source.name,
-  )}&config=${config})`;
+  )}&config=${encodeURIComponent(config)})`;
 }
 
 /**
@@ -312,7 +312,7 @@ function readmeInstallBlock() {
     snippetCursor(),
     snippetVscode(),
     snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
-    "**More MCP clients** — same server, different config file:",
+    "**More MCP clients** — same server, different config file:\n",
     snippetZed(),
     snippetJetBrains(),
     snippetCline(),

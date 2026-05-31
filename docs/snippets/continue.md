@@ -10,5 +10,5 @@ mcpServers:
       - "-y"
       - "@mnemoverse/mcp-memory-server@latest"
     env:
-      MNEMOVERSE_API_KEY: mk_live_YOUR_KEY
+      MNEMOVERSE_API_KEY: "mk_live_YOUR_KEY"
 ```
