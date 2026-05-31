@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-mcpb
+*.mcpb
+.git
+.github
+docs
+*.md
+icon.png

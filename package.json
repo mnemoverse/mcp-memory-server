@@ -22,7 +22,9 @@
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "install-hooks": "node scripts/install-hooks.mjs",
     "prebuild": "npm run generate:configs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "mcpb:validate": "npx -y @anthropic-ai/mcpb@2 validate .",
+    "mcpb:pack": "npm run build && npx -y @anthropic-ai/mcpb@2 pack . dist-mcpb/mnemoverse-memory.mcpb"
   },
   "mcpName": "io.github.mnemoverse/mcp-memory-server",
   "keywords": [

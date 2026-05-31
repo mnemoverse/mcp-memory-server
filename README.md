@@ -233,6 +233,17 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 - [MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
 - [Contributing](CONTRIBUTING.md)
 
+## Privacy
+
+This server sends only what you explicitly choose to store or search to the Mnemoverse API (`core.mnemoverse.com`), authenticated with your API key. It does **not** read your AI client's conversation history, your local files, or anything you don't pass to a `memory_*` tool. Stored memories live under your account and are never sold or shared with third parties.
+
+| | |
+|---|---|
+| **Privacy Policy** | <https://mnemoverse.com/privacy.html> |
+| **Data sent** | the `content` / `concepts` / `domain` you pass to `memory_write`; the `query` you pass to `memory_read` |
+| **Retention & deletion** | delete one memory with `memory_delete`, or an entire namespace with `memory_delete_domain` |
+| **Contact** | hello@mnemoverse.com |
+
 ## License
 
 [MIT](LICENSE) © Mnemoverse
