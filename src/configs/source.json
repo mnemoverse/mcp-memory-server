@@ -32,6 +32,7 @@
   "mcpb": {
     "$comment": "Fields specific to the Claude Desktop Extension (MCPB) manifest.json. version + identity fields are derived from package.json + the source above; only MCPB-specific extras live here.",
     "name": "mnemoverse-memory",
+    "author": { "name": "Mnemoverse", "url": "https://github.com/mnemoverse" },
     "longDescription": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read. The same memory is shared everywhere you use your Mnemoverse API key — Claude, Cursor, VS Code, and any MCP client. Requires a free API key from https://console.mnemoverse.com.",
     "privacyPolicies": ["https://mnemoverse.com/privacy.html"],
     "icon": "icon.png",

@@ -337,10 +337,10 @@ function genMcpbManifest() {
     version: PACKAGE_VERSION,
     description: source.description,
     long_description: m.longDescription,
-    author: {
-      name: source.metadata.author,
-      url: source.websiteUrl,
-    },
+    // The MCPB directory submission requires `author` to point at a GitHub
+    // profile — so this comes from source.mcpb.author (a github.com URL), not
+    // the marketing websiteUrl.
+    author: m.author,
     repository: {
       type: "git",
       url: `${source.metadata.repository}.git`,
