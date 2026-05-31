@@ -1,0 +1,9 @@
+# Normalize all text files to LF in the repo AND on checkout.
+# scripts/generate-configs.mjs emits LF; without eol=lf, Windows checkouts get
+# CRLF and every `npm run build` shows phantom drift on the generated files.
+* text=auto eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.ico binary
+*.mcpb binary
