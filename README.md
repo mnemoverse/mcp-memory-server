@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
 [![npm downloads](https://img.shields.io/npm/dm/@mnemoverse/mcp-memory-server.svg?color=blue&label=downloads)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
-[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 
@@ -231,7 +231,7 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 - [Console (get API key)](https://console.mnemoverse.com)
 - [GitHub](https://github.com/mnemoverse/mcp-memory-server)
 - [Releases](https://github.com/mnemoverse/mcp-memory-server/releases)
-- [MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
+- [MCP Registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse)
 - [Contributing](CONTRIBUTING.md)
 
 ## Privacy

@@ -103,13 +103,15 @@ server.registerTool(
   "memory_write",
   {
     description:
-      "Store a memory that should persist across sessions — preferences, decisions, lessons learned, project facts, people and roles. Memories you store are also accessible from Claude, ChatGPT, Cursor, VS Code, and any other AI tool the user connects to Mnemoverse — write once, recall everywhere. Call this PROACTIVELY whenever the user states a preference, makes a decision, or you learn something important. Don't wait to be asked — if it's worth remembering, store it now.",
+      "Store a long-term memory that persists across sessions AND across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code) — write once, recall everywhere. Call this PROACTIVELY the moment the user states a preference, makes a decision, or you learn a durable fact (people, roles, project setup, a lesson). Don't wait to be asked. Do NOT use it for transient chatter, secrets, or anything only relevant to the current turn. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
     inputSchema: {
       content: z
         .string()
         .min(1)
         .max(10000)
-        .describe("The memory to store — what happened, what was learned"),
+        .describe(
+          "The memory to store as a self-contained statement, e.g. 'User prefers TypeScript strict mode' or 'Decided to deploy the API on Cloudflare Workers (2026-06)'.",
+        ),
       concepts: z
         .array(z.string())
         .optional()
@@ -175,13 +177,15 @@ server.registerTool(
   "memory_read",
   {
     description:
-      "ALWAYS call this tool first when the user asks a question about preferences, past decisions, project setup, people, or anything that might have been discussed before. This is your long-term memory — it persists across sessions and tools (Claude, ChatGPT, Cursor, VS Code, and any other AI tool the user connects). Search by natural language query. If you have any doubt whether you know something — check memory first.",
+      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (semantic similarity plus learned concept associations); each result carries an id you can pass to memory_feedback or memory_delete.",
     inputSchema: {
       query: z
         .string()
         .min(1)
         .max(5000)
-        .describe("Natural language query — what are you looking for?"),
+        .describe(
+          "Natural-language description of what you're looking for, e.g. 'database choice for the API' or 'user's preferred testing framework'.",
+        ),
       top_k: z
         .number()
         .int()
@@ -192,7 +196,9 @@ server.registerTool(
       domain: z
         .string()
         .optional()
-        .describe("Filter by domain namespace"),
+        .describe(
+          "Restrict the search to one domain namespace (e.g. 'project:acme'); omit to search across all domains.",
+        ),
     },
     annotations: {
       title: "Search Memories",
@@ -260,7 +266,7 @@ server.registerTool(
   "memory_feedback",
   {
     description:
-      "Report whether a retrieved memory was helpful. Positive feedback makes memories easier to find next time across all tools. Negative feedback lets them fade. Call this after using memories from memory_read.",
+      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results.",
     inputSchema: {
       atom_ids: z
         .array(z.string())
@@ -309,7 +315,7 @@ server.registerTool(
   "memory_stats",
   {
     description:
-      "Get memory statistics — how many memories are stored, which domains exist, average quality scores. These memories are shared with all AI tools the user has connected to Mnemoverse. Useful for understanding the current state of memory.",
+      "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before a delete, or when the user asks what you remember. Read-only — changes nothing.",
     inputSchema: {},
     annotations: {
       title: "Memory Statistics",
@@ -351,7 +357,7 @@ server.registerTool(
   "memory_delete",
   {
     description:
-      "Permanently delete a single memory by its atom_id. Use when the user explicitly asks to forget something specific, or when you stored a wrong fact that needs correcting. The deletion is irreversible — the memory is gone for good. For broad cleanup of an entire topic, prefer memory_delete_domain.",
+      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use only when the user explicitly asks to forget something specific, or to correct a fact you stored wrongly. Get the atom_id from a memory_read result. To clear an entire topic at once, use memory_delete_domain instead. Never delete on your own initiative — require an explicit user request.",
     inputSchema: {
       atom_id: z
         .string()
@@ -405,7 +411,7 @@ server.registerTool(
   "memory_delete_domain",
   {
     description:
-      "Permanently delete ALL memories in a given domain. Use when the user wants to clean up an entire topic — e.g., 'forget everything about project X' or 'wipe my benchmark experiments'. The deletion is irreversible. List domains first with memory_stats to confirm the exact name. Refuse to call this without an explicit user request — it is much more destructive than memory_delete.",
+      "Permanently delete EVERY memory in one domain — irreversible, and far more destructive than memory_delete. Use only on an explicit user request to wipe a whole topic, e.g. 'forget everything about project X' or 'wipe my benchmark experiments'. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). Never call this speculatively or to 'clean up' on your own — only when the user explicitly asks.",
     inputSchema: {
       domain: z
         .string()
