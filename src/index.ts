@@ -20,13 +20,13 @@ const API_KEY = process.env.MNEMOVERSE_API_KEY || "";
 // Approximate token count = chars / 4. Cap at 24,000 tokens to leave headroom under the 25K limit.
 const MAX_RESULT_CHARS = 24_000 * 4;
 
-if (!API_KEY) {
-  console.error(
-    "Error: MNEMOVERSE_API_KEY environment variable is required.\n" +
-      "Get your free key at https://console.mnemoverse.com",
-  );
-  process.exit(1);
-}
+// The API key is validated lazily — inside apiFetch, on the first tool call —
+// rather than at startup. This lets the server START WITHOUT a key so that
+// `tools/list` and other introspection work key-free. MCP directories and
+// registries (e.g. Glama) boot the server to enumerate and score its tools,
+// and clients may browse capabilities before sign-in; a startup exit on a
+// missing key blocks all of that. A tool *invocation* without a key returns a
+// clear, actionable error instead (see apiFetch).
 
 /**
  * Fetch from the Mnemoverse core API with authentication.
@@ -45,6 +45,12 @@ async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  if (!API_KEY) {
+    throw new Error(
+      "MNEMOVERSE_API_KEY is required for this operation. Get a free key at " +
+        "https://console.mnemoverse.com and set it in your MCP client config.",
+    );
+  }
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
