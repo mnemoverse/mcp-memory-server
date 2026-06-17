@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 
-Shared AI memory across Claude, Cursor, VS Code, ChatGPT, and any MCP client. Write once, recall anywhere.
+Hosted memory for AI agents that learns and forgets. Feedback reranks the facts that help; recall fades by recency. One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
 
-Your agent remembers everything — across sessions, projects, and tools. One API key, one memory, everywhere.
+Memory that persists across sessions, projects, and tools — and improves with use. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
 
 ## Quick Start
 
