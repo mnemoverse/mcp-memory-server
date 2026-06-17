@@ -25,12 +25,13 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com) — takes 30
 ```bash
 claude mcp add mnemoverse \
   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY \
+  -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 \
   -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
 **Cursor** — click to install, or add to `.cursor/mcp.json`:
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSJ9fQ%3D%3D)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
 
 ```json
 {
@@ -42,7 +43,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -62,7 +64,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -81,7 +84,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -103,7 +107,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -122,7 +127,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -141,7 +147,8 @@ claude mcp add mnemoverse \
         "@mnemoverse/mcp-memory-server@latest"
       ],
       "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY"
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
       }
     }
   }
@@ -159,6 +166,7 @@ mcpServers:
       - "@mnemoverse/mcp-memory-server@latest"
     env:
       MNEMOVERSE_API_KEY: "mk_live_YOUR_KEY"
+      MNEMOVERSE_API_URL: "https://core.mnemoverse.com/api/v1"
 ```
 
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.

@@ -9,23 +9,31 @@
     "source": "github",
     "id": "1207193530"
   },
-  "version": "0.3.7",
+  "version": "0.3.8",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "MNEMOVERSE_API_KEY",
-          "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
-          "isRequired": true,
+          "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; a key is required only to store or recall memories. Get one free in ~30s at https://console.mnemoverse.com",
+          "isRequired": false,
           "format": "string",
           "isSecret": true,
           "default": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "name": "MNEMOVERSE_API_URL",
+          "description": "Mnemoverse API base URL. Leave as the default unless you self-host the core engine.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "default": "https://core.mnemoverse.com/api/v1"
         }
       ]
     }
