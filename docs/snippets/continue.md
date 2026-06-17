@@ -11,4 +11,5 @@ mcpServers:
       - "@mnemoverse/mcp-memory-server@latest"
     env:
       MNEMOVERSE_API_KEY: "mk_live_YOUR_KEY"
+      MNEMOVERSE_API_URL: "https://core.mnemoverse.com/api/v1"
 ```

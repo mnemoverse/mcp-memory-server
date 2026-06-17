@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "MCP server for Mnemoverse Memory API — persistent AI memory across Claude Code, Cursor, VS Code, and any MCP client",
   "type": "module",
   "bin": {

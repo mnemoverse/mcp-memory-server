@@ -12,9 +12,16 @@
     "MNEMOVERSE_API_KEY": {
       "value": "mk_live_YOUR_KEY",
       "placeholder": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
-      "required": true,
+      "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; a key is required only to store or recall memories. Get one free in ~30s at https://console.mnemoverse.com",
+      "required": false,
       "secret": true
+    },
+    "MNEMOVERSE_API_URL": {
+      "value": "https://core.mnemoverse.com/api/v1",
+      "placeholder": "https://core.mnemoverse.com/api/v1",
+      "description": "Mnemoverse API base URL. Leave as the default unless you self-host the core engine.",
+      "required": false,
+      "secret": false
     }
   },
   "package": {
@@ -45,9 +52,9 @@
       "api_key": {
         "type": "string",
         "title": "Mnemoverse API Key",
-        "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
+        "description": "Mnemoverse API key (starts with mk_live_). Optional — the server installs and lists its tools without it; required only to store or recall memories. Get one free at https://console.mnemoverse.com",
         "sensitive": true,
-        "required": true
+        "required": false
       }
     },
     "tools": [

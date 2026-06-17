@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mnemoverse-memory",
   "display_name": "Mnemoverse Memory",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Persistent long-term memory for AI agents — semantic recall across Claude, Cursor, ChatGPT & MCP.",
   "long_description": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read. The same memory is shared everywhere you use your Mnemoverse API key — Claude, Cursor, VS Code, and any MCP client. Requires a free API key from https://console.mnemoverse.com.",
   "author": {
@@ -71,9 +71,9 @@
     "api_key": {
       "type": "string",
       "title": "Mnemoverse API Key",
-      "description": "Your Mnemoverse API key (starts with mk_live_). Get one free at https://console.mnemoverse.com",
+      "description": "Mnemoverse API key (starts with mk_live_). Optional — the server installs and lists its tools without it; required only to store or recall memories. Get one free at https://console.mnemoverse.com",
       "sensitive": true,
-      "required": true
+      "required": false
     }
   },
   "compatibility": {
