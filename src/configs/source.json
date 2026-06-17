@@ -3,7 +3,7 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Persistent long-term memory for AI agents — semantic recall across Claude, Cursor, ChatGPT & MCP.",
+  "description": "Hosted memory for AI agents that learns and forgets — feedback reranks what helps; recall across Claude, Cursor, ChatGPT & any MCP client.",
   "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",
