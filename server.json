@@ -2,19 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
   "title": "Mnemoverse Memory",
-  "description": "Hosted memory for AI agents that learns and forgets — feedback reranks what helps; recall across Claude, Cursor, ChatGPT & any MCP client.",
+  "description": "Hosted memory for AI agents that learns and forgets — one key across Claude, Cursor & ChatGPT.",
   "websiteUrl": "https://mnemoverse.com",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
     "source": "github",
     "id": "1207193530"
   },
-  "version": "0.3.9",
+  "version": "0.3.10",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.3.9",
+      "version": "0.3.10",
       "transport": {
         "type": "stdio"
       },
