@@ -1,0 +1,38 @@
+name: release-sync check
+
+# Issue #31: confirm every first-party public surface (npm, the Official MCP
+# Registry, the GitHub release) is still tracking package.json#version — so a
+# half-landed release (e.g. npm published but the registry publish failed) can't
+# drift silently and make directories read us as unmaintained.
+#
+# Runs on a schedule (not on every push — a release needs a moment to propagate,
+# and we don't want a false red right after tagging) plus manual dispatch.
+# A red run = drift; open release.yml and re-run the missing leg.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: release-sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Read-only check — no git ops after checkout, so don't leave the token
+          # in .git/config. (SHA-pinning the actions is a repo-wide policy choice;
+          # kept at @v4 to match release.yml / verify-configs.yml until that's done.)
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # No install: the check is pure fetch (Node 18+ global fetch), no deps.
+      - name: Check public surfaces track the release
+        run: npm run check:release-sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
