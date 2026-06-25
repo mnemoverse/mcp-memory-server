@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { getAccessToken } from "./oauth.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -20,13 +21,14 @@ const API_KEY = process.env.MNEMOVERSE_API_KEY || "";
 // Approximate token count = chars / 4. Cap at 24,000 tokens to leave headroom under the 25K limit.
 const MAX_RESULT_CHARS = 24_000 * 4;
 
-// The API key is validated lazily — inside apiFetch, on the first tool call —
-// rather than at startup. This lets the server START WITHOUT a key so that
-// `tools/list` and other introspection work key-free. MCP directories and
-// registries (e.g. Glama) boot the server to enumerate and score its tools,
-// and clients may browse capabilities before sign-in; a startup exit on a
-// missing key blocks all of that. A tool *invocation* without a key returns a
-// clear, actionable error instead (see apiFetch).
+// Auth is resolved lazily — inside apiFetch, on the first tool call — never at
+// startup. This lets the server START WITHOUT credentials so that `tools/list`
+// and other introspection work auth-free. MCP directories and registries (e.g.
+// Glama) boot the server to enumerate and score its tools, and clients may
+// browse capabilities before sign-in; a startup exit would block all of that.
+// On the first tool *invocation*: an explicit MNEMOVERSE_API_KEY is used if
+// set; otherwise the server runs a keyless OAuth browser sign-in and caches the
+// token (see oauth.ts). No key to paste in the common case.
 
 /**
  * Fetch from the Mnemoverse core API with authentication.
@@ -45,17 +47,18 @@ async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  if (!API_KEY) {
-    throw new Error(
-      "MNEMOVERSE_API_KEY is required for this operation. Get a free key at " +
-        "https://console.mnemoverse.com and set it in your MCP client config.",
-    );
-  }
+  // Auth resolution: an explicit API key wins (CI, headless, self-host); with
+  // no key we fall back to keyless OAuth — a one-time browser sign-in, then a
+  // cached + silently-refreshed token in ~/.mnemoverse. getAccessToken throws a
+  // clear error if sign-in fails or times out.
+  const authHeaders: Record<string, string> = API_KEY
+    ? { "X-Api-Key": API_KEY }
+    : { Authorization: `Bearer ${await getAccessToken()}` };
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-Api-Key": API_KEY,
+      ...authHeaders,
       ...((options.headers as Record<string, string>) || {}),
     },
   });
