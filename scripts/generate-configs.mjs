@@ -431,6 +431,11 @@ function genServerJson() {
         environmentVariables,
       },
     ],
+    // The hosted remote endpoint (e.g. mcp.mnemoverse.com/mcp), published
+    // alongside the npm `packages` entry so registry consumers can discover the
+    // one-click-OAuth path, not just the local npx install. Emitted only when
+    // `source.remotes` is present; OAuth-protected remotes carry no headers.
+    ...(source.remotes ? { remotes: source.remotes } : {}),
   };
 }
 

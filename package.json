@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.3.10",
+  "version": "0.4.0",
   "description": "Hosted persistent memory for AI agents that learns which facts help and lets the rest fade — one key across Claude Code, Cursor, VS Code & ChatGPT, no infra to run",
   "type": "module",
   "bin": {

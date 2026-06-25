@@ -9,12 +9,12 @@
     "source": "github",
     "id": "1207193530"
   },
-  "version": "0.3.10",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.3.10",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },
@@ -36,6 +36,12 @@
           "default": "https://core.mnemoverse.com/api/v1"
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.mnemoverse.com/mcp"
     }
   ]
 }

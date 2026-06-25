@@ -28,6 +28,10 @@
     "registry": "npm",
     "name": "@mnemoverse/mcp-memory-server"
   },
+  "$comment_remotes": "The HOSTED remote endpoint — one-click OAuth, no API key to paste. OAuth-protected, so NO headers block here: clients negotiate auth via the MCP OAuth flow (RFC 9728 discovery at /.well-known/oauth-protected-resource/mcp) at connect time. This is the registry counterpart of the npx/mk_live `package` path above; consumers pick whichever they prefer.",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.mnemoverse.com/mcp" }
+  ],
   "metadata": {
     "homepage": "https://mnemoverse.com/docs/api/mcp-server",
     "repository": "https://github.com/mnemoverse/mcp-memory-server",
