@@ -58,8 +58,11 @@ async function checkNpm() {
 }
 
 async function checkRegistry() {
+  // limit=100 keeps every version snapshot of our (single) server on one page —
+  // we have <20 versions, so this sidesteps cursor pagination for any realistic
+  // count without a follow-the-cursor loop.
   const j = await getJson(
-    "https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse&limit=100",
   );
   // The API returns every version snapshot as a separate entry; each carries a
   // server doc + a _meta with the registry's isLatest flag.

@@ -23,6 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Read-only check — no git ops after checkout, so don't leave the token
+          # in .git/config. (SHA-pinning the actions is a repo-wide policy choice;
+          # kept at @v4 to match release.yml / verify-configs.yml until that's done.)
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
