@@ -20,6 +20,7 @@
     "start": "node dist/index.js",
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
+    "check:release-sync": "node scripts/check-release-sync.mjs",
     "install-hooks": "node scripts/install-hooks.mjs",
     "prebuild": "npm run generate:configs",
     "prepublishOnly": "npm run build",
