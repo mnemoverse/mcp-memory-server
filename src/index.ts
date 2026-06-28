@@ -215,12 +215,21 @@ server.registerTool(
     },
   },
   async ({ query, top_k, domain }) => {
+    // CN-001 server-stamped authorship, returned nested on each read item.
+    type Provenance = {
+      principal?: string | null;
+      agent?: string | null;
+      agent_name?: string | null;
+      client_env?: string | null;
+      is_external?: boolean | null;
+    };
     const r = await apiFetch<{
       items?: Array<{
         content?: string;
         relevance?: number;
         concepts?: string[];
         domain?: string;
+        provenance?: Provenance | null;
       }>;
       search_time_ms?: number;
     }>("/memory/read", {
@@ -243,13 +252,30 @@ server.registerTool(
       };
     }
 
+    // Surface server-stamped authorship (CN-001) so the reader knows WHO wrote each
+    // memory — essential for shared rooms (Mnemoverse A2A Rooms), where atoms come from
+    // different agents/vendors. The core REST response already carries `provenance`;
+    // we just render it. Omitted cleanly for legacy atoms that have no author.
+    const formatAuthorTag = (p?: Provenance | null): string => {
+      if (!p) return "";
+      // Surface only the agent identity / client env — never the human `principal`
+      // (it may be an email / PII), even though it's present in the response.
+      const raw = p.agent_name || p.agent || p.client_env || "";
+      // Sanitize before interpolating into tool output: a hostile connector can
+      // choose its own agent_name - keep only a safe charset so a value can't break
+      // the tag format or inject into a client LLM (CN-032). Brackets/control dropped.
+      const who = raw.replace(/[^\w .@:+/-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64);
+      if (!who) return "";
+      return p.is_external ? ` [by ${who} · external]` : ` [by ${who}]`;
+    };
+
     const lines = items.map((item, i) => {
       const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
       const content = item?.content ?? "(empty)";
       const concepts = Array.isArray(item?.concepts) && item.concepts.length > 0
         ? ` (${item.concepts.join(", ")})`
         : "";
-      return `${i + 1}. [${relevance}%] ${content}${concepts}`;
+      return `${i + 1}. [${relevance}%] ${content}${concepts}${formatAuthorTag(item?.provenance)}`;
     });
 
     const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
