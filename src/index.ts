@@ -221,6 +221,13 @@ server.registerTool(
         relevance?: number;
         concepts?: string[];
         domain?: string;
+        provenance?: {
+          principal?: string | null;
+          agent?: string | null;
+          agent_name?: string | null;
+          client_env?: string | null;
+          is_external?: boolean | null;
+        } | null;
       }>;
       search_time_ms?: number;
     }>("/memory/read", {
@@ -243,13 +250,32 @@ server.registerTool(
       };
     }
 
+    // Surface server-stamped authorship (CN-001) so the reader knows WHO wrote each
+    // memory — essential for shared rooms (Mnemoverse A2A Rooms), where atoms come from
+    // different agents/vendors. The core REST response already carries `provenance`;
+    // we just render it. Omitted cleanly for legacy atoms that have no author.
+    const formatAuthorTag = (p?: {
+      principal?: string | null;
+      agent?: string | null;
+      agent_name?: string | null;
+      client_env?: string | null;
+      is_external?: boolean | null;
+    } | null): string => {
+      if (!p) return "";
+      // Surface only the agent identity / client env — never the human `principal`
+      // (it may be an email / PII), even though it's present in the response.
+      const who = p.agent_name || p.agent || p.client_env;
+      if (!who) return "";
+      return p.is_external ? ` [by ${who} · external]` : ` [by ${who}]`;
+    };
+
     const lines = items.map((item, i) => {
       const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
       const content = item?.content ?? "(empty)";
       const concepts = Array.isArray(item?.concepts) && item.concepts.length > 0
         ? ` (${item.concepts.join(", ")})`
         : "";
-      return `${i + 1}. [${relevance}%] ${content}${concepts}`;
+      return `${i + 1}. [${relevance}%] ${content}${concepts}${formatAuthorTag(item?.provenance)}`;
     });
 
     const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
