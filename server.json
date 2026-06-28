@@ -9,12 +9,12 @@
     "source": "github",
     "id": "1207193530"
   },
-  "version": "0.4.0",
+  "version": "0.4.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "transport": {
         "type": "stdio"
       },
