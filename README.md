@@ -11,6 +11,8 @@ Hosted memory for AI agents that learns and forgets. Feedback reranks the facts 
 
 Memory that persists across sessions, projects, and tools — and improves with use. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
 
+> ⭐ If Mnemoverse saves you from re-explaining context to your agents, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
+
 ## Quick Start
 
 ### 1. Get a free API key
