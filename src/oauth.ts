@@ -111,6 +111,12 @@ function saveTokens(t: Tokens): void {
     /* best effort — tighten a pre-existing loose dir; ignore if not permitted */
   }
   writeFileSync(TOKEN_FILE, JSON.stringify(t, null, 2), { mode: 0o600 });
+  try {
+    // `mode` only applies on file CREATION — re-tighten a pre-existing loose file.
+    if (platform() !== "win32") chmodSync(TOKEN_FILE, 0o600);
+  } catch {
+    /* best effort — same rationale as the dir chmod above */
+  }
   memTokens = t;
 }
 
@@ -156,6 +162,12 @@ export function browserCommand(
 }
 
 function openBrowser(url: string): void {
+  // Defense-in-depth for CodeQL's "uncontrolled command line": the URL is
+  // already built from https-validated endpoints (assertSafeEndpoint at
+  // discovery) and passed as a single argv element with NO shell — but
+  // re-assert here so a future call site can't hand a non-https string
+  // (or something dash-prefixed an opener could parse as a flag) to spawn.
+  assertSafeEndpoint(url, "browser sign-in URL");
   const { cmd, args } = browserCommand(platform(), url);
   try {
     spawn(cmd, args, { stdio: "ignore", detached: true }).unref();

@@ -58,8 +58,11 @@ async function apiFetch<T = unknown>(
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders,
+      // Caller headers first, auth headers LAST: Content-Type stays
+      // overridable, but Authorization / X-Api-Key always win — a caller
+      // (or future user-influenced input) must not clobber auth.
       ...((options.headers as Record<string, string>) || {}),
+      ...authHeaders,
     },
   });
 
