@@ -1,0 +1,53 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Eduard Izgorodin",
+    "email": "helloworld@uinside.org",
+    "phone": "",
+    "description": "Independent researcher and engineer building open memory infrastructure for AI agents. Author of Semantic Level of Detail (SLoD, arXiv:2603.08965). Based in Funchal, Portugal.",
+    "webpageUrl": {
+      "url": "https://mnemoverse.com",
+      "wellKnown": "https://mnemoverse.com/.well-known/funding-manifest-urls"
+    }
+  },
+  "projects": [
+    {
+      "guid": "mnemoverse-mcp-memory-server",
+      "name": "Mnemoverse MCP Memory Server",
+      "description": "An MCP server that gives AI agents persistent long-term memory through one key, across Claude, Cursor, VS Code and other MCP clients. Published in the Official MCP Registry. Proxies the Mnemoverse memory engine: memory atoms connected by a weighted graph, with server-stamped provenance and DB-enforced isolation.",
+      "webpageUrl": { "url": "https://github.com/mnemoverse/mcp-memory-server", "wellKnown": "" },
+      "repositoryUrl": { "url": "https://github.com/mnemoverse/mcp-memory-server", "wellKnown": "" },
+      "licenses": ["spdx:MIT"],
+      "tags": ["ai", "agents", "memory", "mcp", "developer-tools"]
+    },
+    {
+      "guid": "mnemoverse-sdk-python",
+      "name": "Mnemoverse Python SDK",
+      "description": "Python client for the Mnemoverse memory API: write, read, and give feedback on agent memory from any Python program.",
+      "webpageUrl": { "url": "https://github.com/mnemoverse/mnemoverse-sdk-python", "wellKnown": "" },
+      "repositoryUrl": { "url": "https://github.com/mnemoverse/mnemoverse-sdk-python", "wellKnown": "" },
+      "licenses": ["spdx:MIT"],
+      "tags": ["ai", "agents", "memory", "sdk", "python"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      { "guid": "primary", "type": "other", "address": "helloworld@uinside.org", "description": "Contact to arrange funding; direct transfer or platform to be agreed." }
+    ],
+    "plans": [
+      {
+        "guid": "maintenance-2026",
+        "status": "active",
+        "name": "Maintain and grow the open memory tooling",
+        "description": "One maintainer plus hosting and CI to keep the MCP memory server and Python SDK healthy, documented, and usable across MCP clients, and to keep the honest-evaluation and provenance work open.",
+        "amount": 30000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": ["primary"]
+      }
+    ],
+    "history": []
+  }
+}
