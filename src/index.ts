@@ -96,6 +96,22 @@ function capResult(text: string): string {
   );
 }
 
+/**
+ * Sanitize an untrusted string for safe inline rendering in tool output that a
+ * DIFFERENT principal's LLM will read (CN-032 anti-injection). A room name is
+ * chosen by the room OWNER but surfaced to a JOINER's assistant on join/invite;
+ * core only trims whitespace on it, so quotes/colons/newlines pass. Strip to a
+ * conservative charset and collapse whitespace, then cap length. Same treatment
+ * `formatAuthorTag` already applies to a server-stamped author.
+ */
+function safeInline(s: string | undefined | null, cap = 200): string {
+  return (s ?? "")
+    .replace(/[^\w .@:+/-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, cap);
+}
+
 // --- Server setup ---
 
 const server = new McpServer({
@@ -537,14 +553,18 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ name, description }),
     });
+    const roomName = safeInline(r?.name ?? name);
+    const address = safeInline(r?.address);
+    const roomId = safeInline(r?.room_id);
     return {
       content: [
         {
           type: "text" as const,
-          text:
-            `Created shared room "${r?.name ?? name}". Address: ${r?.address ?? "unknown"}\n` +
-            `Use it now: pass domain="${r?.address ?? ""}" on memory_write / memory_read.\n` +
-            `To add someone: call memory_invite_to_room with room_id="${r?.room_id ?? ""}".`,
+          text: capResult(
+            `Created shared room "${roomName}". Address: ${address || "unknown"}\n` +
+              `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
+              `To add someone: call memory_invite_to_room with room_id="${roomId}".`,
+          ),
         },
       ],
     };
@@ -597,9 +617,13 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text:
+          // Shown to the room OWNER (who minted it), not a foreign principal, so
+          // the core-generated share_message is fine as-is; capResult only bounds
+          // its length for the Connectors-Directory 25K cap.
+          text: capResult(
             `Invite ready. Forward this message to the person you're inviting:\n\n` +
-            `${r?.share_message ?? r?.join_url ?? "(no message returned)"}`,
+              `${r?.share_message ?? r?.join_url ?? "(no message returned)"}`,
+          ),
         },
       ],
     };
@@ -634,16 +658,22 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ code }),
     });
+    // CN-032: the room name/scope are OWNER-chosen but rendered into the
+    // JOINER's LLM context here — sanitize before inlining (anti prompt-injection).
+    const roomName = safeInline(r?.name) || "the room";
+    const scope = safeInline(r?.scope) || "member";
+    const address = safeInline(r?.address);
     const prefix = r?.already_member
-      ? `You're already a member of "${r?.name ?? "the room"}".`
-      : `Joined "${r?.name ?? "the room"}" (${r?.scope ?? "member"}).`;
+      ? `You're already a member of "${roomName}".`
+      : `Joined "${roomName}" (${scope}).`;
     return {
       content: [
         {
           type: "text" as const,
-          text:
+          text: capResult(
             `${prefix}\n` +
-            `Use it: pass domain="${r?.address ?? ""}" on memory_write / memory_read to read and write the shared room.`,
+              `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`,
+          ),
         },
       ],
     };
