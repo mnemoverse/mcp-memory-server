@@ -581,6 +581,8 @@ server.registerTool(
     inputSchema: {
       room_id: z
         .string()
+        .min(1)
+        .max(100)
         .describe("The room's id (room_...), from memory_create_room."),
       scope: z
         .enum(["read", "read_write"])
