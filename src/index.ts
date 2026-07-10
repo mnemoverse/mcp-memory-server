@@ -278,13 +278,9 @@ server.registerTool(
       // (it may be an email / PII), even though it's present in the response.
       const raw = p.agent_name || p.agent || p.client_env || "";
       // Sanitize before interpolating into tool output: a hostile connector can
-      // choose its own agent_name - keep only a safe charset so a value can't break
-      // the tag format or inject into a client LLM (CN-032). Brackets/control dropped.
-      const who = raw
-        .replace(/[^\w .@:+/-]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 64);
+      // choose its own agent_name — reuse the shared safeInline helper so the
+      // CN-032 charset/cap stays consistent across all tool outputs (Copilot).
+      const who = safeInline(raw, 64);
       if (!who) return "";
       return p.is_external ? ` [by ${who} · external]` : ` [by ${who}]`;
     };
@@ -556,15 +552,21 @@ server.registerTool(
     const roomName = safeInline(r?.name ?? name);
     const address = safeInline(r?.address);
     const roomId = safeInline(r?.room_id);
+    // If core returned no usable id (empty body / sanitized away), don't print
+    // broken `domain=""` guidance — say so instead (Copilot).
+    const text = address
+      ? `Created shared room "${roomName}". Address: ${address}\n` +
+        `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
+        (roomId
+          ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
+          : "")
+      : `Room "${roomName}" was created but the server did not return a usable address — ` +
+        `retry, or check that your API key is set.`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(
-            `Created shared room "${roomName}". Address: ${address || "unknown"}\n` +
-              `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
-              `To add someone: call memory_invite_to_room with room_id="${roomId}".`,
-          ),
+          text: capResult(text),
         },
       ],
     };
@@ -668,14 +670,15 @@ server.registerTool(
     const prefix = r?.already_member
       ? `You're already a member of "${roomName}".`
       : `Joined "${roomName}" (${scope}).`;
+    // Don't print broken `domain=""` guidance if no address came back (Copilot).
+    const usage = address
+      ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
+      : `The server did not return a room address — retry, or check that your API key is set.`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(
-            `${prefix}\n` +
-              `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`,
-          ),
+          text: capResult(`${prefix}\n${usage}`),
         },
       ],
     };
