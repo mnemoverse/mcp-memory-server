@@ -96,6 +96,22 @@ function capResult(text: string): string {
   );
 }
 
+/**
+ * Sanitize an untrusted string for safe inline rendering in tool output that a
+ * DIFFERENT principal's LLM will read (CN-032 anti-injection). A room name is
+ * chosen by the room OWNER but surfaced to a JOINER's assistant on join/invite;
+ * core only trims whitespace on it, so quotes/colons/newlines pass. Strip to a
+ * conservative charset and collapse whitespace, then cap length. Same treatment
+ * `formatAuthorTag` already applies to a server-stamped author.
+ */
+function safeInline(s: string | undefined | null, cap = 200): string {
+  return (s ?? "")
+    .replace(/[^\w .@:+/-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, cap);
+}
+
 // --- Server setup ---
 
 const server = new McpServer({
@@ -262,9 +278,9 @@ server.registerTool(
       // (it may be an email / PII), even though it's present in the response.
       const raw = p.agent_name || p.agent || p.client_env || "";
       // Sanitize before interpolating into tool output: a hostile connector can
-      // choose its own agent_name - keep only a safe charset so a value can't break
-      // the tag format or inject into a client LLM (CN-032). Brackets/control dropped.
-      const who = raw.replace(/[^\w .@:+/-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 64);
+      // choose its own agent_name — reuse the shared safeInline helper so the
+      // CN-032 charset/cap stays consistent across all tool outputs (Copilot).
+      const who = safeInline(raw, 64);
       if (!who) return "";
       return p.is_external ? ` [by ${who} · external]` : ` [by ${who}]`;
     };
@@ -272,9 +288,10 @@ server.registerTool(
     const lines = items.map((item, i) => {
       const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
       const content = item?.content ?? "(empty)";
-      const concepts = Array.isArray(item?.concepts) && item.concepts.length > 0
-        ? ` (${item.concepts.join(", ")})`
-        : "";
+      const concepts =
+        Array.isArray(item?.concepts) && item.concepts.length > 0
+          ? ` (${item.concepts.join(", ")})`
+          : "";
       return `${i + 1}. [${relevance}%] ${content}${concepts}${formatAuthorTag(item?.provenance)}`;
     });
 
@@ -303,12 +320,16 @@ server.registerTool(
       atom_ids: z
         .array(z.string())
         .min(1)
-        .describe("IDs of memories to give feedback on (from memory_read results)"),
+        .describe(
+          "IDs of memories to give feedback on (from memory_read results)",
+        ),
       outcome: z
         .number()
         .min(-1)
         .max(1)
-        .describe("How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong"),
+        .describe(
+          "How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong",
+        ),
     },
     annotations: {
       title: "Rate Memory Helpfulness",
@@ -368,9 +389,10 @@ server.registerTool(
       avg_importance?: number;
     }>("/memory/stats");
 
-    const domains = Array.isArray(r?.domains) && r.domains.length > 0
-      ? r.domains.join(", ")
-      : "general";
+    const domains =
+      Array.isArray(r?.domains) && r.domains.length > 0
+        ? r.domains.join(", ")
+        : "general";
 
     const text = [
       `Memories: ${r?.total_atoms ?? 0} (${r?.episodes ?? 0} episodes, ${r?.prototypes ?? 0} prototypes)`,
@@ -483,6 +505,180 @@ server.registerTool(
         {
           type: "text" as const,
           text: `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain "${domainName}".`,
+        },
+      ],
+    };
+  },
+);
+
+// --- Tool: memory_create_room ---
+
+server.registerTool(
+  "memory_create_room",
+  {
+    description:
+      "Create a SHARED memory room — a space you and OTHER people's assistants can both read and write, across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
+    inputSchema: {
+      name: z
+        .string()
+        .min(1)
+        .max(200)
+        .describe(
+          "Room name, unique within your account (e.g. 'me-and-olya').",
+        ),
+      description: z
+        .string()
+        .max(2000)
+        .optional()
+        .describe("Optional description of the room."),
+    },
+    annotations: {
+      title: "Create shared room",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  async ({ name, description }) => {
+    const r = await apiFetch<{
+      room_id?: string;
+      address?: string;
+      name?: string;
+    }>("/memory/rooms", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    });
+    const roomName = safeInline(r?.name ?? name);
+    const address = safeInline(r?.address);
+    const roomId = safeInline(r?.room_id);
+    // If core returned no usable id (empty body / sanitized away), don't print
+    // broken `domain=""` guidance — say so instead (Copilot).
+    const text = address
+      ? `Created shared room "${roomName}". Address: ${address}\n` +
+        `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
+        (roomId
+          ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
+          : "")
+      : `Room "${roomName}" was created but the server did not return a usable address — ` +
+        `retry, or check that your API key is set.`;
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: capResult(text),
+        },
+      ],
+    };
+  },
+);
+
+// --- Tool: memory_invite_to_room ---
+
+server.registerTool(
+  "memory_invite_to_room",
+  {
+    description:
+      "Mint a one-time invite for a room you own and get a ready-to-forward message. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use after memory_create_room, or whenever the user says 'invite <someone>' to an existing room.",
+    inputSchema: {
+      room_id: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("The room's id (room_...), from memory_create_room."),
+      scope: z
+        .enum(["read", "read_write"])
+        .optional()
+        .describe(
+          "Role the invitee gets — 'read' or 'read_write' (default read_write).",
+        ),
+      expires_in_days: z
+        .number()
+        .int()
+        .min(1)
+        .max(90)
+        .optional()
+        .describe("Days until the invite expires (default 7)."),
+    },
+    annotations: {
+      title: "Invite to room",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  async ({ room_id, scope, expires_in_days }) => {
+    const r = await apiFetch<{
+      share_message?: string;
+      join_url?: string;
+      code?: string;
+    }>(`/memory/rooms/${encodeURIComponent(room_id)}/invites`, {
+      method: "POST",
+      body: JSON.stringify({ scope, expires_in_days }),
+    });
+    return {
+      content: [
+        {
+          type: "text" as const,
+          // Shown to the room OWNER (who minted it), not a foreign principal, so
+          // the core-generated share_message is fine as-is; capResult only bounds
+          // its length for the Connectors-Directory 25K cap.
+          text: capResult(
+            `Invite ready. Forward this message to the person you're inviting:\n\n` +
+              `${r?.share_message ?? r?.join_url ?? "(no message returned)"}`,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+// --- Tool: memory_join_room ---
+
+server.registerTool(
+  "memory_join_room",
+  {
+    description:
+      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_write/memory_read to read and write the shared room.",
+    inputSchema: {
+      code: z.string().min(1).max(200).describe("The invite code (mnvr_...)."),
+    },
+    annotations: {
+      title: "Join room",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ code }) => {
+    const r = await apiFetch<{
+      address?: string;
+      name?: string;
+      scope?: string;
+      already_member?: boolean;
+    }>("/memory/rooms/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+    // CN-032: the room name/scope are OWNER-chosen but rendered into the
+    // JOINER's LLM context here — sanitize before inlining (anti prompt-injection).
+    const roomName = safeInline(r?.name) || "the room";
+    const scope = safeInline(r?.scope) || "member";
+    const address = safeInline(r?.address);
+    const prefix = r?.already_member
+      ? `You're already a member of "${roomName}".`
+      : `Joined "${roomName}" (${scope}).`;
+    // Don't print broken `domain=""` guidance if no address came back (Copilot).
+    const usage = address
+      ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
+      : `The server did not return a room address — retry, or check that your API key is set.`;
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: capResult(`${prefix}\n${usage}`),
         },
       ],
     };
