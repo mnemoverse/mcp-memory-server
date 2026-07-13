@@ -685,6 +685,115 @@ server.registerTool(
   },
 );
 
+// --- Tool: memory_list_rooms ---
+
+server.registerTool(
+  "memory_list_rooms",
+  {
+    description:
+      "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_write / memory_read. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
+    inputSchema: {},
+    annotations: {
+      title: "List rooms",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async () => {
+    const rooms = await apiFetch<
+      Array<{
+        room_id?: string;
+        name?: string;
+        address?: string;
+        role?: string;
+        scope?: string;
+        archived?: boolean;
+      }>
+    >("/memory/rooms");
+    const list = Array.isArray(rooms) ? rooms : [];
+    if (list.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              "You have no shared rooms yet. Create one with memory_create_room, " +
+              "or join one with memory_join_room using an invite code.",
+          },
+        ],
+      };
+    }
+    // Room name is OWNER-chosen and surfaced to THIS assistant — sanitize it (CN-032),
+    // like memory_join_room already does. address/role/scope are server-shaped but pass
+    // through the same guard defensively.
+    const lines = list.map((r) => {
+      const name = safeInline(r?.name) || "(unnamed room)";
+      const address = safeInline(r?.address);
+      const role = safeInline(r?.role);
+      const scope = safeInline(r?.scope);
+      const archived = r?.archived ? " [archived]" : "";
+      const use = address ? ` — use domain="${address}"` : "";
+      return `- "${name}" (${role}${scope ? `, ${scope}` : ""})${archived}${use}`;
+    });
+    const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
+    return {
+      content: [{ type: "text" as const, text: capResult(text) }],
+    };
+  },
+);
+
+// --- Tool: vault_list ---
+
+server.registerTool(
+  "vault_list",
+  {
+    description:
+      "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you. Use this to DISCOVER which secret to use (e.g. the user says 'use my GitHub token' — find its alias here) before a tool that consumes it. Only YOUR account's secrets are listed.",
+    inputSchema: {},
+    annotations: {
+      title: "List vault secrets",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async () => {
+    const r = await apiFetch<{
+      secrets?: Array<{
+        alias?: string;
+        context?: string;
+        created_at?: string;
+        concepts?: string[];
+      }>;
+    }>("/vault/secrets");
+    const list = Array.isArray(r?.secrets) ? r.secrets : [];
+    if (list.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "No secrets are stored in your Vault yet.",
+          },
+        ],
+      };
+    }
+    const lines = list.map((s) => {
+      const alias = safeInline(s?.alias) || "(no alias)";
+      const context = safeInline(s?.context);
+      return context ? `- ${alias} — ${context}` : `- ${alias}`;
+    });
+    const text =
+      `Your Vault secrets (${list.length}) — alias and purpose only, never the value:\n` +
+      lines.join("\n");
+    return {
+      content: [{ type: "text" as const, text: capResult(text) }],
+    };
+  },
+);
+
 // --- Start ---
 
 async function main() {
