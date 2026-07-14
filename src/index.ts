@@ -83,17 +83,20 @@ async function apiFetch<T = unknown>(
  * result stays well-formed. Otherwise an emoji or non-BMP character at the
  * boundary can produce a lone surrogate and corrupt downstream JSON encoding.
  */
-function capResult(text: string): string {
+function capResult(
+  text: string,
+  moreHint = "Use a more specific query or smaller top_k to see all results.",
+): string {
   if (text.length <= MAX_RESULT_CHARS) return text;
   let truncated = text.slice(0, MAX_RESULT_CHARS - 200);
   const lastCode = truncated.charCodeAt(truncated.length - 1);
   if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
     truncated = truncated.slice(0, -1);
   }
-  return (
-    truncated +
-    `\n\n[…truncated to fit 25K token limit. Use a more specific query or smaller top_k to see all results.]`
-  );
+  // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
+  // guidance instead of the read-tool default (which points at query/top_k controls a
+  // repeated no-arg call cannot use). Existing callers keep the default message.
+  return `${truncated}\n\n[…truncated to fit the 25K token limit. ${moreHint}]`;
 }
 
 /**
@@ -730,7 +733,10 @@ server.registerTool(
     // through the same guard defensively.
     const lines = list.map((r) => {
       const name = safeInline(r?.name) || "(unnamed room)";
-      const address = safeInline(r?.address);
+      const roomId = safeInline(r?.room_id);
+      // Always surface the canonical address: fall back to xroom:<room_id> when the server
+      // omits `address`, so the domain guidance this tool promises is never silently dropped.
+      const address = safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
       const role = safeInline(r?.role);
       const scope = safeInline(r?.scope);
       const archived = r?.archived ? " [archived]" : "";
@@ -739,7 +745,12 @@ server.registerTool(
     });
     const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
     return {
-      content: [{ type: "text" as const, text: capResult(text) }],
+      content: [
+        {
+          type: "text" as const,
+          text: capResult(text, "The room list was truncated — some rooms are not shown."),
+        },
+      ],
     };
   },
 );
@@ -789,7 +800,12 @@ server.registerTool(
       `Your Vault secrets (${list.length}) — alias and purpose only, never the value:\n` +
       lines.join("\n");
     return {
-      content: [{ type: "text" as const, text: capResult(text) }],
+      content: [
+        {
+          type: "text" as const,
+          text: capResult(text, "The secret list was truncated — some secrets are not shown."),
+        },
+      ],
     };
   },
 );
