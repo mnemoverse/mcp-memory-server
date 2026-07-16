@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { maybeRegisterVaultSurface } from "./vault-surface.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -813,6 +814,10 @@ server.registerTool(
 // --- Start ---
 
 async function main() {
+  // Fold in the optional CLOSED vault companion (vault_use / create_secret_capture) BEFORE
+  // connecting the transport, so any vault tools are present for the client's tools/list. A
+  // missing companion or missing vault-env degrades to memory-only — it never blocks startup.
+  await maybeRegisterVaultSurface(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
