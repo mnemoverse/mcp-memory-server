@@ -191,6 +191,11 @@ function withRegistrationRollback(server: McpServer): {
   rollback: () => void;
 } {
   const handles: Array<{ remove: () => void }> = [];
+  // A timeout stops us WAITING on the companion but cannot CANCEL an in-flight async register()
+  // coroutine. If that coroutine resumes AFTER rollback (and after the transport connects) and
+  // registers a late tool, it would land a stray tool on the LIVE surface. This flag, set by
+  // rollback(), makes any post-rollback registration self-remove immediately so nothing lingers.
+  let aborted = false;
   const proxy = new Proxy(server, {
     get(target, prop, receiver) {
       if (prop === "registerTool") {
@@ -201,7 +206,16 @@ function withRegistrationRollback(server: McpServer): {
             ) => { remove?: () => void }
           )(...args);
           if (handle && typeof handle.remove === "function") {
-            handles.push(handle as { remove: () => void });
+            if (aborted) {
+              // Fold already failed + rolled back — a late registration must not persist.
+              try {
+                handle.remove();
+              } catch {
+                /* best-effort */
+              }
+            } else {
+              handles.push(handle as { remove: () => void });
+            }
           }
           return handle;
         };
@@ -213,8 +227,10 @@ function withRegistrationRollback(server: McpServer): {
   return {
     server: proxy as McpServer,
     // Remove in REVERSE registration order; best-effort — a remove() that throws must not mask the
-    // original failure or stop the rest of the rollback.
+    // original failure or stop the rest of the rollback. Setting `aborted` FIRST closes the race
+    // with a still-live coroutine that registers after this point.
     rollback: () => {
+      aborted = true;
       for (const handle of handles.splice(0).reverse()) {
         try {
           handle.remove();

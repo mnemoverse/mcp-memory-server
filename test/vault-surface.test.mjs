@@ -195,6 +195,30 @@ test("timeout — a never-settling registration is bounded + rolled back", async
   assert.deepEqual(server.removed, ["vault_use"]);
 });
 
+test("timeout — a LATE registration after rollback self-removes (no stray live tool)", async () => {
+  const server = spyServer();
+  const status = await maybeRegisterVaultSurface(server, FULL_ENV, {
+    importRegister: async () => ({
+      registerVaultSurface: (s) => {
+        s.registerTool("vault_use");
+        // A slow coroutine that resumes AFTER the deadline and registers a late tool through the
+        // still-live recording proxy — the exact race the aborted flag closes.
+        setTimeout(() => {
+          s.registerTool("create_secret_capture");
+        }, 40);
+        return new Promise(() => {}); // never settles -> times out at 20ms -> rollback
+      },
+    }),
+    companionTimeoutMs: 20,
+  });
+  assert.equal(status, "timeout");
+  // Wait past the late registration (40ms) so we observe the post-rollback path.
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(server.registered, []); // nothing lingers on the live surface
+  assert.ok(server.removed.includes("vault_use")); // rolled back
+  assert.ok(server.removed.includes("create_secret_capture")); // late tool self-removed
+});
+
 // --- happy paths ---------------------------------------------------------------------------------
 
 test("live — companion folds its tools onto THIS server's surface", async () => {
