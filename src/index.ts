@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { roomCreatedNextSteps } from "./room-guidance.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -548,6 +549,7 @@ server.registerTool(
       room_id?: string;
       address?: string;
       name?: string;
+      next_steps?: string;
     }>("/memory/rooms", {
       method: "POST",
       body: JSON.stringify({ name, description }),
@@ -555,14 +557,12 @@ server.registerTool(
     const roomName = safeInline(r?.name ?? name);
     const address = safeInline(r?.address);
     const roomId = safeInline(r?.room_id);
+    const nextSteps = roomCreatedNextSteps(r?.next_steps, address, roomId);
     // If core returned no usable id (empty body / sanitized away), don't print
     // broken `domain=""` guidance — say so instead (Copilot).
     const text = address
       ? `Created shared room "${roomName}". Address: ${address}\n` +
-        `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
-        (roomId
-          ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
-          : "")
+        nextSteps
       : `Room "${roomName}" was created but the server did not return a usable address — ` +
         `retry, or check that your API key is set.`;
     return {
