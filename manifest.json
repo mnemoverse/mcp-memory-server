@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mnemoverse-memory",
   "display_name": "Mnemoverse Memory",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Hosted memory for AI agents that learns and forgets — one key across Claude, Cursor & ChatGPT.",
   "long_description": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read. The same memory is shared everywhere you use your Mnemoverse API key — Claude, Cursor, VS Code, and any MCP client. Requires a free API key from https://console.mnemoverse.com.",
   "author": {
@@ -65,6 +65,26 @@
     {
       "name": "memory_delete_domain",
       "description": "Permanently delete every memory in a domain (requires an explicit confirm)."
+    },
+    {
+      "name": "memory_create_room",
+      "description": "Create a shared memory room — a space your and other people's assistants can both read and write, across Claude/ChatGPT/editors."
+    },
+    {
+      "name": "memory_invite_to_room",
+      "description": "Mint a one-time invite for a room you own and get a ready-to-forward message for the person you want to add."
+    },
+    {
+      "name": "memory_join_room",
+      "description": "Join a shared memory room with an invite code; then pass the returned address as the domain on memory_write/memory_read."
+    },
+    {
+      "name": "memory_list_rooms",
+      "description": "List the shared rooms you own or have joined, with the address to use as the domain — re-find a room in a new session."
+    },
+    {
+      "name": "vault_list",
+      "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown."
     }
   ],
   "user_config": {
