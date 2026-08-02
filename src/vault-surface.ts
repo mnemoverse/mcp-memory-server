@@ -120,17 +120,27 @@ export async function maybeRegisterVaultSurface(
   try {
     mod = await withTimeout(importRegister(), timeoutMs, "vault companion import");
   } catch (err) {
+    // Distinguish three load failures (all fail OPEN — the server still starts memory-only):
+    //   - timed out            -> "timeout"
+    //   - genuinely not installed (module-not-found) -> "unavailable" (install it to enable USE)
+    //   - installed but broke while loading (syntax / native-addon / init error) -> "error"
+    // Collapsing the last two would log a misleading "not installed" for a broken install (Copilot #1).
     const timedOut = err instanceof TimeoutError;
+    const notFound = !timedOut && isModuleNotFound(err);
     console.error(
       timedOut
         ? "[mnemoverse-memory] Vault env is set but the @mnemoverse/mcp-vault companion did not " +
             `load within ${timeoutMs}ms — starting memory-only; the vault_use surface is ` +
             "unavailable this run."
-        : "[mnemoverse-memory] Vault env is set but the @mnemoverse/mcp-vault companion is not " +
-            "installed — the vault_use surface is unavailable. Install it alongside this server " +
-            `to enable using secrets without seeing them. (${asMessage(err)})`,
+        : notFound
+          ? "[mnemoverse-memory] Vault env is set but the @mnemoverse/mcp-vault companion is not " +
+              "installed — the vault_use surface is unavailable. Install it alongside this server " +
+              "to enable using secrets without seeing them."
+          : "[mnemoverse-memory] Vault env is set and the @mnemoverse/mcp-vault companion is present " +
+              "but FAILED TO LOAD (syntax / native-addon / init error) — starting memory-only; the " +
+              `vault_use surface is unavailable this run. (${asMessage(err)})`,
     );
-    return timedOut ? "timeout" : "unavailable";
+    return timedOut ? "timeout" : notFound ? "unavailable" : "error";
   }
 
   // Register through a rollback-recording proxy. If the companion registers some tools and THEN
@@ -270,4 +280,10 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 function asMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** True iff `err` is a module-not-found (the companion is genuinely absent), vs a load/eval error. */
+function isModuleNotFound(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
 }

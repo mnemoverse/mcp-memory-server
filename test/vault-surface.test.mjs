@@ -21,18 +21,21 @@ const FULL_ENV = {
  * rollback is observable. `registered` reflects the CURRENT surface; `removed` is the rollback log.
  */
 function spyServer() {
-  const registered = [];
-  const removed = [];
   return {
-    registered,
-    removed,
+    registered: [],
+    removed: [],
+    // Reads `this` ON PURPOSE: if the rollback proxy ever calls registerTool without binding `this`
+    // to the server (a bare `fn(...args)` call), `this.registered` is undefined and this THROWS —
+    // turning the proxy's call semantics into a real regression test (Copilot #3), instead of a
+    // closed-over array that would pass even with a dropped `this`.
     registerTool(name) {
-      registered.push(name);
+      this.registered.push(name);
+      const self = this;
       return {
         remove() {
-          removed.push(name);
-          const i = registered.indexOf(name);
-          if (i >= 0) registered.splice(i, 1);
+          self.removed.push(name);
+          const i = self.registered.indexOf(name);
+          if (i >= 0) self.registered.splice(i, 1);
         },
       };
     },
@@ -93,6 +96,18 @@ test("unavailable — full env but companion not installed: degrades to memory-o
     },
   });
   assert.equal(status, "unavailable");
+  assert.deepEqual(server.registered, []);
+});
+
+test("error — companion present but FAILS TO LOAD (not a not-found): degrades to memory-only", async () => {
+  const server = spyServer();
+  // A load/eval failure that is NOT module-not-found (e.g. a syntax or native-addon init error).
+  const status = await maybeRegisterVaultSurface(server, FULL_ENV, {
+    importRegister: async () => {
+      throw new SyntaxError("Unexpected token while evaluating @mnemoverse/mcp-vault");
+    },
+  });
+  assert.equal(status, "error", "a broken install is 'error', not misreported as 'unavailable'");
   assert.deepEqual(server.registered, []);
 });
 
