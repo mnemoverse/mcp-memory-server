@@ -68,7 +68,7 @@
     },
     {
       "name": "memory_create_room",
-      "description": "Create a shared memory room — a space your and other people's assistants can both read and write, across Claude/ChatGPT/editors."
+      "description": "Create a shared memory room — a space that your and other people's assistants can both read and write, across Claude/ChatGPT/editors."
     },
     {
       "name": "memory_invite_to_room",
