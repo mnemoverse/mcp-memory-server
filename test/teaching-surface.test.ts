@@ -143,6 +143,14 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     const text = await buildReadEmptyResponse(async () => ({ total_atoms: 7 }));
     expect(text).not.toMatch(/drop the domain filter/i);
   });
+
+  // Copilot: a whitespace-only domain is not a real filter — the caller trims
+  // before computing the scoped flag, so the greeting still fires. This pins
+  // the caller-side contract as source text (the handler is not bootable in
+  // tests — importing src/index.ts starts the stdio transport).
+  it("caller treats a whitespace-only domain as UNSCOPED (trim before the scoped flag)", () => {
+    expect(indexSource).toContain('domain != null && domain.trim() !== ""');
+  });
 });
 
 describe("install-command canon", () => {

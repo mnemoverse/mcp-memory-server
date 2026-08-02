@@ -280,7 +280,9 @@ server.registerTool(
       // store, not the scoped domain. See src/teaching.ts.
       const text = await buildReadEmptyResponse(
         () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-        domain != null && domain !== "",
+        // trim(): a whitespace-only domain is not a real filter — treating it
+        // as scoped would silently suppress the first-contact greeting.
+        domain != null && domain.trim() !== "",
       );
       return {
         content: [{ type: "text" as const, text }],
