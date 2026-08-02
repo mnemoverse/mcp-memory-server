@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -117,10 +118,17 @@ function safeInline(s: string | undefined | null, cap = 200): string {
 
 // --- Server setup ---
 
-const server = new McpServer({
-  name: "mnemoverse-memory",
-  version: pkg.version,
-});
+// The second argument lands verbatim in the connected model's system prompt on
+// clients that surface MCP instructions — it is the single highest-leverage
+// teaching surface this server has. Kept in src/teaching.ts so tests can
+// assert its polarity/length without booting the server.
+const server = new McpServer(
+  {
+    name: "mnemoverse-memory",
+    version: pkg.version,
+  },
+  { instructions: SERVER_INSTRUCTIONS },
+);
 
 // --- Tool: memory_write ---
 
@@ -128,7 +136,7 @@ server.registerTool(
   "memory_write",
   {
     description:
-      "Store a long-term memory that persists across sessions AND across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code) — write once, recall everywhere. Call this PROACTIVELY the moment the user states a preference, makes a decision, or you learn a durable fact (people, roles, project setup, a lesson). Don't wait to be asked. Do NOT use it for transient chatter, secrets, or anything only relevant to the current turn. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+      "Store a long-term memory that persists across sessions AND across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code) — write once, recall everywhere. Call this PROACTIVELY the moment the user states a preference, makes a decision, or you learn a durable fact (people, roles, project setup, a lesson). Don't wait to be asked. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records; skip transient chatter that only matters this turn. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
     inputSchema: {
       content: z
         .string()
@@ -264,10 +272,15 @@ server.registerTool(
     const items = Array.isArray(r?.items) ? r.items : [];
 
     if (items.length === 0) {
+      // Zero results: ONE stats call (made only on this path) distinguishes a
+      // truly empty store (first contact — greet with how to save the first
+      // memory) from "no match for this query" (hint to broaden). Stats
+      // failure falls open to the plain no-match message. See src/teaching.ts.
+      const text = await buildReadEmptyResponse(() =>
+        apiFetch<{ total_atoms?: number }>("/memory/stats"),
+      );
       return {
-        content: [
-          { type: "text" as const, text: "No memories found for this query." },
-        ],
+        content: [{ type: "text" as const, text }],
       };
     }
 
@@ -414,7 +427,7 @@ server.registerTool(
   "memory_delete",
   {
     description:
-      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use only when the user explicitly asks to forget something specific, or to correct a fact you stored wrongly. Get the atom_id from a memory_read result. To clear an entire topic at once, use memory_delete_domain instead. Never delete on your own initiative — require an explicit user request.",
+      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. To clear an entire topic at once, use memory_delete_domain instead.",
     inputSchema: {
       atom_id: z
         .string()
@@ -468,7 +481,7 @@ server.registerTool(
   "memory_delete_domain",
   {
     description:
-      "Permanently delete EVERY memory in one domain — irreversible, and far more destructive than memory_delete. Use only on an explicit user request to wipe a whole topic, e.g. 'forget everything about project X' or 'wipe my benchmark experiments'. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). Never call this speculatively or to 'clean up' on your own — only when the user explicitly asks.",
+      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. Use it when a whole topic is dead — a finished or abandoned project, an experiment batch that no longer matters — or when the user asks to wipe one, e.g. 'forget everything about project X'. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). For a single wrong or stale memory, memory_delete is the right tool.",
     inputSchema: {
       domain: z
         .string()
