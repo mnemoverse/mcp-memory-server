@@ -18,6 +18,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",
@@ -59,7 +61,8 @@
   },
   "devDependencies": {
     "typescript": "^5.8.3",
-    "@types/node": "^22.15.3"
+    "@types/node": "^22.15.3",
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": ">=18"
