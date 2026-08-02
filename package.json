@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test test/vault-surface.test.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "generate:configs": "node scripts/generate-configs.mjs",
