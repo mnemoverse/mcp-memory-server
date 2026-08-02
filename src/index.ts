@@ -275,9 +275,12 @@ server.registerTool(
       // Zero results: ONE stats call (made only on this path) distinguishes a
       // truly empty store (first contact — greet with how to save the first
       // memory) from "no match for this query" (hint to broaden). Stats
-      // failure falls open to the plain no-match message. See src/teaching.ts.
-      const text = await buildReadEmptyResponse(() =>
-        apiFetch<{ total_atoms?: number }>("/memory/stats"),
+      // failure falls open to the plain no-match message. Domain-scoped reads
+      // never greet and never probe — the stats call measures the PERSONAL
+      // store, not the scoped domain. See src/teaching.ts.
+      const text = await buildReadEmptyResponse(
+        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+        domain != null && domain !== "",
       );
       return {
         content: [{ type: "text" as const, text }],
@@ -481,7 +484,7 @@ server.registerTool(
   "memory_delete_domain",
   {
     description:
-      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. Use it when a whole topic is dead — a finished or abandoned project, an experiment batch that no longer matters — or when the user asks to wipe one, e.g. 'forget everything about project X'. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). For a single wrong or stale memory, memory_delete is the right tool.",
+      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). For a single wrong or stale memory, memory_delete is the right tool.",
     inputSchema: {
       domain: z
         .string()

@@ -14,6 +14,7 @@ import {
   EMPTY_STORE_WELCOME,
   NO_MATCH_MESSAGE,
   NO_MATCH_HINT,
+  NO_MATCH_SCOPED_HINT,
   buildReadEmptyResponse,
 } from "../src/teaching.js";
 
@@ -121,6 +122,26 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
       return { total_atoms: 0 };
     });
     expect(calls).toBe(1);
+  });
+
+  // Review finding: the stats probe measures the PERSONAL store, so a
+  // domain-scoped read (e.g. a shared room) must never claim "the store is
+  // empty" about a domain that has memories the query merely missed.
+  it("NEVER greets a domain-scoped read — no probe, scoped copy with the drop-filter hint", async () => {
+    let calls = 0;
+    const text = await buildReadEmptyResponse(async () => {
+      calls++;
+      return { total_atoms: 0 };
+    }, true);
+    expect(calls).toBe(0); // scoped reads skip the probe entirely
+    expect(text).toBe(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT);
+    expect(text).toMatch(/drop the domain filter/i); // honest: a filter EXISTS
+    expect(text).not.toContain(EMPTY_STORE_WELCOME);
+  });
+
+  it("the unscoped broaden hint does NOT advise dropping a filter that was never set", async () => {
+    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 7 }));
+    expect(text).not.toMatch(/drop the domain filter/i);
   });
 });
 

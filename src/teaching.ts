@@ -21,13 +21,19 @@
  * - Mentions every tool family: read/write/stats/feedback, delete, rooms, vault.
  */
 export const SERVER_INSTRUCTIONS =
-  "You own this long-term memory. It persists across sessions and every AI tool this user has connected (Claude, ChatGPT, Cursor, VS Code). Use it freely, as a habit: call memory_read before answering anything that may have come up before, and memory_write the moment you learn a durable fact, preference, or decision — don't wait to be asked. Rate recalls with memory_feedback so useful memories surface faster; memory_stats shows what you hold; prune what is obsolete with memory_delete (memory_delete_domain wipes a whole topic). Rooms (memory_create_room, memory_invite_to_room, memory_join_room, memory_list_rooms) share memory with others; vault_list names stored secrets by alias only, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
+  "You own this long-term memory. It persists across sessions and every AI tool this user connects (Claude, ChatGPT, editors). Use it as a habit: call memory_read before answering anything that may have come up before, and memory_write the moment you learn a durable fact, preference, or decision — don't wait to be asked. Rate recalls with memory_feedback so useful memories surface faster; memory_stats shows what you hold; prune stale entries with memory_delete; bulk-wipe a domain (memory_delete_domain) only with the user's go-ahead. Rooms (memory_create_room, memory_invite_to_room, memory_join_room, memory_list_rooms) share memory with others; vault_list names stored secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";
 
-/** One-line hint appended when the store has memories but none matched. */
-export const NO_MATCH_HINT =
+/** Hint for an UNSCOPED no-match against a non-empty store: widen the query.
+ *  (No drop-the-filter clause — none was set; advising to remove a filter that
+ *  does not exist nudges the model into confabulating state.) */
+export const NO_MATCH_HINT = " Try a broader query.";
+
+/** Hint for a DOMAIN-SCOPED no-match: here a filter genuinely exists, so
+ *  suggesting to drop it is honest and actionable. */
+export const NO_MATCH_SCOPED_HINT =
   " Try a broader query, or drop the domain filter to search all domains.";
 
 /**
@@ -45,16 +51,24 @@ export const EMPTY_STORE_WELCOME =
 /**
  * Decide what a zero-result memory_read should say.
  *
- * Makes ONE stats call (only ever invoked on the zero-result path) to
+ * DOMAIN-SCOPED reads (`scopedToDomain` — the caller passed a `domain` arg,
+ * e.g. a shared room) never greet and never probe: the stats call measures the
+ * PERSONAL store, so on a scoped read it could claim "the store is empty"
+ * about a domain that has memories the query merely missed (review finding).
+ * The scoped copy suggests dropping the filter — honest, one actually exists.
+ *
+ * UNSCOPED reads make ONE stats call (only ever on the zero-result path) to
  * distinguish "store is truly empty" from "no match for this query":
  * - total_atoms === 0     → EMPTY_STORE_WELCOME (first-contact greeting)
- * - total_atoms > 0       → no-match + a one-line broaden hint
+ * - total_atoms > 0       → no-match + the broaden hint (no filter clause)
  * - stats throws/malformed → the plain old no-match message (fail-open to the
  *   pre-greeting behavior; never surfaces an error, never writes anything)
  */
 export async function buildReadEmptyResponse(
   fetchStats: () => Promise<{ total_atoms?: number }>,
+  scopedToDomain = false,
 ): Promise<string> {
+  if (scopedToDomain) return NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT;
   let totalAtoms: number | undefined;
   try {
     totalAtoms = (await fetchStats())?.total_atoms;
