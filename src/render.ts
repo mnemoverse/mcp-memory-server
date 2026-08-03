@@ -2,11 +2,13 @@
  * Result-rendering helpers for memory_read and memory_list_recent.
  *
  * Kept out of index.ts (same move as teaching.ts) so tests can pin the
- * rendered contract: since the #404 temporal work, every item line MUST
- * carry its id (memory_feedback / memory_delete are uncallable without
- * one — the tool description always promised ids, the old render never
- * delivered them) and its created_at date (a reader cannot reason about
- * recency it cannot see).
+ * rendered contract: since the #404 temporal work, every item line
+ * carries its id and created_at date WHENEVER the server provides them
+ * (memory_feedback / memory_delete are uncallable without ids — the tool
+ * description always promised them, the old render never delivered any;
+ * a reader cannot reason about recency it cannot see). Legacy response
+ * shapes without atom_id/created_at degrade gracefully: those parts of
+ * the line are simply omitted.
  */
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
