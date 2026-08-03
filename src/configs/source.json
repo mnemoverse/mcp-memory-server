@@ -67,7 +67,12 @@
       { "name": "memory_feedback", "description": "Report whether a recalled memory was helpful so good memories surface faster next time." },
       { "name": "memory_stats", "description": "Show how many memories are stored, which domains exist, and average quality scores." },
       { "name": "memory_delete", "description": "Permanently delete a single memory by its atom_id." },
-      { "name": "memory_delete_domain", "description": "Permanently delete every memory in a domain (requires an explicit confirm)." }
+      { "name": "memory_delete_domain", "description": "Permanently delete every memory in a domain (requires an explicit confirm)." },
+      { "name": "memory_create_room", "description": "Create a shared memory room — a space that your and other people's assistants can both read and write, across Claude/ChatGPT/editors." },
+      { "name": "memory_invite_to_room", "description": "Mint a one-time invite for a room you own and get a ready-to-forward message for the person you want to add." },
+      { "name": "memory_join_room", "description": "Join a shared memory room with an invite code; then pass the returned address as the domain on memory_write/memory_read." },
+      { "name": "memory_list_rooms", "description": "List the shared rooms you own or have joined, with the address to use as the domain — re-find a room in a new session." },
+      { "name": "vault_list", "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown." }
     ]
   }
 }
