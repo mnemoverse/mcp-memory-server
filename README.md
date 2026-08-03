@@ -199,7 +199,8 @@ If it doesn't remember: check that the client was fully restarted and the config
 | Tool | What it does |
 |------|-------------|
 | `memory_write` | Store a memory — insight, preference, lesson learned |
-| `memory_read` | Search memories by natural language query |
+| `memory_read` | Search memories by natural language query (optional recency ordering, time bounds, author exclusion) |
+| `memory_list_recent` | List newest memories first — no query; `since` watermark + cursor paging |
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
 | `memory_delete` | Permanently delete a single memory by `atom_id` |
