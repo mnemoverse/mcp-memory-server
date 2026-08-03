@@ -213,7 +213,7 @@ server.registerTool(
   "memory_read",
   {
     description:
-      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (semantic similarity plus learned concept associations); each result carries an id you can pass to memory_feedback or memory_delete.",
+      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback or memory_delete.",
     inputSchema: {
       query: z
         .string()
@@ -245,6 +245,7 @@ server.registerTool(
         ),
       since: z
         .string()
+        .max(40)
         .optional()
         .describe(
           "Only memories created at/after this ISO-8601 instant (naive = " +
@@ -252,14 +253,18 @@ server.registerTool(
         ),
       until: z
         .string()
+        .max(40)
         .optional()
         .describe("Only memories created at/before this ISO-8601 instant."),
       exclude_author: z
         .string()
+        .max(200)
         .optional()
         .describe(
-          "Drop memories written by this principal — 'everyone but me' " +
-            "reads in shared rooms.",
+          "Drop memories written by this author PRINCIPAL (the server-side " +
+            "identity, not shown in these results). Useful when your system " +
+            "knows principals (e.g. via the REST API); a self-exclusion " +
+            "shortcut is planned server-side.",
         ),
     },
     annotations: {
@@ -291,6 +296,20 @@ server.registerTool(
     });
 
     const items = Array.isArray(r?.items) ? r.items : [];
+
+    if (items.length === 0 && (since || until || exclude_author)) {
+      // A bounded/filtered read that finds nothing is NOT a bad query —
+      // the truthful answer is "nothing new for these filters" (mirrors
+      // memory_list_recent's empty copy; no stats probe, no broaden hint).
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Nothing matching within the given time/author filters.",
+          },
+        ],
+      };
+    }
 
     if (items.length === 0) {
       // Zero results: ONE stats call (made only on this path) distinguishes a
@@ -361,6 +380,7 @@ server.registerTool(
         .describe("Page size (default: 20). Newest first."),
       cursor: z
         .string()
+        .max(512)
         .optional()
         .describe(
           "Opaque cursor from a previous page's 'More older entries exist' line — continues the listing without skips or duplicates.",
@@ -393,15 +413,18 @@ server.registerTool(
       // Graceful degradation while the server side rolls out: a 404 from
       // core means the /memory/recent endpoint is not deployed yet — say
       // so instead of surfacing a raw HTTP error.
-      if (e instanceof Error && e.message.includes("404")) {
+      const endpointAbsent =
+        e instanceof Error &&
+        e.message.startsWith("Mnemoverse API error 404:") &&
+        !e.message.includes('"code"');
+      if (endpointAbsent) {
         return {
           content: [
             {
               type: "text" as const,
               text:
-                "The memory server does not support the recent-entries feed yet " +
-                "(core /memory/recent not deployed). Use memory_read with " +
-                "order_by: 'recency' as an approximation.",
+                "The memory service does not support the recent-entries feed yet. " +
+                "Use memory_read with order_by: 'recency' as an approximation.",
             },
           ],
         };
@@ -426,7 +449,10 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(formatRecentPage(items, r?.next_cursor)),
+          text: capResult(
+            formatRecentPage(items, r?.next_cursor),
+            "Lower `limit` or add a `domain` for smaller pages.",
+          ),
         },
       ],
     };

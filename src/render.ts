@@ -117,7 +117,11 @@ export function formatRecentItem(item: RecentItem, index: number): string {
 /** Full feed page: items newest-first + how to continue / that it's over. */
 export function formatRecentPage(items: RecentItem[], nextCursor?: string | null): string {
   const lines = items.map((it, i) => formatRecentItem(it, i));
-  const tail = nextCursor
+  // Defense-in-depth (CN-032 posture): the cursor is server-supplied and
+  // interpolated into instructional text — only echo it when it matches the
+  // opaque urlsafe-base64 shape ours always has.
+  const cursorOk = nextCursor != null && /^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor);
+  const tail = cursorOk
     ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`
     : `\n\n(end of feed — nothing older)`;
   return lines.join("\n\n") + tail;
