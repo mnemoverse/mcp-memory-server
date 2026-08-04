@@ -4,6 +4,14 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import {
+  formatReadItem,
+  formatRecentPage,
+  safeInline,
+  type Provenance,
+  type ReadItem,
+  type RecentItem,
+} from "./render.js";
 import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
 
 // Version is read at runtime from package.json so there is exactly one place
@@ -107,14 +115,9 @@ function capResult(
  * core only trims whitespace on it, so quotes/colons/newlines pass. Strip to a
  * conservative charset and collapse whitespace, then cap length. Same treatment
  * `formatAuthorTag` already applies to a server-stamped author.
+ * Implementation lives in src/render.ts (shared with the item renderers,
+ * testable there); re-imported here for the 15 other call sites.
  */
-function safeInline(s: string | undefined | null, cap = 200): string {
-  return (s ?? "")
-    .replace(/[^\w .@:+/-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, cap);
-}
 
 // --- Server setup ---
 
@@ -210,7 +213,7 @@ server.registerTool(
   "memory_read",
   {
     description:
-      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (semantic similarity plus learned concept associations); each result carries an id you can pass to memory_feedback or memory_delete.",
+      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback or memory_delete.",
     inputSchema: {
       query: z
         .string()
@@ -232,6 +235,37 @@ server.registerTool(
         .describe(
           "Restrict the search to one domain namespace (e.g. 'project:acme'); omit to search across all domains.",
         ),
+      order_by: z
+        .enum(["relevance", "recency"])
+        .optional()
+        .describe(
+          "'relevance' (default) = ranking order. 'recency' = the matched " +
+            "set re-sorted newest-first. For a complete newest-first feed " +
+            "with no search at all, use memory_list_recent instead.",
+        ),
+      since: z
+        .string()
+        .max(40)
+        .optional()
+        .describe(
+          "Only memories created at/after this ISO-8601 instant (naive = " +
+            "UTC) — e.g. your last-seen watermark in a shared room.",
+        ),
+      until: z
+        .string()
+        .max(40)
+        .optional()
+        .describe("Only memories created at/before this ISO-8601 instant."),
+      exclude_author: z
+        .string()
+        .max(200)
+        .optional()
+        .describe(
+          "Drop memories written by this author PRINCIPAL (the server-side " +
+            "identity, not shown in these results). Useful when your system " +
+            "knows principals (e.g. via the REST API); a self-exclusion " +
+            "shortcut is planned server-side.",
+        ),
     },
     annotations: {
       title: "Search Memories",
@@ -241,23 +275,9 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ query, top_k, domain }) => {
-    // CN-001 server-stamped authorship, returned nested on each read item.
-    type Provenance = {
-      principal?: string | null;
-      agent?: string | null;
-      agent_name?: string | null;
-      client_env?: string | null;
-      is_external?: boolean | null;
-    };
+  async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
     const r = await apiFetch<{
-      items?: Array<{
-        content?: string;
-        relevance?: number;
-        concepts?: string[];
-        domain?: string;
-        provenance?: Provenance | null;
-      }>;
+      items?: ReadItem[];
       search_time_ms?: number;
     }>("/memory/read", {
       method: "POST",
@@ -266,10 +286,30 @@ server.registerTool(
         top_k: top_k || 5,
         domain: domain || undefined,
         include_associations: true,
+        // #404 temporal dimension — omitted entirely when unused so the
+        // request body stays byte-identical for existing callers.
+        ...(order_by ? { order_by } : {}),
+        ...(since ? { since } : {}),
+        ...(until ? { until } : {}),
+        ...(exclude_author ? { exclude_author } : {}),
       }),
     });
 
     const items = Array.isArray(r?.items) ? r.items : [];
+
+    if (items.length === 0 && (since || until || exclude_author)) {
+      // A bounded/filtered read that finds nothing is NOT a bad query —
+      // the truthful answer is "nothing new for these filters" (mirrors
+      // memory_list_recent's empty copy; no stats probe, no broaden hint).
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Nothing matching within the given time/author filters.",
+          },
+        ],
+      };
+    }
 
     if (items.length === 0) {
       // Zero results: ONE stats call (made only on this path) distinguishes a
@@ -289,32 +329,13 @@ server.registerTool(
       };
     }
 
-    // Surface server-stamped authorship (CN-001) so the reader knows WHO wrote each
-    // memory — essential for shared rooms (Mnemoverse A2A Rooms), where atoms come from
-    // different agents/vendors. The core REST response already carries `provenance`;
-    // we just render it. Omitted cleanly for legacy atoms that have no author.
-    const formatAuthorTag = (p?: Provenance | null): string => {
-      if (!p) return "";
-      // Surface only the agent identity / client env — never the human `principal`
-      // (it may be an email / PII), even though it's present in the response.
-      const raw = p.agent_name || p.agent || p.client_env || "";
-      // Sanitize before interpolating into tool output: a hostile connector can
-      // choose its own agent_name — reuse the shared safeInline helper so the
-      // CN-032 charset/cap stays consistent across all tool outputs (Copilot).
-      const who = safeInline(raw, 64);
-      if (!who) return "";
-      return p.is_external ? ` [by ${who} · external]` : ` [by ${who}]`;
-    };
-
-    const lines = items.map((item, i) => {
-      const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
-      const content = item?.content ?? "(empty)";
-      const concepts =
-        Array.isArray(item?.concepts) && item.concepts.length > 0
-          ? ` (${item.concepts.join(", ")})`
-          : "";
-      return `${i + 1}. [${relevance}%] ${content}${concepts}${formatAuthorTag(item?.provenance)}`;
-    });
+    // Rendering lives in src/render.ts (testable): each line carries the
+    // CN-001 author tag, the created_at date (#404 R1 — a reader cannot
+    // reason about recency it cannot see) and the full atom id (the tool
+    // description always promised ids for memory_feedback/memory_delete;
+    // the old render never delivered them, making both uncallable from
+    // read results).
+    const lines = items.map((item, i) => formatReadItem(item, i));
 
     const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
     const text = lines.join("\n\n") + `\n\n(${searchMs}ms)`;
@@ -324,6 +345,114 @@ server.registerTool(
         {
           type: "text" as const,
           text: capResult(text),
+        },
+      ],
+    };
+  },
+);
+
+// --- Tool: memory_list_recent ---
+
+server.registerTool(
+  "memory_list_recent",
+  {
+    description:
+      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction — nothing is skipped, unlike a search that only returns semantic matches.",
+    inputSchema: {
+      domain: z
+        .string()
+        .optional()
+        .describe(
+          "Restrict to one domain (e.g. a shared room address 'xroom:...'); omit for all your domains.",
+        ),
+      since: z
+        .string()
+        .optional()
+        .describe(
+          "Only entries created at/after this ISO-8601 instant (naive = UTC) — your novelty watermark.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("Page size (default: 20). Newest first."),
+      cursor: z
+        .string()
+        .max(512)
+        .optional()
+        .describe(
+          "Opaque cursor from a previous page's 'More older entries exist' line — continues the listing without skips or duplicates.",
+        ),
+    },
+    annotations: {
+      title: "List Recent Memories",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ domain, since, limit, cursor }) => {
+    let r: { items?: RecentItem[]; next_cursor?: string | null };
+    try {
+      r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
+        "/memory/recent",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            domain: domain || undefined,
+            since: since || undefined,
+            limit: limit || 20,
+            cursor: cursor || undefined,
+          }),
+        },
+      );
+    } catch (e) {
+      // Graceful degradation while the server side rolls out: a 404 from
+      // core means the /memory/recent endpoint is not deployed yet — say
+      // so instead of surfacing a raw HTTP error.
+      const endpointAbsent =
+        e instanceof Error &&
+        e.message.startsWith("Mnemoverse API error 404:") &&
+        !e.message.includes('"code"');
+      if (endpointAbsent) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text:
+                "The memory service does not support the recent-entries feed yet. " +
+                "Use memory_read with order_by: 'recency' as an approximation.",
+            },
+          ],
+        };
+      }
+      throw e;
+    }
+
+    const items = Array.isArray(r?.items) ? r.items : [];
+    if (items.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: since
+              ? "Nothing new since your watermark."
+              : "No memories here yet.",
+          },
+        ],
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: capResult(
+            formatRecentPage(items, r?.next_cursor),
+            "Lower `limit` or add a `domain` for smaller pages.",
+          ),
         },
       ],
     };

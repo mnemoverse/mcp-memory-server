@@ -51,6 +51,10 @@
       "description": "Search your long-term memory by natural-language query before answering or starting a task."
     },
     {
+      "name": "memory_list_recent",
+      "description": "List the newest memories first — no search query; supports domain, since-watermark, and cursor paging."
+    },
+    {
       "name": "memory_feedback",
       "description": "Report whether a recalled memory was helpful so good memories surface faster next time."
     },
