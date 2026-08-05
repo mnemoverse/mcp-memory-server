@@ -371,6 +371,19 @@ server.registerTool(
         .describe(
           "Only entries created at/after this ISO-8601 instant (naive = UTC) — your novelty watermark.",
         ),
+      until: z
+        .string()
+        .optional()
+        .describe(
+          "Only entries created at/before this ISO-8601 instant (inclusive). Pair with `since` to read a closed window — 'what happened on Monday' — instead of paging back from now.",
+        ),
+      exclude_author: z
+        .string()
+        .max(200)
+        .optional()
+        .describe(
+          "Drop entries written by this author PRINCIPAL — the 'everyone but me' read in a shared room. Same parameter as on memory_read.",
+        ),
       limit: z
         .number()
         .int()
@@ -394,7 +407,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ domain, since, limit, cursor }) => {
+  async ({ domain, since, until, exclude_author, limit, cursor }) => {
     let r: { items?: RecentItem[]; next_cursor?: string | null };
     try {
       r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
@@ -404,6 +417,8 @@ server.registerTool(
           body: JSON.stringify({
             domain: domain || undefined,
             since: since || undefined,
+            until: until || undefined,
+            exclude_author: exclude_author || undefined,
             limit: limit || 20,
             cursor: cursor || undefined,
           }),
