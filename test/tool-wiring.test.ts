@@ -26,10 +26,34 @@ function toolBlock(name: string): string {
   return end === -1 ? source.slice(start) : source.slice(start, end);
 }
 
-/** Field names declared in the tool's `inputSchema: { … }`. */
+/**
+ * Field names declared in the tool's `inputSchema: { … }`.
+ *
+ * Indentation-agnostic and accepts `name: z` broken across lines as well as
+ * `name: z.string()` on one. An earlier version demanded exactly six leading
+ * spaces and `: z` at end of line, which meant a reformat or a one-line field
+ * would quietly shrink the set this test checks — and a contract test that
+ * silently checks less is worse than none, because it still reports green.
+ */
 function declaredParams(block: string): string[] {
-  const schema = block.slice(block.indexOf("inputSchema: {"));
-  return [...schema.matchAll(/^\s{6}([a-z_]+): z$/gm)].map((m) => m[1]);
+  const at = block.indexOf("inputSchema: {");
+  expect(at, "inputSchema not found — the extraction pattern has drifted").toBeGreaterThan(-1);
+  const schema = braceBody(block, at);
+  const names = [...schema.matchAll(/^\s*([a-z_]+)\s*:\s*z\b/gm)].map((m) => m[1]);
+  expect(names.length, "no parameters extracted — pattern drift, not an empty schema").toBeGreaterThan(0);
+  return names;
+}
+
+/** The `{ … }` object literal starting at or after `from`, brace-matched. */
+function braceBody(block: string, from: number): string {
+  const open = block.indexOf("{", from);
+  expect(open, "no object literal here — the extraction pattern has drifted").toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = open; i < block.length; i++) {
+    if (block[i] === "{") depth++;
+    else if (block[i] === "}" && --depth === 0) return block.slice(open, i);
+  }
+  throw new Error("unbalanced braces while slicing the object literal");
 }
 
 /**
@@ -40,21 +64,17 @@ function declaredParams(block: string): string[] {
  * to keep the body byte-identical for callers who pass no filters.
  */
 function forwardedParams(block: string): string[] {
+  // Assert the anchor was found rather than letting indexOf return -1 and
+  // brace-match some unrelated object earlier in the block: that path produces
+  // a PASS from the wrong text, which is the one outcome this file must not
+  // have. If the handler stops building the body inline (`JSON.stringify(body)`),
+  // this fails loudly and someone updates the pattern deliberately.
   const open = block.indexOf("body: JSON.stringify({");
-  const from = block.indexOf("{", open + "body: JSON.stringify(".length);
+  expect(open, "body: JSON.stringify({ … }) not found — the handler shape changed").toBeGreaterThan(-1);
   // Brace-match rather than searching for a closing token: a conditional
   // spread ends in `: {}),`, which contains the obvious `}),` sentinel and
   // would truncate the object at its first filter.
-  let depth = 0;
-  let to = from;
-  for (let i = from; i < block.length; i++) {
-    if (block[i] === "{") depth++;
-    else if (block[i] === "}" && --depth === 0) {
-      to = i;
-      break;
-    }
-  }
-  const literal = block.slice(from, to);
+  const literal = braceBody(block, open + "body: JSON.stringify(".length);
   const plain = [...literal.matchAll(/^\s+([a-z_]+)[:,]/gm)].map((m) => m[1]);
   const spread = [...literal.matchAll(/\.\.\.\(\s*([a-z_]+)\s*\?/g)].map((m) => m[1]);
   return [...new Set([...plain, ...spread])];
