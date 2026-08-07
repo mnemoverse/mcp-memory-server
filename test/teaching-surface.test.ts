@@ -157,6 +157,27 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   // before computing the scoped flag, so the greeting still fires. This pins
   // the caller-side contract as source text (the handler is not bootable in
   // tests — importing src/index.ts starts the stdio transport).
+  it("every empty-result branch is WIRED to the scope note", () => {
+    // Found by the merge gate, not by these tests: the scope note itself is
+    // well covered, but the wiring is not — deleting the call from a handler
+    // and replacing it with `""` left all 50 tests green. For a release whose
+    // entire point is "the tool must say where it looked", a silently
+    // unwired note is the failure, not a cosmetic one.
+    //
+    // A source assertion is weaker than a behavioural one and is here because
+    // index.ts starts a stdio transport on import, so the handlers cannot be
+    // invoked from a unit test. It catches the deletion, which is the
+    // regression that matters. Same pattern as the instructions check above.
+    const unscoped = indexSource.match(/await unsearchedRoomsNote\(/g) ?? [];
+    const scoped = indexSource.match(/await domainMissNote\(/g) ?? [];
+    // Three empty-result branches: the recent feed, the filtered read, and
+    // the plain no-match read. Each must handle both scopes.
+    expect(unscoped).toHaveLength(3);
+    expect(scoped).toHaveLength(3);
+    // And the note must reach the reader, not be computed and dropped.
+    expect(indexSource.match(/\+ scopeNote|scopeNote,$/gm)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
   it("every scope-taking handler normalises the domain at the edge", () => {
     // A whitespace-only domain is not a filter. This used to be enforced by a
     // trim at ONE decision point, which is how the same call could be "scoped"
