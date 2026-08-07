@@ -104,6 +104,9 @@ describe("futureSinceNote", () => {
     expect(note).toMatch(/FUTURE/);
     expect(note).toContain("2026-08-07T22:00Z");
     expect(note).toMatch(/timezone slip/i);
+    // Must not overstate: a future watermark means nothing is newer YET.
+    expect(note).not.toMatch(/nothing can exist/i);
+    expect(note).toMatch(/YET/);
   });
 
   it("stays quiet for a sane past watermark", () => {

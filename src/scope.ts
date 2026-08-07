@@ -36,7 +36,8 @@ export function futureSinceNote(since: string | undefined, nowMs: number): strin
   const t = Date.parse(since);
   if (Number.isNaN(t) || t <= nowMs) return "";
   return (
-    `\n\nNote: that timestamp is in the FUTURE — nothing can exist after it. ` +
+    `\n\nNote: that watermark is in the FUTURE — nothing has been written after it YET, ` +
+    `so an empty result here says nothing about whether you are caught up. ` +
     `Now is ${new Date(nowMs).toISOString().slice(0, 16)}Z. ` +
     `Check the watermark you passed (a timezone slip is the usual cause).`
   );

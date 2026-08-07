@@ -639,17 +639,20 @@ server.registerTool(
     // Echo the DIRECTION, not just the count: the same four words for +1 and
     // -1 gave a caller no evidence the loop did anything, which is why nobody
     // calls it twice.
-    const direction =
-      outcome > 0 ? "helpful" : outcome < 0 ? "unhelpful" : "neutral";
+    //
+    // The effect clause is per-direction. Promising "this shifts how they
+    // rank" for outcome 0 would be a claim we cannot make — dogfooding saw a
+    // neutral rating move a score UP by about five points, so neither "no
+    // change" nor "ranks higher" is safe to assert (CodeRabbit, #65).
+    const noun = `${count} memor${count === 1 ? "y" : "ies"}`;
+    const text =
+      outcome > 0
+        ? `Recorded +${outcome} (helpful) for ${noun} — they should surface sooner next time.`
+        : outcome < 0
+          ? `Recorded ${outcome} (unhelpful) for ${noun} — they should fade.`
+          : `Recorded 0 (neutral) for ${noun}. Logged as a recall that was neither useful nor wrong; use +1 or -1 when you want the ranking to move.`;
     return {
-      content: [
-        {
-          type: "text" as const,
-          text:
-            `Recorded ${outcome > 0 ? "+" : ""}${outcome} (${direction}) for ` +
-            `${count} memor${count === 1 ? "y" : "ies"} — this shifts how they rank next time.`,
-        },
-      ],
+      content: [{ type: "text" as const, text }],
     };
   },
 );
