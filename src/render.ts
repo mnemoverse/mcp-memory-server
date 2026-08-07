@@ -66,6 +66,25 @@ export function formatAuthorTag(p?: Provenance | null): string {
 }
 
 /**
+ * ` @domain` — which store the memory actually came from.
+ *
+ * Absent before 0.8.1, and its absence was a real trap: an unscoped search for
+ * a common name returned five different people's "Maria Chen" from five
+ * different projects, ranked together, with nothing on the line to tell them
+ * apart (dogfood, 2026-08-07). A reader could not answer "is this mine?"
+ * without re-querying scoped.
+ *
+ * Omitted when the server doesn't send it, and omitted for the caller's own
+ * default bucket — labelling everything "@general" would be noise on the
+ * common case.
+ */
+export function formatDomainTag(domain?: string): string {
+  const d = safeInline(domain, 64);
+  if (!d || d === "general") return "";
+  return ` @${d}`;
+}
+
+/**
  * ` · 2026-08-01 21:04Z` — minute-precision UTC, compact enough for a line
  * tail, precise enough to order a same-day room conversation by eye.
  * Empty for legacy atoms without a timestamp.
@@ -93,9 +112,9 @@ export function formatReadItem(item: ReadItem, index: number): string {
     Array.isArray(item?.concepts) && item.concepts.length > 0
       ? ` (${item.concepts.join(", ")})`
       : "";
-  const head = `${index + 1}. [${relevance}%] ${content}${concepts}${formatAuthorTag(
-    item?.provenance,
-  )}${formatDateTag(item?.created_at)}`;
+  const head = `${index + 1}. [${relevance}%] ${content}${concepts}${formatDomainTag(
+    item?.domain,
+  )}${formatAuthorTag(item?.provenance)}${formatDateTag(item?.created_at)}`;
   return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
 }
 
@@ -110,9 +129,9 @@ export function formatRecentItem(item: RecentItem, index: number): string {
       ? ` (${item.concepts.join(", ")})`
       : "";
   const date = formatDateTag(item?.created_at).replace(/^ · /, "");
-  const head = `${index + 1}. ${date ? `[${date}] ` : ""}${content}${concepts}${formatAuthorTag(
-    item?.provenance,
-  )}`;
+  const head = `${index + 1}. ${date ? `[${date}] ` : ""}${content}${concepts}${formatDomainTag(
+    item?.domain,
+  )}${formatAuthorTag(item?.provenance)}`;
   return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
 }
 

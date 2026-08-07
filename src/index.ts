@@ -13,7 +13,28 @@ import {
   type RecentItem,
 } from "./render.js";
 import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
-import { unsearchedRoomsNote } from "./scope.js";
+import {
+  unsearchedRoomsNote,
+  futureSinceNote,
+  nearestDomainNote,
+} from "./scope.js";
+
+/**
+ * On an empty SCOPED result, ask stats for the domain list and say whether the
+ * name is a casing slip or a near-miss. One extra call, only on the zero-result
+ * path — the same shape as the existing first-contact probe. Never throws: a
+ * failed probe just means no extra help, which is the status quo.
+ */
+async function domainMissNote(domain: string): Promise<string> {
+  try {
+    const s = await apiFetch<{ domains?: string[] }>("/memory/stats");
+    const known = Array.isArray(s?.domains) ? s.domains : [];
+    if (known.includes(domain)) return "";
+    return nearestDomainNote(domain, known);
+  } catch {
+    return "";
+  }
+}
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -239,7 +260,9 @@ server.registerTool(
         .min(1)
         .max(50)
         .optional()
-        .describe("Max results to return (default: 5)"),
+        .describe(
+          "Requested number of results (default: 5). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
+        ),
       domain: z
         .string()
         .optional()
@@ -272,10 +295,13 @@ server.registerTool(
         .max(200)
         .optional()
         .describe(
-          "Drop memories written by this author PRINCIPAL (the server-side " +
-            "identity, not shown in these results). Useful when your system " +
-            "knows principals (e.g. via the REST API); a self-exclusion " +
-            "shortcut is planned server-side.",
+          "Drop memories written by this author PRINCIPAL — the server-side " +
+            "identity. ⚠️ NOT USABLE FROM HERE YET: the principal is not shown " +
+            "in these results, so there is no value you can obtain through " +
+            "this tool, and a guess like 'me' silently matches nothing and " +
+            "filters nothing. Only pass it if your system knows the exact " +
+            "principal from elsewhere (e.g. the REST API). A self-exclusion " +
+            "shortcut is planned.",
         ),
     },
     annotations: {
@@ -314,7 +340,7 @@ server.registerTool(
       // memory_list_recent's empty copy; no stats probe, no broaden hint).
       // Unscoped, it also has to name the rooms it never looked in.
       const scopeNote = domain
-        ? ""
+        ? await domainMissNote(domain)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -324,7 +350,9 @@ server.registerTool(
           {
             type: "text" as const,
             text:
-              "Nothing matching within the given time/author filters." + scopeNote,
+              "Nothing matching within the given time/author filters." +
+              futureSinceNote(since, Date.now()) +
+              scopeNote,
           },
         ],
       };
@@ -347,7 +375,7 @@ server.registerTool(
       // Same rule as the feed: an unscoped miss must name the rooms it never
       // searched, or "no memories found" reads as a fact about everything.
       const scopeNote = scoped
-        ? ""
+        ? await domainMissNote(domain!.trim())
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -410,7 +438,7 @@ server.registerTool(
         .max(200)
         .optional()
         .describe(
-          "Drop entries written by this author PRINCIPAL — the 'everyone but me' read in a shared room. Same parameter as on memory_read.",
+          "Drop entries written by this author PRINCIPAL. ⚠️ NOT USABLE FROM HERE YET — the principal is never shown in these results, so there is no value you can get through this tool; a guess like 'me' filters nothing, silently. Same caveat as on memory_read.",
         ),
       limit: z
         .number()
@@ -481,7 +509,7 @@ server.registerTool(
       // stores and are never covered here, so a bare "nothing new" is a false
       // claim about the world (incident 2026-08-07 — see src/scope.ts).
       const scopeNote = domain
-        ? ""
+        ? await domainMissNote(domain)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -493,7 +521,9 @@ server.registerTool(
             text:
               (since
                 ? "Nothing new since your watermark."
-                : "No memories here yet.") + scopeNote,
+                : "No memories here yet.") +
+              futureSinceNote(since, Date.now()) +
+              scopeNote,
           },
         ],
       };

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { formatUnsearchedRoomsNote, unsearchedRoomsNote } from "../src/scope.js";
+import {
+  formatUnsearchedRoomsNote,
+  unsearchedRoomsNote,
+  futureSinceNote,
+  nearestDomainNote,
+} from "../src/scope.js";
 import { safeInline } from "../src/render.js";
 
 const room = (name: string, id: string, archived = false) => ({
@@ -88,5 +93,50 @@ describe("unsearchedRoomsNote", () => {
     await expect(
       unsearchedRoomsNote(async () => ({ nope: true }), safeInline),
     ).resolves.toBe("");
+  });
+});
+
+describe("futureSinceNote", () => {
+  const now = Date.parse("2026-08-07T22:00:00Z");
+
+  it("names a future watermark, which otherwise reads as 'all clear'", () => {
+    const note = futureSinceNote("2027-01-01T00:00:00Z", now);
+    expect(note).toMatch(/FUTURE/);
+    expect(note).toContain("2026-08-07T22:00Z");
+    expect(note).toMatch(/timezone slip/i);
+  });
+
+  it("stays quiet for a sane past watermark", () => {
+    expect(futureSinceNote("2026-08-01T00:00:00Z", now)).toBe("");
+  });
+
+  it("stays quiet when there is no watermark or it cannot be parsed", () => {
+    expect(futureSinceNote(undefined, now)).toBe("");
+    expect(futureSinceNote("yesterday", now)).toBe("");
+  });
+});
+
+describe("nearestDomainNote", () => {
+  const known = ["dogfood-0807-org-a-engineering", "user:eduard", "project:acme"];
+
+  it("catches a casing slip — the failure that silently forks a namespace", () => {
+    const note = nearestDomainNote("Dogfood-0807-Org-A-Engineering", known);
+    expect(note).toMatch(/matched exactly, including case/i);
+    expect(note).toContain("dogfood-0807-org-a-engineering");
+  });
+
+  it("names an obvious neighbour on a prefix miss", () => {
+    const note = nearestDomainNote("project:acme-old", known);
+    expect(note).toContain("project:acme");
+  });
+
+  it("refuses to guess when nothing is close", () => {
+    const note = nearestDomainNote("totally-unrelated", known);
+    expect(note).toMatch(/No store is named "totally-unrelated"/);
+    expect(note).toContain("memory_stats");
+  });
+
+  it("says nothing useful for an empty domain", () => {
+    expect(nearestDomainNote("   ", known)).toBe("");
   });
 });

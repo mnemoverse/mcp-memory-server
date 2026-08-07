@@ -22,6 +22,67 @@
  * stdio transport, matching render.ts and teaching.ts.
  */
 
+/**
+ * "Nothing new since your watermark" is also what you get for a watermark in
+ * the FUTURE — a mixed-up timezone or a bad relative-date calculation reads
+ * exactly like a clean bill of health (dogfood, 2026-08-07). If the caller's
+ * `since` is ahead of now, say so and show the current time; that is the whole
+ * diagnosis, and the caller cannot reach it from "nothing new".
+ *
+ * `nowMs` is injected so the note is testable without freezing the clock.
+ */
+export function futureSinceNote(since: string | undefined, nowMs: number): string {
+  if (!since) return "";
+  const t = Date.parse(since);
+  if (Number.isNaN(t) || t <= nowMs) return "";
+  return (
+    `\n\nNote: that timestamp is in the FUTURE — nothing can exist after it. ` +
+    `Now is ${new Date(nowMs).toISOString().slice(0, 16)}Z. ` +
+    `Check the watermark you passed (a timezone slip is the usual cause).`
+  );
+}
+
+/**
+ * A scoped read that finds nothing looks identical whether the domain is empty
+ * or MISSPELLED — and a casing slip silently creates a second, permanent shard
+ * of what the writer believes is one bucket (dogfood, 2026-08-07). When we can
+ * name a domain that differs only in case, or one that is obviously the
+ * intended neighbour, saying so is the difference between a dead end and a fix.
+ *
+ * Deliberately conservative: only an exact case-insensitive match or a clear
+ * prefix relationship counts. A fuzzy guess that names the wrong domain would
+ * be worse than silence, because the reader would trust it.
+ */
+export function nearestDomainNote(
+  domain: string,
+  knownDomains: readonly string[],
+): string {
+  const wanted = domain.trim();
+  if (!wanted) return "";
+  const lower = wanted.toLowerCase();
+
+  const caseTwin = knownDomains.find(
+    (d) => d !== wanted && d.toLowerCase() === lower,
+  );
+  if (caseTwin) {
+    return (
+      `\n\nDomain names are matched exactly, including case: "${wanted}" is not ` +
+      `the same store as "${caseTwin}", which does exist. Did you mean that one?`
+    );
+  }
+
+  const neighbour = knownDomains.find(
+    (d) =>
+      d !== wanted &&
+      (d.toLowerCase().startsWith(lower) || lower.startsWith(d.toLowerCase())),
+  );
+  if (neighbour) {
+    return `\n\nNo store is named exactly "${wanted}". The closest existing one is "${neighbour}".`;
+  }
+
+  return `\n\nNo store is named "${wanted}" — check the name with memory_stats.`;
+}
+
 /** The subset of a room record this note needs. */
 export interface RoomSummary {
   room_id?: string;
