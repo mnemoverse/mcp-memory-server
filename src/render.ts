@@ -99,20 +99,38 @@ export function formatDateTag(createdAt?: string): string {
 
 /**
  * One memory_read result line:
- * `N. [82%] content (concepts) [by X] · 2026-08-01 21:04Z\n   id: <uuid>`
+ * `N. content (concepts) @domain [by X] · 2026-08-01 21:04Z\n   id: <uuid>`
  *
  * The id sits on its own indented line: full-width (feedback/delete need
  * the EXACT id, truncation would break them) without crowding the content
  * line a model actually reads.
+ *
+ * NO SCORE, as of 0.8.1 (Eduard's call). The line used to lead with the
+ * server's `relevance` rendered as a percentage, and that was wrong twice
+ * over:
+ *
+ *   - It read as confidence and wasn't. There is no relevance floor, so a
+ *     query about something never stored still returned the nearest
+ *     neighbours — dogfooding got a real person's profile at "73%" for a
+ *     question about someone fictional, and month-old notes at "73%" for
+ *     "what's new". A number that never bottoms out cannot say "I don't
+ *     know", but a reader takes it as though it can.
+ *   - It wasn't a percentage of anything. Positive feedback pushes the score
+ *     above 1.0, so reads showed "112%".
+ *
+ * Rank order still carries the ranking, which is the part that is true. A
+ * genuinely dependable signal is worth surfacing and is on the 0.9 list —
+ * this is a deliberate removal until there is one, not a decision that
+ * scores are useless. `relevance` stays on the type because the server sends
+ * it; we simply do not put it in front of a reader yet.
  */
 export function formatReadItem(item: ReadItem, index: number): string {
-  const relevance = ((item?.relevance ?? 0) * 100).toFixed(0);
   const content = item?.content ?? "(empty)";
   const concepts =
     Array.isArray(item?.concepts) && item.concepts.length > 0
       ? ` (${item.concepts.join(", ")})`
       : "";
-  const head = `${index + 1}. [${relevance}%] ${content}${concepts}${formatDomainTag(
+  const head = `${index + 1}. ${content}${concepts}${formatDomainTag(
     item?.domain,
   )}${formatAuthorTag(item?.provenance)}${formatDateTag(item?.created_at)}`;
   return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
