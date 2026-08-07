@@ -13,6 +13,7 @@ import {
   type RecentItem,
 } from "./render.js";
 import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
+import { unsearchedRoomsNote } from "./scope.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -196,11 +197,21 @@ server.registerTool(
         ],
       };
     }
+    // NOT STORED. The old wording ("Filtered — …") named the mechanism but
+    // never the outcome, so a caller could read it as a soft success and move
+    // on. In dogfooding this ate a CORRECTION to a wrong fact: the stale
+    // version stayed as the only record, and looked more authoritative for
+    // having no competitor (2026-08-07). Say plainly that nothing was saved,
+    // and what to do about it.
     return {
       content: [
         {
           type: "text" as const,
-          text: `Filtered — ${r?.reason ?? "unknown reason"} (importance: ${importance})`,
+          text:
+            `NOT STORED — the importance gate rejected it (${r?.reason ?? "no reason given"}; ` +
+            `importance ${importance}). Nothing was saved. If this matters, rewrite it as a ` +
+            `self-contained factual statement ("X is Y", "we decided Z because…") rather than ` +
+            `a remark or a meta-comment, and write it again.`,
         },
       ],
     };
@@ -233,7 +244,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Restrict the search to one domain namespace (e.g. 'project:acme'); omit to search across all domains.",
+          "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms.",
         ),
       order_by: z
         .enum(["relevance", "recency"])
@@ -301,11 +312,19 @@ server.registerTool(
       // A bounded/filtered read that finds nothing is NOT a bad query —
       // the truthful answer is "nothing new for these filters" (mirrors
       // memory_list_recent's empty copy; no stats probe, no broaden hint).
+      // Unscoped, it also has to name the rooms it never looked in.
+      const scopeNote = domain
+        ? ""
+        : await unsearchedRoomsNote(
+            () => apiFetch<unknown>("/memory/rooms"),
+            safeInline,
+          );
       return {
         content: [
           {
             type: "text" as const,
-            text: "Nothing matching within the given time/author filters.",
+            text:
+              "Nothing matching within the given time/author filters." + scopeNote,
           },
         ],
       };
@@ -318,14 +337,23 @@ server.registerTool(
       // failure falls open to the plain no-match message. Domain-scoped reads
       // never greet and never probe — the stats call measures the PERSONAL
       // store, not the scoped domain. See src/teaching.ts.
+      const scoped = domain != null && domain.trim() !== "";
       const text = await buildReadEmptyResponse(
         () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
         // trim(): a whitespace-only domain is not a real filter — treating it
         // as scoped would silently suppress the first-contact greeting.
-        domain != null && domain.trim() !== "",
+        scoped,
       );
+      // Same rule as the feed: an unscoped miss must name the rooms it never
+      // searched, or "no memories found" reads as a fact about everything.
+      const scopeNote = scoped
+        ? ""
+        : await unsearchedRoomsNote(
+            () => apiFetch<unknown>("/memory/rooms"),
+            safeInline,
+          );
       return {
-        content: [{ type: "text" as const, text }],
+        content: [{ type: "text" as const, text: text + scopeNote }],
       };
     }
 
@@ -357,13 +385,13 @@ server.registerTool(
   "memory_list_recent",
   {
     description:
-      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction — nothing is skipped, unlike a search that only returns semantic matches.",
+      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
     inputSchema: {
       domain: z
         .string()
         .optional()
         .describe(
-          "Restrict to one domain (e.g. a shared room address 'xroom:...'); omit for all your domains.",
+          "Restrict to one domain. REQUIRED to read a shared room — pass its address ('xroom:room_01ABC'), because rooms are separate stores that an unscoped feed does NOT cover. Omit only when you mean your own domains. Room addresses come from memory_list_rooms.",
         ),
       since: z
         .string()
@@ -449,13 +477,23 @@ server.registerTool(
 
     const items = Array.isArray(r?.items) ? r.items : [];
     if (items.length === 0) {
+      // An empty UNSCOPED feed must say where it looked. Rooms are separate
+      // stores and are never covered here, so a bare "nothing new" is a false
+      // claim about the world (incident 2026-08-07 — see src/scope.ts).
+      const scopeNote = domain
+        ? ""
+        : await unsearchedRoomsNote(
+            () => apiFetch<unknown>("/memory/rooms"),
+            safeInline,
+          );
       return {
         content: [
           {
             type: "text" as const,
-            text: since
-              ? "Nothing new since your watermark."
-              : "No memories here yet.",
+            text:
+              (since
+                ? "Nothing new since your watermark."
+                : "No memories here yet.") + scopeNote,
           },
         ],
       };
@@ -516,11 +554,36 @@ server.registerTool(
 
     const count = r?.updated_count ?? 0;
 
+    // "Feedback recorded for 0 memories." is one character away from the
+    // success line and reads like one. Zero here almost always means the ids
+    // were stale or came from somewhere other than a read result — say that,
+    // because it is the actionable part (dogfood, 2026-08-07).
+    if (count === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              "No feedback was recorded — none of those ids matched a memory. " +
+              "Ids come from a memory_read result (the `id:` line under each hit) " +
+              "and stop matching once a memory is deleted.",
+          },
+        ],
+      };
+    }
+
+    // Echo the DIRECTION, not just the count: the same four words for +1 and
+    // -1 gave a caller no evidence the loop did anything, which is why nobody
+    // calls it twice.
+    const direction =
+      outcome > 0 ? "helpful" : outcome < 0 ? "unhelpful" : "neutral";
     return {
       content: [
         {
           type: "text" as const,
-          text: `Feedback recorded for ${count} memor${count === 1 ? "y" : "ies"}.`,
+          text:
+            `Recorded ${outcome > 0 ? "+" : ""}${outcome} (${direction}) for ` +
+            `${count} memor${count === 1 ? "y" : "ies"} — this shifts how they rank next time.`,
         },
       ],
     };
@@ -554,16 +617,25 @@ server.registerTool(
       avg_importance?: number;
     }>("/memory/stats");
 
+    // A field the server did not send is UNKNOWN, not zero. Rendering it as
+    // "0" is the same class of lie as an empty search claiming emptiness:
+    // "Associations: 0" reads as "this memory has learned nothing", which is
+    // a strong and possibly false statement about the product itself.
+    const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
+    const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
+
     const domains =
       Array.isArray(r?.domains) && r.domains.length > 0
         ? r.domains.join(", ")
-        : "general";
+        : "none reported";
 
     const text = [
-      `Memories: ${r?.total_atoms ?? 0} (${r?.episodes ?? 0} episodes, ${r?.prototypes ?? 0} prototypes)`,
-      `Associations: ${r?.hebbian_edges ?? 0} Hebbian edges`,
+      `Memories: ${num(r?.total_atoms)} (${num(r?.episodes)} episodes, ${num(r?.prototypes)} prototypes)`,
+      `Associations: ${num(r?.hebbian_edges)} Hebbian edges — links the store learned between memories that get used together`,
       `Domains: ${domains}`,
-      `Avg quality: valence ${(r?.avg_valence ?? 0).toFixed(2)}, importance ${(r?.avg_importance ?? 0).toFixed(2)}`,
+      `Avg quality: valence ${dec(r?.avg_valence)} (how well recalls turned out, -1..1), importance ${dec(r?.avg_importance)} (0..1)`,
+      "",
+      "Counts cover your own domains. Shared rooms are separate stores and are not included — see memory_list_rooms.",
     ].join("\n");
 
     return { content: [{ type: "text" as const, text }] };

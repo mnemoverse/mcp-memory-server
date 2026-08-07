@@ -127,7 +127,7 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   // Review finding: the stats probe measures the PERSONAL store, so a
   // domain-scoped read (e.g. a shared room) must never claim "the store is
   // empty" about a domain that has memories the query merely missed.
-  it("NEVER greets a domain-scoped read — no probe, scoped copy with the drop-filter hint", async () => {
+  it("NEVER greets a domain-scoped read, and never tells the reader to drop the scope", async () => {
     let calls = 0;
     const text = await buildReadEmptyResponse(async () => {
       calls++;
@@ -135,7 +135,16 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     }, true);
     expect(calls).toBe(0); // scoped reads skip the probe entirely
     expect(text).toBe(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT);
-    expect(text).toMatch(/drop the domain filter/i); // honest: a filter EXISTS
+    // This assertion used to REQUIRE "drop the domain filter", on the
+    // reasoning that a filter genuinely exists so suggesting its removal is
+    // honest. Dogfooding proved that harmful: when the domain is a ROOM,
+    // dropping it is the one move that guarantees the content stays hidden,
+    // because an unscoped read does not cover rooms at all. It is the exact
+    // step that cost two agents a working day (2026-08-07). The hint now
+    // suggests a wider query or a different domain — both can actually find
+    // something — and the test guards against the old advice returning.
+    expect(text).not.toMatch(/drop the domain filter/i);
+    expect(text).toMatch(/different domain/i);
     expect(text).not.toContain(EMPTY_STORE_WELCOME);
   });
 

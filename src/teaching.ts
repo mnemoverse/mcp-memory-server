@@ -21,7 +21,7 @@
  * - Mentions every tool family: read/write/stats/feedback, delete, rooms, vault.
  */
 export const SERVER_INSTRUCTIONS =
-  "You own this long-term memory. It persists across sessions and every AI tool this user connects (Claude, ChatGPT, editors). Use it as a habit: call memory_read before answering anything that may have come up before, and memory_write the moment you learn a durable fact, preference, or decision — don't wait to be asked. Rate recalls with memory_feedback so good ones surface faster; memory_stats shows counts; memory_list_recent: newest first; prune with memory_delete; memory_delete_domain wipes a domain, only with user go-ahead. Rooms (memory_create_room, memory_invite_to_room, memory_join_room, memory_list_rooms) share memory with others; vault_list names stored secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
+  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain (memory_list_rooms); unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first; memory_delete prunes; memory_delete_domain wipes a domain, only with user go-ahead. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";
@@ -34,7 +34,17 @@ export const NO_MATCH_HINT = " Try a broader query.";
 /** Hint for a DOMAIN-SCOPED no-match: here a filter genuinely exists, so
  *  suggesting to drop it is honest and actionable. */
 export const NO_MATCH_SCOPED_HINT =
-  " Try a broader query, or drop the domain filter to search all domains.";
+  " Try a broader query, or a different domain.";
+
+/**
+ * The scoped hint used to end "…or drop the domain filter to search all
+ * domains." That advice is actively HARMFUL when the domain is a room: an
+ * unscoped read does not cover rooms at all, so dropping the filter is the one
+ * move guaranteed to lose the content the reader is looking for. It is exactly
+ * the step that cost two agents a day on 2026-08-07. The replacement suggests
+ * widening the query or trying another domain — both of which can actually
+ * find something — and never suggests removing the scope.
+ */
 
 /**
  * First-contact greeting: shown ONLY when a read comes back empty AND the
