@@ -56,18 +56,25 @@ export function futureSinceNote(since: string | undefined, nowMs: number): strin
 export function nearestDomainNote(
   domain: string,
   knownDomains: readonly string[],
+  sanitize: (s: string | undefined | null) => string,
 ): string {
   const wanted = domain.trim();
   if (!wanted) return "";
   const lower = wanted.toLowerCase();
+
+  // Match on the RAW values, render only sanitized ones. A domain name is
+  // caller-chosen and, for the neighbour, comes back from storage — both can
+  // carry newlines or instruction-shaped text, and this note lands in a
+  // model's context. Same treatment room names already get (CodeRabbit, #65).
+  const safeWanted = sanitize(wanted);
 
   const caseTwin = knownDomains.find(
     (d) => d !== wanted && d.toLowerCase() === lower,
   );
   if (caseTwin) {
     return (
-      `\n\nDomain names are matched exactly, including case: "${wanted}" is not ` +
-      `the same store as "${caseTwin}", which does exist. Did you mean that one?`
+      `\n\nDomain names are matched exactly, including case: "${safeWanted}" is not ` +
+      `the same store as "${sanitize(caseTwin)}", which does exist. Did you mean that one?`
     );
   }
 
@@ -77,10 +84,10 @@ export function nearestDomainNote(
       (d.toLowerCase().startsWith(lower) || lower.startsWith(d.toLowerCase())),
   );
   if (neighbour) {
-    return `\n\nNo store is named exactly "${wanted}". The closest existing one is "${neighbour}".`;
+    return `\n\nNo store is named exactly "${safeWanted}". The closest existing one is "${sanitize(neighbour)}".`;
   }
 
-  return `\n\nNo store is named "${wanted}" — check the name with memory_stats.`;
+  return `\n\nNo store is named "${safeWanted}" — check the name with memory_stats.`;
 }
 
 /** The subset of a room record this note needs. */

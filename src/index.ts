@@ -20,17 +20,39 @@ import {
 } from "./scope.js";
 
 /**
- * On an empty SCOPED result, ask stats for the domain list and say whether the
- * name is a casing slip or a near-miss. One extra call, only on the zero-result
- * path — the same shape as the existing first-contact probe. Never throws: a
- * failed probe just means no extra help, which is the status quo.
+ * On an empty SCOPED result, say whether the domain name is a casing slip or a
+ * near-miss. One extra call, only on the zero-result path — the same shape as
+ * the existing first-contact probe. Never throws: a failed probe just means no
+ * extra help, which is the status quo.
+ *
+ * ROOMS ARE EXCLUDED FROM THE STATS PROBE, and that exclusion is the whole
+ * reason this release exists. `memory_stats` reports personal domains only —
+ * not one of the account's twelve live rooms appears in its domain list. So
+ * probing it for an `xroom:` address would confidently answer "No store is
+ * named xroom:room_01ABC" about a room that exists and that the caller is a
+ * member of: the exact false-absence claim being fixed, reintroduced by the
+ * fix (CodeRabbit, #65). Room addresses are checked against the ROOM list
+ * instead, where they actually live.
  */
 async function domainMissNote(domain: string): Promise<string> {
   try {
+    if (domain.startsWith("xroom:")) {
+      const rooms = await apiFetch<Array<{ address?: string; room_id?: string }>>(
+        "/memory/rooms",
+      );
+      const list = Array.isArray(rooms) ? rooms : [];
+      const known = list.some(
+        (r) => r?.address === domain || `xroom:${r?.room_id}` === domain,
+      );
+      // Known room, genuinely empty for this query — nothing to add.
+      return known
+        ? ""
+        : `\n\nThat room is not in your list — either the address is wrong or you are not a member. memory_list_rooms shows the ones you can read.`;
+    }
     const s = await apiFetch<{ domains?: string[] }>("/memory/stats");
     const known = Array.isArray(s?.domains) ? s.domains : [];
     if (known.includes(domain)) return "";
-    return nearestDomainNote(domain, known);
+    return nearestDomainNote(domain, known, safeInline);
   } catch {
     return "";
   }
@@ -191,7 +213,12 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ content, concepts, domain }) => {
+  async ({ content, concepts, domain: rawDomain }) => {
+    // Trim before writing: domain names are matched byte-for-byte, so
+    // " engineering" would create a permanent second store next to
+    // "engineering" with no cross-visibility. Dogfooding hit the casing
+    // version of this; whitespace is the same trap with an invisible cause.
+    const domain = rawDomain?.trim() || "general";
     const r = await apiFetch<{
       stored?: boolean;
       atom_id?: string | null;
@@ -202,7 +229,7 @@ server.registerTool(
       body: JSON.stringify({
         content,
         concepts: concepts || [],
-        domain: domain || "general",
+        domain,
       }),
     });
 
@@ -312,7 +339,13 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
+  async ({ query, top_k, domain: rawDomain, order_by, since, until, exclude_author }) => {
+    // Normalise ONCE, at the edge. A whitespace-only domain is not a filter:
+    // it used to be sent to the server verbatim and simultaneously counted as
+    // "scoped" here but "unscoped" three branches down, so the same call could
+    // both miss everything and suppress the unsearched-rooms note (CodeRabbit,
+    // #65). Everything below uses the normalised value.
+    const domain = rawDomain?.trim() || undefined;
     const r = await apiFetch<{
       items?: ReadItem[];
       search_time_ms?: number;
@@ -321,7 +354,7 @@ server.registerTool(
       body: JSON.stringify({
         query,
         top_k: top_k || 5,
-        domain: domain || undefined,
+        domain,
         include_associations: true,
         // #404 temporal dimension — omitted entirely when unused so the
         // request body stays byte-identical for existing callers.
@@ -365,17 +398,16 @@ server.registerTool(
       // failure falls open to the plain no-match message. Domain-scoped reads
       // never greet and never probe — the stats call measures the PERSONAL
       // store, not the scoped domain. See src/teaching.ts.
-      const scoped = domain != null && domain.trim() !== "";
+      // `domain` is already normalised at the top of the handler, so a
+      // whitespace-only value counts as unscoped here and everywhere else.
       const text = await buildReadEmptyResponse(
         () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-        // trim(): a whitespace-only domain is not a real filter — treating it
-        // as scoped would silently suppress the first-contact greeting.
-        scoped,
+        domain !== undefined,
       );
       // Same rule as the feed: an unscoped miss must name the rooms it never
       // searched, or "no memories found" reads as a fact about everything.
-      const scopeNote = scoped
-        ? await domainMissNote(domain!.trim())
+      const scopeNote = domain
+        ? await domainMissNote(domain)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -463,7 +495,9 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ domain, since, until, exclude_author, limit, cursor }) => {
+  async ({ domain: rawDomain, since, until, exclude_author, limit, cursor }) => {
+    // Same normalisation as memory_read — one rule for "is this scoped?".
+    const domain = rawDomain?.trim() || undefined;
     let r: { items?: RecentItem[]; next_cursor?: string | null };
     try {
       r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
@@ -471,7 +505,7 @@ server.registerTool(
         {
           method: "POST",
           body: JSON.stringify({
-            domain: domain || undefined,
+            domain,
             since: since || undefined,
             until: until || undefined,
             exclude_author: exclude_author || undefined,

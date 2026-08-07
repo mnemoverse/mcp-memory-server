@@ -157,8 +157,21 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   // before computing the scoped flag, so the greeting still fires. This pins
   // the caller-side contract as source text (the handler is not bootable in
   // tests — importing src/index.ts starts the stdio transport).
-  it("caller treats a whitespace-only domain as UNSCOPED (trim before the scoped flag)", () => {
-    expect(indexSource).toContain('domain != null && domain.trim() !== ""');
+  it("every scope-taking handler normalises the domain at the edge", () => {
+    // A whitespace-only domain is not a filter. This used to be enforced by a
+    // trim at ONE decision point, which is how the same call could be "scoped"
+    // for the greeting and "unscoped" three branches down while sending "   "
+    // to the server (CodeRabbit, #65). The rule now lives at the edge of each
+    // handler, so there is one normalised value and no second opinion.
+    const normalisations = indexSource.match(
+      /const domain = rawDomain\?\.trim\(\) \|\| (undefined|"general")/g,
+    );
+    // memory_read, memory_list_recent, memory_write.
+    expect(normalisations).toHaveLength(3);
+
+    // And nothing downstream re-derives its own answer from the raw value.
+    expect(indexSource).not.toContain("domain != null && domain.trim()");
+    expect(indexSource).not.toContain("domain: domain || undefined");
   });
 });
 
