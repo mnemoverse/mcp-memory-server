@@ -30,13 +30,15 @@
  *    API either.
  *
  * 2. An UNSTUBBED request fails the test — it does not quietly take the
- *    fall-open path. Several handlers swallow probe failures on purpose
- *    (`domainMissNote`, `unsearchedRoomsNote`), which means a forgotten stub
- *    would silently move the assertion onto the "we could not check" branch
- *    while still reading like the "there is none" branch. That is the precise
- *    confusion this release exists to end, so `callText` refuses to return a
- *    string if any request went unrouted during the call. To test a failed probe
- *    on purpose, stub it with `httpError()` or `networkDown()`.
+ *    fall-open path. The scope probes (`probeReadScope` / `probeRoomScope` in
+ *    src/scope.ts) swallow a probe failure on purpose and turn it into an
+ *    `unknown` state, so a forgotten stub would silently move the assertion onto
+ *    the "we could not check" answer. While that answer was byte-identical to
+ *    "there is none" the substitution was invisible; now that the two differ it
+ *    would merely be a test asserting a branch it did not mean to, which is no
+ *    better. `callText` therefore refuses to return a string if any request went
+ *    unrouted during the call. To test a failed probe on purpose, stub it with
+ *    `httpError()` or `networkDown()`.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";

@@ -19,11 +19,32 @@ import {
   SERVER_INSTRUCTIONS,
   EMPTY_STORE_WELCOME,
   EMPTY_PERSONAL_STORE_WITH_ROOMS,
+  EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED,
   NO_MATCH_MESSAGE,
   NO_MATCH_HINT,
   NO_MATCH_SCOPED_HINT,
   buildReadEmptyResponse,
 } from "../src/teaching.js";
+import { classifyRooms, type ReadScope, type RoomScope } from "../src/scope.js";
+import { safeInline } from "../src/render.js";
+
+/**
+ * Scope fixtures. `buildReadEmptyResponse` now takes the KNOWLEDGE rather than
+ * two booleans, so every call has to say where it looked — which is the point:
+ * the pair it replaced could describe a scope nobody searched, and did.
+ */
+const ROOM = { room_id: "room_01ABC", name: "me-and-olya", address: "xroom:room_01ABC" };
+const ARCHIVED = { ...ROOM, room_id: "room_01OLD", name: "last-quarter", archived: true };
+
+const own = (rooms: RoomScope): ReadScope => ({ kind: "own-domains", rooms });
+const NO_ROOMS = own({ state: "none" });
+const LIVE_ROOMS = own(classifyRooms([ROOM], safeInline));
+const ARCHIVED_ROOMS = own(classifyRooms([ARCHIVED], safeInline));
+const ROOMS_UNKNOWN = own(classifyRooms({ nope: true }, safeInline));
+const NAMED_PRESENT: ReadScope = {
+  kind: "named",
+  named: { state: "present", name: "engineering" },
+};
 
 const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
@@ -81,7 +102,7 @@ describe("server instructions", () => {
 
 describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   it("greets on a truly empty store (total_atoms === 0, no rooms)", async () => {
-    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 0 }));
+    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 0 }), NO_ROOMS);
     expect(text).toBe(EMPTY_STORE_WELCOME);
     expect(text).toContain("memory_write");
     expect(text).toContain('"User prefers TypeScript strict mode"');
@@ -94,36 +115,80 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     // nothing": three false clauses, and the scope note appended underneath
     // contradicted them in the same payload. That reader is precisely the
     // person from the incident this release is about.
-    const text = await buildReadEmptyResponse(
-      async () => ({ total_atoms: 0 }),
-      false,
-      true, // rooms exist
-    );
-    expect(text).toBe(EMPTY_PERSONAL_STORE_WITH_ROOMS);
+    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 0 }), LIVE_ROOMS);
+    expect(text.startsWith(EMPTY_PERSONAL_STORE_WITH_ROOMS)).toBe(true);
     expect(text).not.toContain(EMPTY_STORE_WELCOME);
     expect(text).not.toMatch(/nothing has been saved yet/);
     // Says what it actually knows, and points onward rather than concluding.
     expect(text).toMatch(/your own domains/i);
     expect(text).toMatch(/not the whole picture/i);
+    // The colon is a promise, and the disclosure that keeps it now comes out of
+    // the same value as the head. It used to come from a separate computation
+    // over a different set of rooms.
+    expect(text).toContain("1 room went unsearched");
+    expect(text.trimEnd().endsWith(":")).toBe(false);
+  });
+
+  it("does not greet, and does not go silent, when the room probe failed", async () => {
+    // The state that had no arm of its own: rooms were "found" whenever the note
+    // was non-empty, and the failure branch returns a non-empty note — so this
+    // fell to the OTHER side and a genuinely-unknown account could be told
+    // "nothing has been saved yet" in the same answer that admits the room list
+    // could not be read.
+    const text = await buildReadEmptyResponse(
+      async () => ({ total_atoms: 0 }),
+      ROOMS_UNKNOWN,
+    );
+    expect(text.startsWith(EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED)).toBe(true);
+    expect(text).not.toContain(EMPTY_STORE_WELCOME);
+    expect(text).not.toMatch(/nothing has been saved yet/);
+    expect(text).toMatch(/could not be checked/);
+    expect(text).toMatch(/shape this client does not recognise/);
+    expect(text.trimEnd().endsWith(":")).toBe(false);
+  });
+
+  it("does not claim the memory is empty when the only room is archived", async () => {
+    const text = await buildReadEmptyResponse(
+      async () => ({ total_atoms: 0 }),
+      ARCHIVED_ROOMS,
+    );
+    expect(text.startsWith(EMPTY_PERSONAL_STORE_WITH_ROOMS)).toBe(true);
+    expect(text).not.toMatch(/nothing has been saved yet/);
+    expect(text).toContain("1 shared room");
+    expect(text).toMatch(/archived/i);
+    expect(text.trimEnd().endsWith(":")).toBe(false);
   });
 
   it("returns no-match + broaden hint when the store has memories", async () => {
-    const text = await buildReadEmptyResponse(async () => ({
-      total_atoms: 42,
-    }));
+    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 42 }), NO_ROOMS);
     expect(text).toBe(NO_MATCH_MESSAGE + NO_MATCH_HINT);
     expect(text).not.toContain(EMPTY_STORE_WELCOME);
+  });
+
+  it("keeps the disclosure on every unscoped answer, whatever stats said", async () => {
+    // A stats failure is not a reason to drop what we know about the rooms —
+    // that concatenation used to live at the call site and could be forgotten.
+    for (const stats of [
+      async () => ({ total_atoms: 42 }),
+      async () => ({}),
+      async () => {
+        throw new Error("core unreachable");
+      },
+    ]) {
+      const text = await buildReadEmptyResponse(stats, LIVE_ROOMS);
+      expect(text).toContain("1 room went unsearched");
+    }
   });
 
   it("fails open to the plain old message when stats throws", async () => {
     const text = await buildReadEmptyResponse(async () => {
       throw new Error("core unreachable");
-    });
+    }, NO_ROOMS);
     expect(text).toBe(NO_MATCH_MESSAGE);
   });
 
   it("fails open to the plain old message on a malformed stats response", async () => {
-    const text = await buildReadEmptyResponse(async () => ({}));
+    const text = await buildReadEmptyResponse(async () => ({}), NO_ROOMS);
     expect(text).toBe(NO_MATCH_MESSAGE);
   });
 
@@ -132,8 +197,48 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     await buildReadEmptyResponse(async () => {
       calls++;
       return { total_atoms: 0 };
-    });
+    }, NO_ROOMS);
     expect(calls).toBe(1);
+  });
+
+  it("no answer ever ends on a dangling colon, for any combination of states", async () => {
+    // The colon-carrying heads are a promise that something follows. Only the
+    // room states that carry a `note` may use them, and that is a type-level
+    // property now — this asserts it over the whole matrix anyway, because the
+    // failure it guards against shipped.
+    const scopes: ReadScope[] = [
+      NO_ROOMS,
+      LIVE_ROOMS,
+      ARCHIVED_ROOMS,
+      ROOMS_UNKNOWN,
+      own(classifyRooms([ROOM, ARCHIVED], safeInline)),
+      NAMED_PRESENT,
+      { kind: "named", named: { state: "no-such-room", name: "xroom:room_X", note: "\n\nno" } },
+      {
+        kind: "named",
+        named: {
+          state: "unchecked",
+          name: "engineering",
+          probed: "domains",
+          reason: "fetch-failed",
+          note: "\n\nunknown",
+        },
+      },
+    ];
+    for (const scope of scopes) {
+      for (const stats of [
+        async () => ({ total_atoms: 0 }),
+        async () => ({ total_atoms: 9 }),
+        async () => ({}),
+        async () => {
+          throw new Error("down");
+        },
+      ]) {
+        const text = await buildReadEmptyResponse(stats, scope);
+        expect(text.trim().length, JSON.stringify(scope)).toBeGreaterThan(0);
+        expect(text.trimEnd().endsWith(":"), text).toBe(false);
+      }
+    }
   });
 
   // Review finding: the stats probe measures the PERSONAL store, so a
@@ -144,7 +249,7 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     const text = await buildReadEmptyResponse(async () => {
       calls++;
       return { total_atoms: 0 };
-    }, true);
+    }, NAMED_PRESENT);
     expect(calls).toBe(0); // scoped reads skip the probe entirely
     expect(text).toBe(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT);
     // This assertion used to REQUIRE "drop the domain filter", on the
@@ -161,8 +266,34 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   });
 
   it("the unscoped broaden hint does NOT advise dropping a filter that was never set", async () => {
-    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 7 }));
+    const text = await buildReadEmptyResponse(async () => ({ total_atoms: 7 }), NO_ROOMS);
     expect(text).not.toMatch(/drop the domain filter/i);
+  });
+
+  it("an unchecked scope keeps the advice AND admits it could not look", async () => {
+    // "Unchecked" is not a diagnosis, so it does not replace the generic hint the
+    // way "no such store" does — it is added to it. Spelling it the same as
+    // "present" (an empty string) is the defect this stage closes.
+    let calls = 0;
+    const text = await buildReadEmptyResponse(
+      async () => {
+        calls++;
+        return { total_atoms: 0 };
+      },
+      {
+        kind: "named",
+        named: {
+          state: "unchecked",
+          name: "engineering",
+          probed: "domains",
+          reason: "unrecognised-shape",
+          note: "\n\nWhether a store with that exact name exists could not be checked.",
+        },
+      },
+    );
+    expect(calls).toBe(0);
+    expect(text.startsWith(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT)).toBe(true);
+    expect(text).toMatch(/could not be checked/);
   });
 
   // Retired from here: `every empty-result branch is WIRED to the scope note`,

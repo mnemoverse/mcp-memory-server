@@ -108,10 +108,11 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite also grew from 60 tests to 213 (the number in this paragraph was
+The suite also grew from 60 tests to 241 (the number in this paragraph was
 written as 116 while the count was 119, then the naming fix added 70 more, then
-the harness below replaced 17 and added 41 — a countable claim nobody was
-counting), and the ones that mattered most were replaced rather than added to.
+the harness below replaced 17 and added 41, then the knowledge fix added 28 — a
+countable claim nobody was counting), and the ones that mattered most were
+replaced rather than added to.
 The wire contract is now pinned by calling the real body builders
 (`src/requests.ts`) and comparing against 0.8.0's bodies for every domain shape —
 whitespace, non-breaking and zero-width spaces, padded room addresses. The guard
@@ -144,9 +145,9 @@ not check" branch while it still read like the "there is none" branch, which is
 the confusion this whole release is about.
 
 The two test files that read `src/index.ts` as text carried 41 tests between them;
-they now carry 24, and `test/tool-wiring.test.ts` no longer reads the source at
+they now carry 29, and `test/tool-wiring.test.ts` no longer reads the source at
 all — its parameter list comes from `tools/list`, as a model sees it, and its
-values come out of the request the handler actually sent. 41 new behavioural tests
+values come out of the request the handler actually sent. 53 behavioural tests
 live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
 assertion is labelled in place with the reason no call can establish it (chiefly
 the "never" rules: no handler sends a name the reader must reproduce through the
@@ -212,9 +213,13 @@ test, and replacing it with the entry-point idiom each fail it.
   promised recovery "until it is unarchived" when core has archive with no
   inverse); and the `NOT STORED` prediction that "rewording will score the same
   or lower", which is probably backwards, since novelty falls as similarity
-  rises. Of the three, the FIRST was later done properly rather than left
-  withdrawn — see "a name is printed exactly, or not at all" below. The other
-  two stand withdrawn.
+  rises. Of the three, the first TWO were later done properly rather than left
+  withdrawn — see "a name is printed exactly, or not at all" and "unknown is not
+  the same as none" below. Only the third stands withdrawn. The archived-rooms
+  claim came back in a different place: not as a count beside a list of readable
+  rooms (both objections above still hold there), but as its own sentence for the
+  state where EVERY room is archived — where staying silent is not available,
+  because it either dangles a colon or lets the answer claim the memory is empty.
 - **`NOT STORED` no longer states a cause it cannot see.** A live surface answers
   `{"stored":false}` with no reason and no score; the mechanism is now named only
   when the server named it.
@@ -272,7 +277,11 @@ about exactly this failure mode and the fix committed it thirteen times.
 - **Archived rooms were hidden from the scope note.** They still hold content
   and reads of them are refused, so an agent hunting a lost memory saw "nothing
   found" plus "2 rooms unsearched", both empty, and concluded it did not exist.
-  They are now counted with an explicit "cannot be read at all".
+  The counting clause written for this was withdrawn (see above) and the earlier
+  drafts of this bullet claimed it had shipped. What shipped instead is narrower
+  and lands where the defect actually bites: when EVERY room is archived, the
+  answer says so and says what it means. In the mixed case the note still names
+  only the readable rooms. See "unknown is not the same as none" below.
 - **`memory_stats` hid whitespace in domain names.** Joining bare names made a
   leading space invisible — the exact defect that creates an unreachable store —
   so the check we point callers at could not reveal what it was for. Quoting was
@@ -334,6 +343,57 @@ Consequences worth stating plainly:
 - **Room names keep `safeInline`, deliberately.** They are a different
   principal's string shown to this one, and reversibility is not their
   requirement.
+
+### Fixed after review — unknown is not the same as none
+
+The release's own thesis, applied to the place it was still broken: every probe
+answered with a **string plus a boolean**, and a falsy string is how this client
+spelled both "there is nothing" and "we could not look". Six false claims came
+out of that one shape.
+
+- **A `/memory/rooms` body that was not an array became an empty room list.** So
+  a contract violation was reported to the reader as fact, three different ways:
+  `memory_list_rooms` answered "You have no shared rooms yet"; a scoped read
+  answered "That room is not in your list — either the address is wrong or you
+  are not a member", a membership claim on no evidence; and an unscoped read
+  dropped its scope caveat entirely, which is exactly the silence this release
+  exists to end.
+- **A 200 with no `domains` key became an empty domain list**, and then "No store
+  has that exact name", definitively. Core's response model always carries
+  `domains: list[str]`, so a missing key means the body is not core's — the one
+  thing it cannot mean is that the store is absent.
+- **A failed probe on a scoped read was spelled `""`** — byte-identical to "the
+  store is there and your query merely missed".
+- **The first-contact greeting was reachable on a FAILED room probe**, so one
+  answer could say "your long-term memory is empty, nothing has been saved yet"
+  and "the room list could not be fetched" in the same breath.
+- **A dangling colon, and this one shipped.** The flag that gated the "That is not
+  the whole picture:" line counted ALL rooms; the disclosure it promised was built
+  from the LIVE ones. An owner whose only room is archived therefore received the
+  colon and nothing after it — a promise of an explanation that had been filtered
+  out one function earlier.
+
+Fixed at the shape rather than at the sentences. A probe now returns a
+discriminated union whose arms **are** the states — live rooms / only archived
+rooms / no rooms / could not check — and the disclosure sentence is a FIELD on
+that value, computed once, from the same arm it belongs to. The arm with nothing
+to disclose has no `note` field at all, so pairing a colon-carrying head with a
+missing disclosure is a **type error** rather than a convention; the same applies
+to the scoped side, where "the store is there", "there is no store with that
+exact name" and "we could not look" are three arms instead of one empty string. A
+scoped read cannot carry room knowledge and an unscoped read cannot lack it,
+because they are one value with two shapes rather than two parameters. Adding a
+state without answering for it anywhere is a compile error.
+
+Two smaller things fell out of it. The "not in your list" sentence no longer
+offers only two causes: a room the caller merely JOINED disappears from core's
+list the moment its owner archives it, so for exactly the invited teammate this
+release is about, both stated causes were wrong. And a room record whose `name`
+is not a string no longer reaches `safeInline`, which is `(s ?? "").replace(…)`
+and would have thrown inside a renderer.
+
+Fire-tested: ten sabotages of the four changed files, each caught, and the two
+type-level guarantees checked by making the compiler reject them.
 
 ### Known and NOT fixed here
 

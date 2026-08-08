@@ -19,10 +19,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   httpError,
+  networkDown,
   startMemoryServer,
+  type Route,
   type Harness,
 } from "./harness.js";
 import {
+  EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED,
   EMPTY_PERSONAL_STORE_WITH_ROOMS,
   EMPTY_STORE_WELCOME,
   NO_MATCH_HINT,
@@ -48,6 +51,14 @@ const ROOM = {
   room_id: "room_01ABC",
   name: "me-and-olya",
   address: "xroom:room_01ABC",
+};
+
+/** An archived room — still in the list for its owner, readable by nobody. */
+const ARCHIVED_ROOM = {
+  room_id: "room_01OLD",
+  name: "last-quarter",
+  address: "xroom:room_01OLD",
+  archived: true,
 };
 
 /** Route keys, so a typo is a compile-adjacent mistake rather than a silent miss. */
@@ -265,6 +276,10 @@ describe("an empty answer describes the scope it searched", () => {
     expect(text).toContain("That room is not in your list");
     expect(text).toContain("memory_list_rooms shows the ones you can read.");
     expect(text).not.toContain("No store has that exact name");
+    // And the absence is not blamed on the address or the membership alone: a
+    // room the caller merely JOINED drops out of core's list the moment its owner
+    // archives it, so those two causes were not the only two.
+    expect(text).toMatch(/archived/i);
   });
 
   it("a room you ARE in, merely empty for this query, is not reported as missing", async () => {
@@ -302,19 +317,26 @@ describe("an empty answer describes the scope it searched", () => {
     expect(text).toBe(EMPTY_STORE_WELCOME);
   });
 
-  it("a FAILED room probe is not evidence that rooms exist, and is not silence either", async () => {
-    // Two half-fixes met here: deriving "rooms exist" from a non-empty note made
-    // a failed probe suppress the first-contact greeting, and dropping the note
-    // on failure would put the reader back to believing "nothing" covered
-    // everything. Both are branch behaviour; neither is visible in source text.
+  it("a FAILED room probe is neither evidence of rooms nor evidence of an empty memory", async () => {
+    // Three postures were tried here and the first two were both wrong. Deriving
+    // "rooms exist" from a non-empty note made a failed probe suppress the
+    // greeting; dropping the note on failure would put the reader back to
+    // believing "nothing" covered everything. The third posture — greet, and
+    // append the failure note — is what this replaces: it produced one answer
+    // saying "your long-term memory is empty, nothing has been saved yet" and
+    // "the room list could not be fetched" in the same breath. "Could not check"
+    // now has its own state and its own head sentence.
     mcp.on(READ, { items: [] }).on(ROOMS, httpError(503, "upstream down")).on(STATS, {
       total_atoms: 0,
     });
 
     const text = await mcp.callText("memory_read", { query: "anything" });
 
-    expect(text).toContain(EMPTY_STORE_WELCOME);
+    expect(text).toContain(EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED);
+    expect(text).not.toContain(EMPTY_STORE_WELCOME);
+    expect(text).not.toContain("nothing has been saved yet");
     expect(text).toContain("the room list could not be fetched just now");
+    expect(text.trimEnd().endsWith(":")).toBe(false);
   });
 
   it("a whitespace-only domain is a scope, and is named rather than erased", async () => {
@@ -344,6 +366,198 @@ describe("an empty answer describes the scope it searched", () => {
 
     expect(text).toContain("that watermark is in the FUTURE");
     expect(text).toContain("says nothing about whether you are caught up");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * "We could not check" and "there is none" are different answers.
+ *
+ * Every case below used to come out of the same falsy value. A `/memory/rooms`
+ * body that was not an array became an EMPTY room list — so a contract violation
+ * was reported as "you have no rooms", and as "that room is not in your list", a
+ * membership claim on no evidence. A 200 with no `domains` key became "No store
+ * has that exact name", definitively. And a FAILED room probe left the
+ * first-contact greeting reachable, so one answer could assert an empty memory
+ * while admitting it had not been able to look.
+ *
+ * These are the assembled answers, per state, as a caller receives them —
+ * including the two properties the shape of the fix has to guarantee: no answer
+ * ends on a dangling colon, and no answer asserts emptiness in the same breath as
+ * a failed probe.
+ */
+describe("an unreadable or unreachable probe is reported as unknown, not as absence", () => {
+  it("archived-only rooms: the answer explains why nothing else is reachable", async () => {
+    // THE LIVE BUG. `roomsFound` counted every room while the note it gated
+    // filtered the archived ones out, so an owner whose only room is archived got
+    // "That is not the whole picture:" followed by nothing at all.
+    mcp.on(READ, { items: [] }).on(ROOMS, [ARCHIVED_ROOM]).on(STATS, { total_atoms: 0 });
+
+    const text = await mcp.callText("memory_read", { query: "anything" });
+
+    expect(text).toContain(EMPTY_PERSONAL_STORE_WITH_ROOMS);
+    expect(text.trimEnd().endsWith(":")).toBe(false);
+    expect(text).toContain("1 shared room");
+    expect(text).toMatch(/archived/i);
+    expect(text).toMatch(/did not delete/);
+    // No recovery promised: core has archive with no inverse — no route, no store
+    // method, no tool.
+    expect(text).not.toMatch(/unarchiv/i);
+    expect(text).not.toContain("nothing has been saved yet");
+  });
+
+  it("archived-only rooms with a populated store: still discloses the unreachable ones", async () => {
+    mcp.on(READ, { items: [] }).on(ROOMS, [ARCHIVED_ROOM]).on(STATS, { total_atoms: 42 });
+
+    const text = await mcp.callText("memory_read", { query: "anything" });
+
+    expect(text).toContain(NO_MATCH_MESSAGE + NO_MATCH_HINT);
+    expect(text).toContain("1 shared room");
+    expect(text).toMatch(/archived/i);
+  });
+
+  it("a room list that is not a list is UNKNOWN, and never 'you have no rooms'", async () => {
+    for (const payload of [{ nope: true }, "rooms", [1, 2]] as Route[]) {
+      mcp.reset().on(READ, { items: [] }).on(ROOMS, payload).on(STATS, { total_atoms: 0 });
+
+      const text = await mcp.callText("memory_read", { query: "anything" });
+
+      expect(text).toContain(EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED);
+      expect(text).not.toContain(EMPTY_STORE_WELCOME);
+      expect(text).not.toContain("nothing has been saved yet");
+      expect(text).toMatch(/shape this client does not recognise/);
+      expect(text.trimEnd().endsWith(":")).toBe(false);
+    }
+  });
+
+  it("never asserts an empty memory in an answer that admits it could not look", async () => {
+    for (const payload of [
+      httpError(503, "upstream down"),
+      networkDown(),
+      { nope: true },
+      "not-an-array",
+    ] as Route[]) {
+      mcp.reset().on(READ, { items: [] }).on(ROOMS, payload).on(STATS, { total_atoms: 0 });
+
+      const text = await mcp.callText("memory_read", { query: "anything" });
+
+      expect(text).not.toContain(EMPTY_STORE_WELCOME);
+      expect(text).not.toContain("nothing has been saved yet");
+      expect(text).toMatch(/could not be checked/);
+    }
+  });
+
+  it("no empty answer ends on a dangling colon, over the whole probe matrix", async () => {
+    const roomPayloads: Route[] = [
+      [],
+      [ROOM],
+      [ARCHIVED_ROOM],
+      [ROOM, ARCHIVED_ROOM],
+      { nope: true },
+      httpError(503),
+      networkDown(),
+    ];
+    const statsPayloads: Route[] = [
+      { total_atoms: 0 },
+      { total_atoms: 9 },
+      {},
+      httpError(500),
+    ];
+    for (const rooms of roomPayloads) {
+      for (const stats of statsPayloads) {
+        mcp.reset().on(READ, { items: [] }).on(ROOMS, rooms).on(STATS, stats);
+        const text = await mcp.callText("memory_read", { query: "anything" });
+        expect(text.trim().length).toBeGreaterThan(0);
+        expect(text.trimEnd().endsWith(":"), text).toBe(false);
+      }
+    }
+  });
+
+  it("a stats body with no domain list cannot say the store does not exist", async () => {
+    // Core always sends `domains` on a 200, so a missing key means the body is
+    // not core's. The old code read it as an empty list and answered definitively.
+    mcp.on(READ, { items: [] }).on(STATS, { total_atoms: 5 });
+
+    const text = await mcp.callText("memory_read", {
+      query: "deploy notes",
+      domain: "engineering",
+    });
+
+    expect(text).not.toContain("No store has that exact name");
+    expect(text).toContain(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT);
+    expect(text).toMatch(/could not be checked/);
+    expect(text).toMatch(/shape this client does not recognise/);
+  });
+
+  it("a failed stats probe on a scoped read is admitted, not read as a plain miss", async () => {
+    mcp.on(READ, { items: [] }).on(STATS, httpError(503, "down"));
+
+    const text = await mcp.callText("memory_read", {
+      query: "deploy notes",
+      domain: "engineering",
+    });
+
+    expect(text).toMatch(/could not be checked/);
+    expect(text).toMatch(/could not be fetched just now/);
+    expect(text).not.toContain("No store has that exact name");
+  });
+
+  it("a room address is not declared absent from a room list that could not be read", async () => {
+    for (const payload of [{ nope: true }, httpError(503)] as Route[]) {
+      mcp.reset().on(READ, { items: [] }).on(ROOMS, payload);
+
+      const text = await mcp.callText("memory_read", {
+        query: "anything",
+        domain: "xroom:room_01ABC",
+      });
+
+      expect(text).not.toContain("not in your list");
+      expect(text).toMatch(/whether you are a member of that room could not be checked/i);
+      expect(probed()).not.toContain(STATS);
+    }
+  });
+
+  it("the feed reports the same states as the search", async () => {
+    mcp.on(RECENT, { items: [] }).on(ROOMS, [ARCHIVED_ROOM]);
+    const archived = await mcp.callText("memory_list_recent", {});
+    expect(archived).toContain("No memories in your own domains yet.");
+    expect(archived).toContain("1 shared room");
+    expect(archived).toMatch(/archived/i);
+
+    mcp.reset().on(RECENT, { items: [] }).on(ROOMS, { nope: true });
+    const garbled = await mcp.callText("memory_list_recent", {});
+    expect(garbled).toMatch(/shape this client does not recognise/);
+    expect(garbled).toMatch(/cannot say whether any room went unsearched/);
+  });
+
+  it("memory_list_rooms does not report 'no rooms' for a body it cannot read", async () => {
+    // The third consumer of this payload, and the third place `Array.isArray(x) ?
+    // x : []` turned a contract violation into a claim about the account.
+    mcp.on(ROOMS, { nope: true });
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).not.toContain("You have no shared rooms yet");
+    expect(text).toMatch(/shape this client does not recognise/);
+    expect(text).toMatch(/not evidence that you have none/);
+  });
+
+  it("memory_list_rooms still says so when the list is genuinely empty", async () => {
+    mcp.on(ROOMS, []);
+    expect(await mcp.callText("memory_list_rooms")).toContain("You have no shared rooms yet");
+  });
+
+  it("memory_list_rooms lists an archived room rather than hiding it", async () => {
+    // This tool's job is the inventory, so the archived room belongs in it —
+    // unlike the scope note, where there is no address worth handing over.
+    mcp.on(ROOMS, [ARCHIVED_ROOM]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain("Your shared rooms (1)");
+    expect(text).toContain("[archived]");
+    expect(text).toContain('"last-quarter"');
   });
 });
 

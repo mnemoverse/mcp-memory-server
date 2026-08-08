@@ -12,16 +12,18 @@ import {
   type ReadItem,
   type RecentItem,
 } from "./render.js";
+// `NO_MATCH_MESSAGE` is no longer imported here: this file used to pick between
+// it and buildReadEmptyResponse by testing a note string for truthiness, which
+// is how "we could not check" came to be spelled like "the store is there".
+// Assembling the whole answer belongs in one place — src/teaching.ts.
+import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
 import {
-  SERVER_INSTRUCTIONS,
-  buildReadEmptyResponse,
-  NO_MATCH_MESSAGE,
-} from "./teaching.js";
-import {
-  unsearchedRoomsNote,
+  classifyRooms,
   futureSinceNote,
-  nearestDomainNote,
+  probeReadScope,
+  readScopeNote,
   scopeLabel,
+  type ReadScope,
 } from "./scope.js";
 import {
   readRequestBody,
@@ -37,45 +39,29 @@ import {
 } from "./names.js";
 
 /**
- * On an empty SCOPED result, say whether the domain name is a casing slip or is
- * simply not there. One extra call, only on the zero-result path — the same
- * shape as the existing first-contact probe. Never throws: a failed probe just
- * means no extra help, which is the status quo.
+ * What we know about the scope this read actually covered — one probe on the
+ * zero-result path, returning a VALUE rather than a sentence-or-empty-string.
  *
- * ROOMS ARE EXCLUDED FROM THE STATS PROBE, and that exclusion is the whole
- * reason this release exists. `memory_stats` reports personal domains only —
- * not one of the account's twelve live rooms appears in its domain list. So
- * probing it for an `xroom:` address would confidently answer "No store is
- * named xroom:room_01ABC" about a room that exists and that the caller is a
- * member of: the exact false-absence claim being fixed, reintroduced by the
- * fix (CodeRabbit, #65). Room addresses are checked against the ROOM list
- * instead, where they actually live.
+ * This replaces `domainMissNote`, whose `catch { return ""; }` made three
+ * different states share one spelling: the store is there and the query missed,
+ * the room is there and the query missed, and the probe failed. The caller then
+ * read that string as a boolean, so "we could not check" was rendered exactly
+ * like "the store exists" — the collision this release is about, at the point
+ * where the whole scoped path converges. The states are now arms of a union
+ * (src/scope.ts) and every consumer must answer for each of them.
  *
- * The argument is the RAW domain that was searched, never a trimmed copy —
- * see the note at the top of memory_read for what desyncing those two cost.
+ * The probe routing lives in src/scope.ts: a room address is checked against the
+ * ROOM list and a domain against `/memory/stats`, because stats never contains a
+ * room address (CodeRabbit #65). `searched` is the RAW value that went over the
+ * wire, so the diagnosis can never describe a different store than the request.
  */
-async function domainMissNote(domain: string): Promise<string> {
-  try {
-    if (domain.startsWith("xroom:")) {
-      const rooms = await apiFetch<Array<{ address?: string; room_id?: string }>>(
-        "/memory/rooms",
-      );
-      const list = Array.isArray(rooms) ? rooms : [];
-      const known = list.some(
-        (r) => r?.address === domain || `xroom:${r?.room_id}` === domain,
-      );
-      // Known room, genuinely empty for this query — nothing to add.
-      return known
-        ? ""
-        : `\n\nThat room is not in your list — either the address is wrong or you are not a member. memory_list_rooms shows the ones you can read.`;
-    }
-    const s = await apiFetch<{ domains?: string[] }>("/memory/stats");
-    const known = Array.isArray(s?.domains) ? s.domains : [];
-    if (known.includes(domain)) return "";
-    return nearestDomainNote(domain, known);
-  } catch {
-    return "";
-  }
+function probeScope(searched: string | undefined): Promise<ReadScope> {
+  return probeReadScope(
+    searched,
+    () => apiFetch<unknown>("/memory/stats"),
+    () => apiFetch<unknown>("/memory/rooms"),
+    safeInline,
+  );
 }
 
 // Version is read at runtime from package.json so there is exactly one place
@@ -466,12 +452,7 @@ server.registerTool(
       // the truthful answer is "nothing new for these filters" (mirrors
       // memory_list_recent's empty copy; no stats probe, no broaden hint).
       // Unscoped, it also has to name the rooms it never looked in.
-      const scopeNote = searched
-        ? await domainMissNote(searched)
-        : (await unsearchedRoomsNote(
-            () => apiFetch<unknown>("/memory/rooms"),
-            safeInline,
-          )).note;
+      const scopeNote = readScopeNote(await probeScope(searched));
       return {
         content: [
           {
@@ -495,49 +476,32 @@ server.registerTool(
     }
 
     if (items.length === 0) {
-      // Zero results: ONE stats call (made only on this path) distinguishes a
-      // truly empty store (first contact — greet with how to save the first
-      // memory) from "no match for this query" (hint to broaden). Stats
-      // failure falls open to the plain no-match message. Domain-scoped reads
-      // never greet and never probe — the stats call measures the PERSONAL
-      // store, not the scoped domain. See src/teaching.ts.
+      // Zero results. The scope is probed FIRST and the whole answer is then
+      // assembled from that ONE value in src/teaching.ts — head sentence and
+      // disclosure together, per state.
       //
-      // ORDER MATTERS: the scope note is computed FIRST, because whether the
-      // caller has unsearched rooms decides whether the first-contact greeting
-      // is even true. `total_atoms` counts the personal org only, so a joiner
-      // with three full rooms and no personal writes would otherwise be told
-      // "nothing has been saved yet" — and then contradicted by the note right
+      // ORDER MATTERS and is now structural: whether the caller has rooms we
+      // could not search decides whether the first-contact greeting is even
+      // true, so the room knowledge is an INPUT to the answer rather than a flag
+      // consulted beside it. `total_atoms` counts the personal org only, so a
+      // joiner with three full rooms and no personal writes would otherwise be
+      // told "nothing has been saved yet" and contradicted by the note right
       // underneath (review, 2026-08-08).
-      const rooms = searched
-        ? { note: "", roomsFound: false }
-        : await unsearchedRoomsNote(
-            () => apiFetch<unknown>("/memory/rooms"),
-            safeInline,
-          );
-      const scopeNote = searched ? await domainMissNote(searched) : rooms.note;
-      // A SPECIFIC diagnosis replaces the generic advice; it does not follow
-      // it. "Try a broader query, or a different domain." printed first, then
-      // "that is not the same store as X, which does exist" — so a model
-      // reading top-down went off to widen a query against a store that does
-      // not exist, which is the wasted loop this release exists to end
-      // (review, 2026-08-08).
-      const text = searched && scopeNote
-        ? NO_MATCH_MESSAGE
-        : await buildReadEmptyResponse(
-            () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-            searched !== undefined,
-            // Rooms are only KNOWN to exist when the probe succeeded and found
-            // some. A failed probe returns a non-empty note too, and treating
-            // that as "rooms exist" told a genuinely new account "that is not
-            // the whole picture" on no evidence — and withheld the one message
-            // that teaches how to save a first memory.
-            searched === undefined && rooms.roomsFound,
-          );
+      //
+      // Nothing is appended here any more. While the head came from teaching.ts
+      // and the tail was concatenated at this line, the two could disagree — a
+      // head promising "that is not the whole picture:" with an empty tail after
+      // it was a live bug for an account whose only room was archived.
+      const scope = await probeScope(searched);
+      const text = await buildReadEmptyResponse(
+        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+        scope,
+      );
       return {
         content: [
           {
             type: "text" as const,
-            text: withDomainEscapeLegend(text + scopeNote, searched),
+            text: withDomainEscapeLegend(text, searched),
           },
         ],
       };
@@ -673,12 +637,7 @@ server.registerTool(
       // the first was meaningless. Naming the scope inside the clause makes it
       // true on its own, and the note becomes an addition rather than a
       // retraction (review, 2026-08-08).
-      const scopeNote = searched
-        ? await domainMissNote(searched)
-        : (await unsearchedRoomsNote(
-            () => apiFetch<unknown>("/memory/rooms"),
-            safeInline,
-          )).note;
+      const scopeNote = readScopeNote(await probeScope(searched));
       const where = scopeLabel(searched);
       return {
         content: [
@@ -1227,18 +1186,28 @@ server.registerTool(
     },
   },
   async () => {
-    const rooms = await apiFetch<
-      Array<{
-        room_id?: string;
-        name?: string;
-        address?: string;
-        role?: string;
-        scope?: string;
-        archived?: boolean;
-      }>
-    >("/memory/rooms");
-    const list = Array.isArray(rooms) ? rooms : [];
-    if (list.length === 0) {
+    // The same classifier the scope notes use, for the same reason: this handler
+    // did `Array.isArray(rooms) ? rooms : []` and then asserted "You have no
+    // shared rooms yet" — a claim about the account derived from a body it could
+    // not read. It is the third consumer of this payload and the third place the
+    // substitution was made; all three now go through one function that maps an
+    // unreadable body to `unknown`, never to `none`.
+    const rooms = classifyRooms(await apiFetch<unknown>("/memory/rooms"), safeInline);
+    if (rooms.state === "unknown") {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              "The room list came back in a shape this client does not recognise — so this " +
+              "is not a list of your rooms, and it is not evidence that you have none. Retry; " +
+              "if it persists, the memory service is answering this call in a shape this " +
+              "client cannot read.",
+          },
+        ],
+      };
+    }
+    if (rooms.state === "none") {
       return {
         content: [
           {
@@ -1250,6 +1219,9 @@ server.registerTool(
         ],
       };
     }
+    // ARCHIVED ROOMS ARE LISTED HERE, unlike in the scope note — this tool's job
+    // is the inventory, and the `[archived]` tag says which ones cannot be read.
+    const list = rooms.rooms;
     // Room name is OWNER-chosen and surfaced to THIS assistant — sanitize it (CN-032),
     // like memory_join_room already does. address/role/scope are server-shaped but pass
     // through the same guard defensively.
