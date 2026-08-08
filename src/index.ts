@@ -213,12 +213,29 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ content, concepts, domain: rawDomain }) => {
-    // Trim before writing: domain names are matched byte-for-byte, so
-    // " engineering" would create a permanent second store next to
-    // "engineering" with no cross-visibility. Dogfooding hit the casing
-    // version of this; whitespace is the same trap with an invisible cause.
-    const domain = rawDomain?.trim() || "general";
+  async ({ content, concepts, domain }) => {
+    // NO NORMALISATION HERE — deliberately, after a review found two ways it
+    // breaks (2026-08-08). Trimming looked like an obvious win: domain names
+    // are matched byte-for-byte in core, so " engineering" opens a permanent
+    // second store beside "engineering". But:
+    //
+    //   1. Core REJECTS a non-canonical room address on purpose — 400
+    //      "Non-canonical room address", so a write "can't be mis-routed and
+    //      tagged with a spoofed xroom domain" in its own words. Trimming
+    //      " xroom:room_01ABC" normalises past that guard, and the atom lands
+    //      in the ROOM's store, visible to every member. Content that never
+    //      left the caller in 0.8.0 would leave the account in 0.8.1. The
+    //      address in that shape is one our own output hands the model.
+    //   2. For a caller who has been padding a domain for months, trimming
+    //      silently relocates new writes and orphans the old corpus — and
+    //      memory_delete_domain does NOT trim, so the same client can no
+    //      longer even name the shard it created.
+    //
+    // Both are behaviour changes, so they do not belong in a patch whose
+    // whole claim is that it only changes wording. Normalisation returns in
+    // 0.9.0 with delete_domain included, room addresses deliberately EXEMPT,
+    // and zero-width characters handled (JS trim() does not strip them —
+    // verified, contrary to what an earlier comment here asserted).
     const r = await apiFetch<{
       stored?: boolean;
       atom_id?: string | null;
@@ -229,11 +246,16 @@ server.registerTool(
       body: JSON.stringify({
         content,
         concepts: concepts || [],
-        domain,
+        domain: domain || "general",
       }),
     });
 
-    const importance = (r?.importance ?? 0).toFixed(2);
+    // "unknown", not 0.00, when the server didn't send a score — the same rule
+    // memory_stats got in this release. A live surface exists that answers
+    // {"stored":false} with no reason and no score; printing "0.00" there
+    // fabricates the gate's verdict (review, 2026-08-08).
+    const importance =
+      typeof r?.importance === "number" ? r.importance.toFixed(2) : "unknown";
 
     if (r?.stored) {
       return {
@@ -249,17 +271,29 @@ server.registerTool(
     // never the outcome, so a caller could read it as a soft success and move
     // on. In dogfooding this ate a CORRECTION to a wrong fact: the stale
     // version stayed as the only record, and looked more authoritative for
-    // having no competitor (2026-08-07). Say plainly that nothing was saved,
-    // and what to do about it.
+    // having no competitor (2026-08-07).
+    //
+    // The ADVICE was wrong until 2026-08-08, and wrong in a way that made
+    // things worse. It told the caller to rewrite the content as a cleaner
+    // factual statement — but the gate scores GEOMETRIC NOVELTY against the
+    // nearest existing atom in the same domain, not phrasing or factuality.
+    // "Below importance threshold" means TOO SIMILAR TO SOMETHING ALREADY
+    // STORED. A rewrite of the same fact therefore produces a near-identical
+    // embedding, scores the same or lower, and is rejected again — and the old
+    // text ended with "write it again", so a compliant agent looped. It was
+    // anti-correlated with the mechanism in exactly the case it was written
+    // for: a correction, which is by nature similar to what it corrects.
     return {
       content: [
         {
           type: "text" as const,
           text:
-            `NOT STORED — the importance gate rejected it (${r?.reason ?? "no reason given"}; ` +
-            `importance ${importance}). Nothing was saved. If this matters, rewrite it as a ` +
-            `self-contained factual statement ("X is Y", "we decided Z because…") rather than ` +
-            `a remark or a meta-comment, and write it again.`,
+            `NOT STORED — nothing was saved. The gate rejected it as too close to ` +
+            `something already in this domain (${r?.reason ?? "no reason given"}; novelty ` +
+            `score ${importance}). Rewording the same fact will score the same or lower. ` +
+            `If it is genuinely new, write what is DIFFERENT rather than the whole fact ` +
+            `again. If it CORRECTS an existing memory, there is no update — find the old ` +
+            `one with memory_read and remove it with memory_delete, then write the new one.`,
         },
       ],
     };
@@ -339,13 +373,13 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ query, top_k, domain: rawDomain, order_by, since, until, exclude_author }) => {
-    // Normalise ONCE, at the edge. A whitespace-only domain is not a filter:
-    // it used to be sent to the server verbatim and simultaneously counted as
-    // "scoped" here but "unscoped" three branches down, so the same call could
-    // both miss everything and suppress the unsearched-rooms note (CodeRabbit,
-    // #65). Everything below uses the normalised value.
-    const domain = rawDomain?.trim() || undefined;
+  async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
+    // The request body passes `domain` through UNCHANGED (see the note in
+    // memory_write: normalising here changes which store is searched, which is
+    // a behaviour change, not a wording one). What IS normalised is only the
+    // local decision about which EXPLANATION to attach to an empty result —
+    // `scopeKey` below. That never leaves the process.
+    const scopeKey = domain?.trim() || null;
     const r = await apiFetch<{
       items?: ReadItem[];
       search_time_ms?: number;
@@ -372,8 +406,8 @@ server.registerTool(
       // the truthful answer is "nothing new for these filters" (mirrors
       // memory_list_recent's empty copy; no stats probe, no broaden hint).
       // Unscoped, it also has to name the rooms it never looked in.
-      const scopeNote = domain
-        ? await domainMissNote(domain)
+      const scopeNote = scopeKey
+        ? await domainMissNote(scopeKey)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -398,20 +432,26 @@ server.registerTool(
       // failure falls open to the plain no-match message. Domain-scoped reads
       // never greet and never probe — the stats call measures the PERSONAL
       // store, not the scoped domain. See src/teaching.ts.
-      // `domain` is already normalised at the top of the handler, so a
-      // whitespace-only value counts as unscoped here and everywhere else.
-      const text = await buildReadEmptyResponse(
-        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-        domain !== undefined,
-      );
-      // Same rule as the feed: an unscoped miss must name the rooms it never
-      // searched, or "no memories found" reads as a fact about everything.
-      const scopeNote = domain
-        ? await domainMissNote(domain)
+      //
+      // ORDER MATTERS: the scope note is computed FIRST, because whether the
+      // caller has unsearched rooms decides whether the first-contact greeting
+      // is even true. `total_atoms` counts the personal org only, so a joiner
+      // with three full rooms and no personal writes would otherwise be told
+      // "nothing has been saved yet" — and then contradicted by the note right
+      // underneath (review, 2026-08-08).
+      const scopeNote = scopeKey
+        ? await domainMissNote(scopeKey)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
           );
+      const text = await buildReadEmptyResponse(
+        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+        scopeKey !== null,
+        // A non-empty unscoped note means rooms exist — or that we could not
+        // check, in which case suppressing the greeting is the safe error.
+        scopeKey === null && scopeNote !== "",
+      );
       return {
         content: [{ type: "text" as const, text: text + scopeNote }],
       };
@@ -495,9 +535,10 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async ({ domain: rawDomain, since, until, exclude_author, limit, cursor }) => {
-    // Same normalisation as memory_read — one rule for "is this scoped?".
-    const domain = rawDomain?.trim() || undefined;
+  async ({ domain, since, until, exclude_author, limit, cursor }) => {
+    // As in memory_read: `domain` reaches the server untouched; only the local
+    // choice of explanation is normalised.
+    const scopeKey = domain?.trim() || null;
     let r: { items?: RecentItem[]; next_cursor?: string | null };
     try {
       r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
@@ -505,7 +546,7 @@ server.registerTool(
         {
           method: "POST",
           body: JSON.stringify({
-            domain,
+            domain: domain || undefined,
             since: since || undefined,
             until: until || undefined,
             exclude_author: exclude_author || undefined,
@@ -542,8 +583,8 @@ server.registerTool(
       // An empty UNSCOPED feed must say where it looked. Rooms are separate
       // stores and are never covered here, so a bare "nothing new" is a false
       // claim about the world (incident 2026-08-07 — see src/scope.ts).
-      const scopeNote = domain
-        ? await domainMissNote(domain)
+      const scopeNote = scopeKey
+        ? await domainMissNote(scopeKey)
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
@@ -619,18 +660,27 @@ server.registerTool(
     const count = r?.updated_count ?? 0;
 
     // "Feedback recorded for 0 memories." is one character away from the
-    // success line and reads like one. Zero here almost always means the ids
-    // were stale or came from somewhere other than a read result — say that,
-    // because it is the actionable part (dogfood, 2026-08-07).
+    // success line and reads like one. But the DIAGNOSIS matters as much as
+    // the fact: an earlier version of this branch blamed deletion, which is
+    // usually the wrong cause (review, 2026-08-08).
+    //
+    // Core resolves the feedback org from a `domain` argument that defaults to
+    // "general" — and THIS TOOL EXPOSES NO domain PARAMETER. So the ordinary
+    // way to get zero is to rate atoms that live somewhere else: read a room,
+    // take the ids off the `id:` lines, rate them, and every one silently
+    // misses. The atoms exist, the ids are valid, and telling the caller they
+    // were deleted sends them to look for a problem that isn't there.
     if (count === 0) {
       return {
         content: [
           {
             type: "text" as const,
             text:
-              "No feedback was recorded — none of those ids matched a memory. " +
-              "Ids come from a memory_read result (the `id:` line under each hit) " +
-              "and stop matching once a memory is deleted.",
+              "No feedback was recorded — none of those ids matched a memory in your own " +
+              "domains. Most often that means the ids came from a shared room: this tool " +
+              "cannot reach room atoms (it takes no domain argument), so rating them is a " +
+              "no-op. Otherwise the memory was deleted, or the id came from somewhere " +
+              "other than a memory_read result.",
           },
         ],
       };
@@ -691,9 +741,14 @@ server.registerTool(
     const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
     const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
 
+    // QUOTE each name. Joining bare strings with ", " made a leading or
+    // trailing space invisible — and since names match byte-for-byte, an
+    // accidental " engineering" is a real, separate, unreachable store whose
+    // only symptom is a read that finds nothing. The check we point callers at
+    // could not reveal the thing it was meant to reveal (review, 2026-08-08).
     const domains =
       Array.isArray(r?.domains) && r.domains.length > 0
-        ? r.domains.join(", ")
+        ? r.domains.map((d) => `"${safeInline(d)}"`).join(", ")
         : "none reported";
 
     const text = [
@@ -742,11 +797,21 @@ server.registerTool(
     );
 
     if (!r?.deleted) {
+      // NOT "no such memory". Deletion is scoped to the caller's OWN store —
+      // core has no room-scoped delete at all — so a room atom's id lands here
+      // even though the memory plainly exists. This release made room ids MORE
+      // visible in read results, so an agent is now MORE likely to bring one
+      // here, ask to forget it, and be told it never existed while it stays
+      // (review, 2026-08-08). Every other empty branch in this file learned to
+      // state its boundary; the destructive one has to as well.
       return {
         content: [
           {
             type: "text" as const,
-            text: `No memory found with id ${atom_id}.`,
+            text:
+              `Nothing was deleted: no memory with id ${atom_id} in your own domains. ` +
+              `Note that memories in shared rooms CANNOT be deleted through this tool — ` +
+              `if that id came from a room, it still exists and is untouched.`,
           },
         ],
       };
@@ -802,7 +867,30 @@ server.registerTool(
     );
 
     const count = r?.deleted ?? 0;
-    const domainName = r?.domain ?? domain;
+    const domainName = safeInline(r?.domain ?? domain);
+
+    // Zero is NOT a successful wipe, and this line used to read like one.
+    // Core echoes back the caller's own string, so "Deleted 0 memories from
+    // domain 'Project X'" implies a domain that existed and is now empty. The
+    // casing trap runs in this direction too: the user says "forget everything
+    // about project X", the agent passes "Project X", gets a success-shaped
+    // line, reports done — and the atoms live on under "project x" (review,
+    // 2026-08-08). This release built the diagnosis for exactly that and had
+    // applied it only to reads.
+    if (count === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `NOTHING was deleted — no memories matched domain "${domainName}" in your own ` +
+              `store. Names match byte-for-byte, so check the spelling and case against ` +
+              `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
+              `through this tool at all.`,
+          },
+        ],
+      };
+    }
 
     return {
       content: [

@@ -109,12 +109,15 @@ export function formatDateTag(createdAt?: string): string {
  * server's `relevance` rendered as a percentage, and that was wrong twice
  * over:
  *
- *   - It read as confidence and wasn't. There is no relevance floor, so a
- *     query about something never stored still returned the nearest
- *     neighbours — dogfooding got a real person's profile at "73%" for a
- *     question about someone fictional, and month-old notes at "73%" for
- *     "what's new". A number that never bottoms out cannot say "I don't
- *     know", but a reader takes it as though it can.
+ *   - It read as confidence and wasn't. The engine's relevance floor
+ *     (`min_relevance`, default 0.3) is low enough that a query about
+ *     something never stored still returns near-neighbours — dogfooding got a
+ *     real person's profile at "73%" for a question about someone fictional,
+ *     and month-old notes at "73%" for "what's new". A number that in practice
+ *     never bottoms out cannot say "I don't know", but a reader takes it as
+ *     though it can. (An earlier draft of this comment claimed there was NO
+ *     floor. There is one; it is simply too low to mean anything — review,
+ *     2026-08-08.)
  *   - It wasn't a percentage of anything. Positive feedback pushes the score
  *     above 1.0, so reads showed "112%".
  *

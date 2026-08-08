@@ -53,6 +53,19 @@ export const NO_MATCH_SCOPED_HINT =
  * this store is, how to save the first memory, and one next step. It can never
  * appear again once anything is stored (total_atoms > 0 takes the other branch).
  */
+/**
+ * The honest line for an account whose OWN domains are empty but whose rooms
+ * are not — an invited teammate whose every memory lives in shared rooms.
+ *
+ * Without this, such a caller was greeted with EMPTY_STORE_WELCOME: "your
+ * memory is empty, nothing has been saved yet, which is why this search
+ * returned nothing" — three false clauses, immediately contradicted by the
+ * scope note appended underneath, in the same payload (review, 2026-08-08).
+ * That reader is precisely the person from the incident this release is about.
+ */
+export const EMPTY_PERSONAL_STORE_WITH_ROOMS =
+  "Nothing in your own domains — they hold no memories yet. That is not the whole picture:";
+
 export const EMPTY_STORE_WELCOME =
   "Your long-term memory is empty — nothing has been saved yet, which is why this search returned nothing. " +
   "This store is your own persistent memory: whatever you save survives across sessions and across every AI tool this user has connected. " +
@@ -77,6 +90,15 @@ export const EMPTY_STORE_WELCOME =
 export async function buildReadEmptyResponse(
   fetchStats: () => Promise<{ total_atoms?: number }>,
   scopedToDomain = false,
+  /**
+   * True when the caller has rooms we did not search. `total_atoms` counts the
+   * PERSONAL org only, so zero there does NOT mean an empty memory — it means
+   * an empty personal store. Passing this suppresses the first-contact
+   * greeting, which would otherwise tell a rooms-only account that nothing has
+   * ever been saved (review, 2026-08-08). Pass true when unsure: claiming
+   * emptiness is the expensive mistake, not withholding a greeting.
+   */
+  roomsPresent = false,
 ): Promise<string> {
   if (scopedToDomain) return NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT;
   let totalAtoms: number | undefined;
@@ -85,7 +107,9 @@ export async function buildReadEmptyResponse(
   } catch {
     return NO_MATCH_MESSAGE;
   }
-  if (totalAtoms === 0) return EMPTY_STORE_WELCOME;
+  if (totalAtoms === 0) {
+    return roomsPresent ? EMPTY_PERSONAL_STORE_WITH_ROOMS : EMPTY_STORE_WELCOME;
+  }
   if (typeof totalAtoms === "number" && totalAtoms > 0) {
     return NO_MATCH_MESSAGE + NO_MATCH_HINT;
   }

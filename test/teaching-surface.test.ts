@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   SERVER_INSTRUCTIONS,
   EMPTY_STORE_WELCOME,
+  EMPTY_PERSONAL_STORE_WITH_ROOMS,
   NO_MATCH_MESSAGE,
   NO_MATCH_HINT,
   NO_MATCH_SCOPED_HINT,
@@ -88,11 +89,31 @@ describe("tool descriptions in src/index.ts", () => {
 });
 
 describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
-  it("greets on a truly empty store (total_atoms === 0)", async () => {
+  it("greets on a truly empty store (total_atoms === 0, no rooms)", async () => {
     const text = await buildReadEmptyResponse(async () => ({ total_atoms: 0 }));
     expect(text).toBe(EMPTY_STORE_WELCOME);
     expect(text).toContain("memory_write");
     expect(text).toContain('"User prefers TypeScript strict mode"');
+  });
+
+  it("NEVER greets a rooms-only account — total_atoms counts the personal org only", async () => {
+    // The worst finding of the 2026-08-08 review. An invited teammate with zero
+    // personal writes and three full rooms was told "Your long-term memory is
+    // empty — nothing has been saved yet, which is why this search returned
+    // nothing": three false clauses, and the scope note appended underneath
+    // contradicted them in the same payload. That reader is precisely the
+    // person from the incident this release is about.
+    const text = await buildReadEmptyResponse(
+      async () => ({ total_atoms: 0 }),
+      false,
+      true, // rooms exist
+    );
+    expect(text).toBe(EMPTY_PERSONAL_STORE_WITH_ROOMS);
+    expect(text).not.toContain(EMPTY_STORE_WELCOME);
+    expect(text).not.toMatch(/nothing has been saved yet/);
+    // Says what it actually knows, and points onward rather than concluding.
+    expect(text).toMatch(/your own domains/i);
+    expect(text).toMatch(/not the whole picture/i);
   });
 
   it("returns no-match + broaden hint when the store has memories", async () => {
@@ -178,21 +199,25 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     expect(indexSource.match(/\+ scopeNote|scopeNote,$/gm)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
-  it("every scope-taking handler normalises the domain at the edge", () => {
-    // A whitespace-only domain is not a filter. This used to be enforced by a
-    // trim at ONE decision point, which is how the same call could be "scoped"
-    // for the greeting and "unscoped" three branches down while sending "   "
-    // to the server (CodeRabbit, #65). The rule now lives at the edge of each
-    // handler, so there is one normalised value and no second opinion.
-    const normalisations = indexSource.match(
-      /const domain = rawDomain\?\.trim\(\) \|\| (undefined|"general")/g,
-    );
-    // memory_read, memory_list_recent, memory_write.
-    expect(normalisations).toHaveLength(3);
+  it("NEVER normalises the domain it sends to the server", () => {
+    // 0.8.1 briefly trimmed `domain` at the edge of each handler. Two reviews
+    // killed it (2026-08-08): core deliberately 400s a non-canonical room
+    // address so a write "can't be mis-routed and tagged with a spoofed xroom
+    // domain", and trimming normalised past that guard — " xroom:room_01ABC"
+    // would have landed in the ROOM's store, visible to every member, where
+    // 0.8.0 hard-failed. It also silently relocated padded personal domains
+    // while memory_delete_domain kept sending the raw value.
+    //
+    // So the wire value is untouched, and only the LOCAL choice of which
+    // explanation to attach to an empty result is normalised. This test is the
+    // guard: re-introducing the trim on a send path must fail here.
+    expect(indexSource).not.toMatch(/const domain = rawDomain\?\.trim\(\)/);
+    expect(indexSource).not.toMatch(/domain: rawDomain/);
 
-    // And nothing downstream re-derives its own answer from the raw value.
-    expect(indexSource).not.toContain("domain != null && domain.trim()");
-    expect(indexSource).not.toContain("domain: domain || undefined");
+    // The local, never-sent normalisation, in memory_read and memory_list_recent.
+    expect(indexSource.match(/const scopeKey = domain\?\.trim\(\) \|\| null/g)).toHaveLength(2);
+    // And the write still sends exactly what 0.8.0 sent.
+    expect(indexSource).toContain('domain: domain || "general"');
   });
 });
 
