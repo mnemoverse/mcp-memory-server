@@ -108,16 +108,70 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite also grew from 60 tests to 189 (this number was written as 116 while
-the count was 119, then the naming fix added 70 more — a countable claim nobody
-was counting), and the two that mattered most were
-replaced rather than added to. The wire contract is now pinned by calling the
-real body builders (`src/requests.ts`) and comparing against 0.8.0's bodies for
-every domain shape — whitespace, non-breaking and zero-width spaces, padded room
-addresses. The guard it replaced was a regex asserting the ABSENCE of a `trim()`,
-which cannot catch a DELETED coercion — and a deleted coercion is what shipped.
-Both sabotages now fail loudly: removing `|| undefined` breaks 3 tests, adding a
-trim breaks 6.
+The suite also grew from 60 tests to 213 (the number in this paragraph was
+written as 116 while the count was 119, then the naming fix added 70 more, then
+the harness below replaced 17 and added 41 — a countable claim nobody was
+counting), and the ones that mattered most were replaced rather than added to.
+The wire contract is now pinned by calling the real body builders
+(`src/requests.ts`) and comparing against 0.8.0's bodies for every domain shape —
+whitespace, non-breaking and zero-width spaces, padded room addresses. The guard
+it replaced was a regex asserting the ABSENCE of a `trim()`, which cannot catch a
+DELETED coercion — and a deleted coercion is what shipped. Both sabotages now
+fail loudly: removing `|| undefined` breaks 3 tests, adding a trim breaks 6.
+
+### Added — the copy is now tested by CALLING the tools
+
+The gate above still could not reach the sentences it was guarding. `src/index.ts`
+opened a stdio transport at import time, so importing it from a test started a
+server on the runner's stdin and stdout instead of handing back a handler — and
+every user-visible sentence in this release was therefore protected, at best, by a
+regex over the source of that file. That is why three review rounds each found
+false sentences in the fix itself, and why two of the guards written against them
+turned out to be theatre.
+
+A source assertion can only say "this string appears in this file". It cannot say
+which branch prints it, whether that branch is reachable, what the rest of the
+sentence says, which probe was consulted to justify the claim, or whether the
+value interpolated into it is the value that was searched. Every defect in this
+release lived in one of those gaps.
+
+`test/harness.ts` connects a real MCP client to the real server over the SDK's
+in-memory transport and stubs the HTTP layer, so a test calls a tool by name and
+reads the text a user would read. An UNSTUBBED request fails the test rather than
+quietly taking a fall-open path — several handlers swallow probe failures on
+purpose, so a forgotten stub would otherwise move an assertion onto the "we could
+not check" branch while it still read like the "there is none" branch, which is
+the confusion this whole release is about.
+
+The two test files that read `src/index.ts` as text carried 41 tests between them;
+they now carry 24, and `test/tool-wiring.test.ts` no longer reads the source at
+all — its parameter list comes from `tools/list`, as a model sees it, and its
+values come out of the request the handler actually sent. 41 new behavioural tests
+live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
+assertion is labelled in place with the reason no call can establish it (chiefly
+the "never" rules: no handler sends a name the reader must reproduce through the
+lossy sanitiser, and none normalises a domain).
+
+Among the things that now have a test for the first time: that a room address is checked
+against the ROOM list and never against `memory_stats` (the false-absence claim
+CodeRabbit found reintroduced by the fix); that the first-contact greeting is
+decided AFTER the room probe, so a rooms-only account is never told nothing was
+ever saved; that a failed room probe is treated as neither evidence nor silence;
+that the escape legend appears at most once in an answer assembled from two notes;
+and that a parameter reaching the wire under the right key carries the right
+VALUE, which the previous tripwire could not see at all. Each of these was
+fire-tested: eleven separate sabotages of `src/index.ts` and `src/requests.ts`,
+every one caught, each by the test that names it.
+
+There is no change to what the published CLI does. The seam is one strict check —
+`MNEMOVERSE_MCP_NO_AUTOSTART === "1"`, set only by the harness — and it defaults
+to today's behaviour. Deliberately NOT the usual `import.meta.url ===
+process.argv[1]` idiom: under `npx` the thing on argv[1] is a generated shim, on
+Windows a `.cmd` wrapper, so that comparison would be false for real users and
+would fail by starting no server at all, silently. `test/startup.test.ts` pins the
+default and the narrowness across nine cases, by mocking the transport class and
+counting how many the module opens: inverting the check, widening it to a truthy
+test, and replacing it with the entry-point idiom each fail it.
 
 ### Fixed in the second review round
 

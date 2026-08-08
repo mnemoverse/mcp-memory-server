@@ -2,9 +2,15 @@
  * Teaching-surface contract — the strings that teach a connected model how to
  * use this memory, and the first-contact greeting branch logic.
  *
- * Imports src/teaching.ts directly (NOT src/index.ts, which starts a stdio
- * transport on import); the tool-description polarity check reads src/index.ts
- * as text for the same reason.
+ * WHAT IS STILL HERE, AND WHY. This file used to carry a second job: source
+ * assertions standing in for behavioural ones, because src/index.ts opened a
+ * stdio transport on import and its handlers could not be invoked from a test.
+ * They can now (test/harness.ts), and every check that was a stand-in has moved
+ * to test/handlers.test.ts as a real call — the instructions handshake, the tool
+ * descriptions, the scope-note wiring, the boundary copy, the exact naming of a
+ * store. What remains below is either a unit test of src/teaching.ts or one of
+ * the few contracts that are genuinely ABOUT THE SOURCE, each labelled with why
+ * no call can establish it.
  */
 
 import { readFileSync } from "node:fs";
@@ -24,12 +30,11 @@ const indexSource = readFileSync(
   "utf8",
 );
 
+// That these instructions REACH a connected client — the wiring the source
+// check `toContain("{ instructions: SERVER_INSTRUCTIONS }")` could only guess at
+// — is asserted by calling getInstructions() on a real client in
+// test/handlers.test.ts. What is left here is the content of the string itself.
 describe("server instructions", () => {
-  it("exist and are wired into the McpServer constructor", () => {
-    expect(SERVER_INSTRUCTIONS.length).toBeGreaterThan(0);
-    expect(indexSource).toContain("{ instructions: SERVER_INSTRUCTIONS }");
-  });
-
   it("carry active polarity — no user-gating brakes", () => {
     for (const brake of [
       "only when the user explicitly asks",
@@ -69,24 +74,10 @@ describe("server instructions", () => {
   });
 });
 
-describe("tool descriptions in src/index.ts", () => {
-  it("contain no suppressive polarity", () => {
-    for (const brake of [
-      "only when the user explicitly asks",
-      "Never delete on your own initiative",
-      "Never call this speculatively",
-      "only on an explicit user request",
-    ]) {
-      expect(indexSource).not.toContain(brake);
-    }
-  });
-
-  it("keep the never-store-secrets safety line on memory_write", () => {
-    expect(indexSource).toContain(
-      "Never store passwords, API keys, payment data, MFA codes, government IDs, or health records",
-    );
-  });
-});
+// The tool descriptions were checked here by grepping src/index.ts, which also
+// matched the same words in a comment and said nothing about what a model is
+// actually served. Both checks now read the ADVERTISED descriptions off
+// tools/list — see test/handlers.test.ts.
 
 describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   it("greets on a truly empty store (total_atoms === 0, no rooms)", async () => {
@@ -174,36 +165,22 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     expect(text).not.toMatch(/drop the domain filter/i);
   });
 
-  // Copilot: a whitespace-only domain is not a real filter — the caller trims
-  // before computing the scoped flag, so the greeting still fires. This pins
-  // the caller-side contract as source text (the handler is not bootable in
-  // tests — importing src/index.ts starts the stdio transport).
-  it("every empty-result branch is WIRED to the scope note", () => {
-    // Found by the merge gate, not by these tests: the scope note itself is
-    // well covered, but the wiring is not — deleting the call from a handler
-    // and replacing it with `""` left all 50 tests green. For a release whose
-    // entire point is "the tool must say where it looked", a silently
-    // unwired note is the failure, not a cosmetic one.
-    //
-    // A source assertion is weaker than a behavioural one and is here because
-    // index.ts starts a stdio transport on import, so the handlers cannot be
-    // invoked from a unit test. It catches the deletion, which is the
-    // regression that matters. Same pattern as the instructions check above.
-    const unscoped = indexSource.match(/await unsearchedRoomsNote\(/g) ?? [];
-    const scoped = indexSource.match(/await domainMissNote\(/g) ?? [];
-    // Three empty-result branches: the recent feed, the filtered read, and
-    // the plain no-match read. Each must handle both scopes.
-    expect(unscoped).toHaveLength(3);
-    expect(scoped).toHaveLength(3);
-    // And the note must reach the reader, not be computed and dropped.
-    expect(indexSource.match(/\+ scopeNote|scopeNote,$/gm)?.length ?? 0).toBeGreaterThanOrEqual(3);
-  });
+  // Retired from here: `every empty-result branch is WIRED to the scope note`,
+  // which counted `unsearchedRoomsNote(` / `domainMissNote(` occurrences. All six
+  // branch/scope combinations are now called for real (test/handlers.test.ts).
+  // Its comment also claimed "a whitespace-only domain is not a real filter — the
+  // caller trims before computing the scoped flag, so the greeting still fires",
+  // which described a draft that no longer exists: the trim was removed,
+  // `searchedScope(" ")` returns `" "`, so `" "` IS a scope and the greeting does
+  // not fire. The correct behaviour is now asserted by calling the tool.
 
-  // The wire contract itself is pinned by test/requests.test.ts, which compares
-  // real built bodies against 0.8.0's for every domain shape. This source check
-  // is only a tripwire for the pattern coming back into a handler; it is NOT
-  // the guarantee. The previous version of this test WAS the guarantee, and a
-  // deleted coercion walked straight past it (reviews, 2026-08-08).
+  // THIS ONE STAYS A SOURCE ASSERTION, and it is the clearest example of a
+  // contract that has to be: it is a UNIVERSAL claim about the implementation —
+  // no handler normalises a domain, for the wire or for a local decision — and no
+  // finite set of calls can establish "never". The behavioural anchors show a
+  // padded name surviving to the wire and an empty one being dropped
+  // (test/tool-wiring.test.ts) and the raw name driving the diagnosis
+  // (test/handlers.test.ts); this shows there is no third path.
   it("keeps handlers free of ad-hoc domain normalisation", () => {
     // 0.8.1 briefly trimmed `domain` at the edge of each handler. Two reviews
     // killed it (2026-08-08): core deliberately 400s a non-canonical room
@@ -220,14 +197,13 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     // claimed a scope that had not been searched.
     expect(indexSource).not.toMatch(/domain\?\.trim\(\)/);
     expect(indexSource).not.toMatch(/domain: rawDomain/);
-
-    // Bodies are built by the pure, tested module — not assembled inline where
-    // a coercion can quietly go missing.
-    for (const builder of ["readRequestBody(", "recentRequestBody(", "writeRequestBody("]) {
-      expect(indexSource).toContain(builder);
-    }
-    // And every decision about the result uses the same value that was sent.
-    expect(indexSource.match(/const searched = searchedScope\(domain\)/g)).toHaveLength(2);
+    expect(indexSource).not.toMatch(/domain\.trim\(\)/);
+    // The two checks that used to follow — that the builders are called, and
+    // that both handlers derive their decision from `searchedScope(domain)` —
+    // were counts over the source. Both are now consequences of a behavioural
+    // assertion: a padded domain that reaches the wire unchanged AND drives the
+    // diagnosis in the answer can only have come from one shared raw value
+    // (test/tool-wiring.test.ts, test/handlers.test.ts).
   });
 });
 
@@ -254,73 +230,31 @@ describe("install-command canon", () => {
   });
 });
 
-describe("boundary copy — the load-bearing sentences of 0.8.1", () => {
-  // A review reverted FOUR of these messages to their 0.8.0 wording, deleted 32
-  // lines, and the suite stayed 60/60 green (2026-08-08). The copy IS this
-  // release, and it had no mechanical protection at all.
-  //
-  // These are source assertions, and that is a real limitation, stated rather
-  // than hidden: src/index.ts opens a stdio transport on import, so its
-  // handlers cannot be invoked from a unit test. A tripwire that catches
-  // deletion is worth having; it is not a behavioural guarantee. Moving these
-  // strings into an importable module is the proper fix and is on the 0.9 list.
-  const REQUIRED: Array<[why: string, needle: string]> = [
-    [
-      "an empty feed must name the scope INSIDE the sentence, not append a note that retracts it",
-      "since your watermark.`",
-    ],
-    [
-      // The helper moved to src/scope.ts in the naming fix so the sentence
-      // could be unit-tested at all (test/scope.test.ts → describe scopeLabel).
-      // What this file still has to catch is the handler dropping it.
-      "the scope must still be named INSIDE the sentence",
-      "scopeLabel(searched)",
-    ],
-    [
-      "a failed write must say NOTHING WAS SAVED, not merely name the mechanism",
-      "NOT STORED — nothing was saved.",
-    ],
-    [
-      "a delete that hit nothing must not claim the memory never existed",
-      "memories in shared rooms CANNOT be deleted through this tool",
-    ],
-    [
-      "a zero-row domain wipe must not read like a successful wipe",
-      "NOTHING was deleted",
-    ],
-    [
-      "zero feedback must not blame deletion when scope is the likely cause",
-      "cannot reach room atoms",
-    ],
-    [
-      "memory_stats must distinguish unknown from zero",
-      '"unknown"',
-    ],
-  ];
-
-  for (const [why, needle] of REQUIRED) {
-    it(why, () => {
-      expect(indexSource).toContain(needle);
-    });
-  }
-
-  it("does not reinstate the sentences these replaced", () => {
-    // Comments are stripped first. Several of the replaced sentences are QUOTED
-    // in the comments that explain why they were replaced — that is the record
-    // of what went wrong and must stay. Only the code is checked.
-    const code = indexSource
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-    for (const gone of [
-      '"Nothing new since your watermark."',
-      '"No memories here yet."',
-      "`No memory found with id ${atom_id}.`",
-      "Feedback recorded for ${count}",
-    ]) {
-      expect(code, `${gone} came back`).not.toContain(gone);
-    }
-    // And the comments really do still carry the history.
+/**
+ * The load-bearing sentences of 0.8.1 were pinned here by seven source needles,
+ * plus a denylist for the four sentences they replaced. That existed because a
+ * review had reverted four of these messages to their 0.8.0 wording, deleted 32
+ * lines, and the suite stayed 60/60 green — the copy IS this release and it had
+ * no mechanical protection at all.
+ *
+ * All seven are now assertions on what a caller receives, for the response that
+ * triggers the branch (test/handlers.test.ts → "the load-bearing sentences, as
+ * returned"), and the four replaced sentences are asserted absent from the same
+ * returned text. A needle proved a string existed somewhere in 1300 lines; it
+ * could not prove the branch that prints it is reachable, and one of these
+ * needles — `'"unknown"'` — would have matched the word in a comment.
+ *
+ * ONE PART OF IT IS GENUINELY ABOUT THE SOURCE and stays: the replaced sentences
+ * are quoted in the comments that explain why they were replaced. That record is
+ * the reason the release exists, and nothing a caller can observe protects it.
+ */
+describe("the record of what went wrong stays in the source", () => {
+  it("keeps the replaced sentences quoted in the comments that explain them", () => {
+    // Not the code — the history. If this ever fails, check whether the comment
+    // was deleted or whether the sentence came BACK: the second is a regression
+    // the behavioural tests will already have caught.
     expect(indexSource).toContain("Nothing new since your watermark.");
+    expect(indexSource).toContain("Below importance threshold");
   });
 });
 
@@ -334,11 +268,15 @@ describe("boundary copy — the load-bearing sentences of 0.8.1", () => {
  * Rendering one through the other merged `" engineering"` with `"engineering"`
  * and printed two Cyrillic stores as one name.
  *
- * The renderer itself is behaviourally tested (test/names.test.ts), and so are
- * the sentences that moved into importable modules (test/scope.test.ts,
- * test/render.test.ts). These are source tripwires for the handlers that could
- * not move, because importing src/index.ts opens a stdio transport. They catch
- * the sanitiser coming back; they are not a behavioural guarantee.
+ * ONE ASSERTION LEFT, AND IT IS SOURCE BY NECESSITY. That every name a reader
+ * must reproduce is printed exactly is now checked by calling the tools
+ * (test/handlers.test.ts → "naming a store the reader has to reproduce": the
+ * stats domain line, the twin diagnosis, the destructive confirmation, the
+ * escape legend, and the room-name carve-out in the other direction). What no
+ * call can establish is the NEGATIVE, which is the actual rule: not one of the
+ * twelve handlers, on any branch, for any input, sends such a value through the
+ * sanitiser. A denylist over the source is the only instrument for a "never", and
+ * every entry in it is a call site that really existed.
  */
 describe("naming a store", () => {
   it("never renders a domain through safeInline", () => {
@@ -348,43 +286,11 @@ describe("naming a store", () => {
       "safeInline(d)",
       "safeInline(r?.domain",
       "safeInline(r.reason",
+      "safeInline(wiped",
     ]) {
       expect(indexSource, `${banned} sends a value the reader must reproduce through the sanitiser`).not.toContain(
         banned,
       );
     }
-  });
-
-  it("keeps safeInline where it belongs — an owner-chosen room name", () => {
-    // The carve-out is deliberate: a room name is a different principal's
-    // string, shown to this one. Reversibility is not its requirement.
-    expect(indexSource).toContain("safeInline(r?.name");
-  });
-
-  it("relays the server's rejection reason exactly, under a label that promises it", () => {
-    // "Server reason: Below importance threshold (0.412 < 0.500)" lost its
-    // parentheses and its `<` to the sanitiser's charset, leaving two unlabelled
-    // numbers in an order-only relation.
-    expect(indexSource).toContain("exactLiteral(r.reason");
-    expect(indexSource).toContain("Server reason:");
-  });
-
-  it("builds the memory_stats domain line with the tested assembler", () => {
-    expect(indexSource).toContain("formatDomainList(r?.domains)");
-  });
-
-  it("names the wiped domain exactly on BOTH destructive branches", () => {
-    expect(indexSource).toContain("domainPhrase(wiped");
-    // zero-row branch, success branch, and the assignment itself.
-    expect((indexSource.match(/wipedName/g) ?? []).length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("wires the escape legend into every message that can name a store", () => {
-    // read (filtered-empty, empty, results), recent (empty), stats,
-    // delete_domain (zero, success). The recent RESULTS page carries it from
-    // src/render.ts, which is tested there.
-    expect((indexSource.match(/withDomainEscapeLegend\(/g) ?? []).length).toBeGreaterThanOrEqual(
-      6,
-    );
   });
 });

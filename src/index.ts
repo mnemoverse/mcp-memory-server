@@ -197,7 +197,12 @@ function capResult(
 // clients that surface MCP instructions — it is the single highest-leverage
 // teaching surface this server has. Kept in src/teaching.ts so tests can
 // assert its polarity/length without booting the server.
-const server = new McpServer(
+//
+// EXPORTED so a test can connect a real MCP client to this exact server over
+// the SDK's in-memory transport and invoke the tools (test/harness.ts). Nothing
+// on the published CLI path reads this binding — see the note at the bottom of
+// the file for why the export alone is not enough, and what the CLI still does.
+export const server = new McpServer(
   {
     name: "mnemoverse-memory",
     version: pkg.version,
@@ -1329,12 +1334,47 @@ server.registerTool(
 
 // --- Start ---
 
+/**
+ * Opening the stdio transport at import time is what made every user-visible
+ * sentence in this file untestable: a test that imports this module to reach a
+ * handler instead starts a server on the test runner's stdin/stdout. So the copy
+ * was guarded by regexes over this source text — and three review rounds each
+ * found false sentences a behavioural test would have caught immediately, twice
+ * in a guard that turned out to be theatre.
+ *
+ * The seam is one boolean, and its DEFAULT is today's behaviour.
+ *
+ * WHY AN ENV OPT-OUT AND NOT `import.meta.url === process.argv[1]`. That
+ * comparison is the usual "am I the entry point?" idiom and it is the wrong tool
+ * here, because this package ships as an npm `bin`. Under `npx` — the canonical
+ * install, pinned in src/configs/source.json and in every README snippet — the
+ * thing on argv[1] is the generated shim, not this file; on Windows it is a
+ * `.cmd`/`.ps1` wrapper, and even the POSIX shim is a symlink whose realpath
+ * resolution differs between package managers. Every one of those makes the
+ * comparison FALSE for a real user, and a false comparison there does not throw:
+ * the process would exit 0 having started no server, and the client would report
+ * a silent connection failure with nothing in the logs. That is a worse defect
+ * than the one being fixed. The env var inverts the risk — it can only misfire
+ * for something that deliberately sets it, and no released version reads it, so
+ * no existing config can carry it.
+ *
+ * The check is `=== "1"`, deliberately narrow rather than truthy: the failure
+ * mode of a wide check is a startup that silently does nothing, so an
+ * unrecognised value must fall through to starting the server.
+ *
+ * BYTE-IDENTICAL CLI BEHAVIOUR: with the variable unset (or set to anything
+ * other than "1"), `main()` is called exactly as before, with the same catch,
+ * the same message and the same exit code. The only other change to this module
+ * is the `export` on `server`, which is inert when the file is run as a program.
+ */
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((err) => {
-  console.error("MCP server error:", err);
-  process.exit(1);
-});
+if (process.env.MNEMOVERSE_MCP_NO_AUTOSTART !== "1") {
+  main().catch((err) => {
+    console.error("MCP server error:", err);
+    process.exit(1);
+  });
+}
