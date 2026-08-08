@@ -108,11 +108,11 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite also grew from 60 tests to 241 (the number in this paragraph was
+The suite also grew from 60 tests to 279 (the number in this paragraph was
 written as 116 while the count was 119, then the naming fix added 70 more, then
-the harness below replaced 17 and added 41, then the knowledge fix added 28 — a
-countable claim nobody was counting), and the ones that mattered most were
-replaced rather than added to.
+the harness below replaced 17 and added 41, then the knowledge fix added 28, then
+the assembled-answer file added 38 — a countable claim nobody was counting), and
+the ones that mattered most were replaced rather than added to.
 The wire contract is now pinned by calling the real body builders
 (`src/requests.ts`) and comparing against 0.8.0's bodies for every domain shape —
 whitespace, non-breaking and zero-width spaces, padded room addresses. The guard
@@ -163,6 +163,25 @@ and that a parameter reaching the wire under the right key carries the right
 VALUE, which the previous tripwire could not see at all. Each of these was
 fire-tested: eleven separate sabotages of `src/index.ts` and `src/requests.ts`,
 every one caught, each by the test that names it.
+
+One thing still had no test: the CONCATENATION. Every clause above is checked on
+its own, and the defects a review kept finding were in the joins — a sentence
+telling the reader they were caught up followed by one explaining that the first
+was meaningless, a head promising "that is not the whole picture:" with nothing
+after the colon, a first-contact greeting printed above an admission that the room
+list could not be fetched. Each individual clause in those answers was true.
+`test/assembled.test.ts` therefore asserts PROPERTIES of the finished string, over
+34 situations — the ones named in the incident and the ones only the matrix
+reaches: no absence claimed beyond the scope that was searched, nothing left
+dangling, one emptiness explained once, every named store reproducible
+byte-for-byte, and generic advice never standing in front of a specific diagnosis
+(an admission is not a diagnosis and is exempt). Five sabotages, five RED runs:
+advice put back in front of the name diagnosis (5 failed), the sanitiser back on
+the searched name (1), the greeting made reachable on an unanswered room probe (4,
+including the cross-situation check that exactly ONE answer may say the memory has
+never been written to), the disclosure dropped from behind the colon — the live
+bug's exact shape (3) — and an admission APPENDED to a definitive claim instead of
+replacing it, which is the move this release made twice before it was caught (3).
 
 There is no change to what the published CLI does. The seam is one strict check —
 `MNEMOVERSE_MCP_NO_AUTOSTART === "1"`, set only by the harness — and it defaults
