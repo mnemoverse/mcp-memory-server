@@ -69,6 +69,14 @@ export function scopeLabel(searched: string | undefined): string {
  * `since` is ahead of now, say so and show the current time; that is the whole
  * diagnosis, and the caller cannot reach it from "nothing new".
  *
+ * The explaining clause claims a fact about TIME, never about any store. It
+ * used to read "nothing has been written after it YET" — an absence claim over
+ * EVERY store, printed directly above the scope disclosure admitting a room
+ * went unsearched, and premised on an admittedly-approximate client clock
+ * (review, 2026-08-08). The window is empty because it asks for entries newer
+ * than a moment that has not happened; what any store holds is not this note's
+ * to assert.
+ *
  * `nowMs` is injected so the note is testable without freezing the clock.
  */
 export function futureSinceNote(since: string | undefined, nowMs: number): string {
@@ -76,8 +84,9 @@ export function futureSinceNote(since: string | undefined, nowMs: number): strin
   const t = parseAsUtc(since);
   if (t === null || t <= nowMs) return "";
   return (
-    `\n\nNote: that watermark is in the FUTURE — nothing has been written after it YET, ` +
-    `so an empty result here says nothing about whether you are caught up. ` +
+    `\n\nNote: that watermark is in the FUTURE — it asks for entries newer than a ` +
+    `moment that has not happened yet, so an empty result here says nothing about ` +
+    `whether you are caught up. ` +
     `This client's clock reads ${new Date(nowMs).toISOString().slice(0, 16)}Z ` +
     `(the server's may differ slightly). Check the watermark you passed — a timezone ` +
     `slip is the usual cause.`
@@ -121,9 +130,14 @@ function parseAsUtc(iso: string): number | null {
  *      both names can be printed reproducibly — the casing slip that silently
  *      forks a namespace, which is the one miss a reader can act on
  *      (dogfood, 2026-08-07);
- *   2. otherwise a NAME-FREE statement that no store carries that exact name,
- *      which is always safe to say and must never go quiet — silence here is
- *      byte-identical to "the store is there, your query merely missed".
+ *   2. otherwise a NAME-FREE statement that no store OF THE CALLER'S OWN
+ *      carries that exact name — bounded to its evidence: `/memory/stats.domains`
+ *      covers the caller's own org bucket only, so rooms and other principals'
+ *      stores are invisible to it and the sentence may not claim them (review,
+ *      2026-08-08; the destructive sibling in index.ts already said "in your
+ *      own store"). It is always safe to say and must never go quiet — silence
+ *      here is byte-identical to "the store is there, your query merely
+ *      missed".
  *
  * Deliberately conservative: only case differs. A whitespace or zero-width twin
  * (`" engineering"` beside `"engineering"`) is NOT diagnosed here — extending the
@@ -183,10 +197,12 @@ export function noSuchDomainNote(
   // match for every name starting with that letter. This module's own contract
   // says a wrong guess is worse than silence, because the reader trusts it.
   //
-  // The absence claim is narrowed too: names match byte-for-byte, so a store
+  // The absence claim is narrowed twice: names match byte-for-byte, so a store
   // whose name carries a leading space or a zero-width character is real but
-  // unreachable from a clean spelling. Hence "no store with that exact name",
-  // never "no such store".
+  // unreachable from a clean spelling — hence "that exact name", never "no such
+  // store". And it is bounded to the caller's OWN stores, because that is all
+  // the evidence covers: the known list is `/memory/stats.domains`, which
+  // reports one org bucket and sees no room and no other principal's store.
   //
   // NO pointer to memory_stats here, and the reason has CHANGED. A previous
   // draft ended "— memory_stats quotes each name so you can see them", and that
@@ -200,7 +216,7 @@ export function noSuchDomainNote(
   // test/scope.test.ts until someone decides. What must not come back is a
   // pointer to a surface that cannot answer.
   return (
-    `\n\nNo store has that exact name. Names match byte-for-byte, so a stray space, ` +
+    `\n\nNo store of your own has that exact name. Names match byte-for-byte, so a stray space, ` +
     `a different case, or an invisible character makes a separate store — one that ` +
     `exists and holds its own memories.`
   );
@@ -559,9 +575,9 @@ function unchecked(
  * — that exclusion is the whole reason this release exists. `memory_stats`
  * reports the caller's own org bucket only, and not one of an account's twelve
  * live rooms appears in its domain list, so probing it for an `xroom:` address
- * would confidently answer "No store has that exact name" about a room the
- * caller is a member of: the false-absence claim being fixed, reintroduced by
- * the fix (CodeRabbit, #65).
+ * would confidently answer "No store of your own has that exact name" about a
+ * room the caller is a member of: the false-absence claim being fixed,
+ * reintroduced by the fix (CodeRabbit, #65).
  *
  * The argument is the RAW value that was sent, never a trimmed copy. A read on
  * `" engineering"` searched the padded store while a trimmed diagnosis checked

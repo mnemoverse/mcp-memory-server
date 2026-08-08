@@ -223,7 +223,7 @@ describe("an empty answer describes the scope it searched", () => {
     });
 
     expect(mcp.requestTo(READ).body).toMatchObject({ domain: " engineering" });
-    expect(text).toContain("No store has that exact name.");
+    expect(text).toContain("No store of your own has that exact name.");
     expect(text).toContain("a stray space, a different case, or an invisible character");
     // The SPECIFIC diagnosis replaces the generic advice rather than following
     // it: a model reading top-down used to go widen a query against a store that
@@ -255,15 +255,15 @@ describe("an empty answer describes the scope it searched", () => {
 
     expect(mcp.requestTo(RECENT).body).toMatchObject({ domain: " engineering" });
     expect(text).toContain('No memories in " engineering" yet.');
-    expect(text).toContain("No store has that exact name.");
+    expect(text).toContain("No store of your own has that exact name.");
   });
 
   it("a room address is checked against the ROOM list, never against stats", async () => {
     // CodeRabbit #65: memory_stats reports personal domains only, so probing it
-    // for an `xroom:` address would answer "No store has that exact name" about
-    // a room that exists and that the caller is a member of — the false-absence
-    // claim this release exists to fix, reintroduced by the fix. A source test
-    // cannot see which probe a branch consults.
+    // for an `xroom:` address would answer "No store of your own has that exact
+    // name" about a room that exists and that the caller is a member of — the
+    // false-absence claim this release exists to fix, reintroduced by the fix.
+    // A source test cannot see which probe a branch consults.
     mcp.on(READ, { items: [] }).on(ROOMS, [ROOM]);
 
     const text = await mcp.callText("memory_read", {
@@ -275,7 +275,9 @@ describe("an empty answer describes the scope it searched", () => {
     expect(probed()).not.toContain(STATS);
     expect(text).toContain("That room is not in your list");
     expect(text).toContain("memory_list_rooms shows the ones you can read.");
-    expect(text).not.toContain("No store has that exact name");
+    // Broad on purpose: no spelling of the domain-absence claim, qualified or
+    // not, belongs in an answer about a room.
+    expect(text).not.toMatch(/No store/);
     // And the absence is not blamed on the address or the membership alone: a
     // room the caller merely JOINED drops out of core's list the moment its owner
     // archives it, so those two causes were not the only two.
@@ -366,6 +368,35 @@ describe("an empty answer describes the scope it searched", () => {
 
     expect(text).toContain("that watermark is in the FUTURE");
     expect(text).toContain("says nothing about whether you are caught up");
+    // The note explains why the WINDOW is empty — a claim about time — and
+    // asserts nothing about what any store holds. "nothing has been written
+    // after it yet" was an absence claim over every store, printed in the same
+    // answer that may be admitting a room went unsearched.
+    expect(text).toContain("a moment that has not happened yet");
+    expect(text).not.toMatch(/nothing has been written/i);
+  });
+
+  it("the feed head is chosen by EVERY narrowing filter, not by `since` alone", async () => {
+    // The 0.8.1 release-critical find: {until} alone and {exclude_author}
+    // alone fell into "No memories in your own domains yet." — a store with a
+    // thousand atoms after 2020 told it holds none — and {since, until} kept
+    // the watermark phrasing, which pretends the read reached the present when
+    // `until` stopped it years short (review, 2026-08-08).
+    for (const args of [
+      { until: "2020-01-01T00:00:00Z" },
+      { exclude_author: "user_someone_else" },
+      { since: "2020-01-01T00:00:00Z", until: "2021-01-01T00:00:00Z" },
+    ]) {
+      mcp.reset().on(RECENT, { items: [] }).on(ROOMS, [ROOM]);
+
+      const text = await mcp.callText("memory_list_recent", args);
+
+      expect(text, JSON.stringify(args)).toContain(
+        "Nothing in your own domains matches within the given time/author filters.",
+      );
+      expect(text, JSON.stringify(args)).not.toMatch(/No memories in .* yet/);
+      expect(text, JSON.stringify(args)).not.toContain("since your watermark");
+    }
   });
 });
 
@@ -484,7 +515,7 @@ describe("an unreadable or unreachable probe is reported as unknown, not as abse
       domain: "engineering",
     });
 
-    expect(text).not.toContain("No store has that exact name");
+    expect(text).not.toMatch(/No store/);
     expect(text).toContain(NO_MATCH_MESSAGE + NO_MATCH_SCOPED_HINT);
     expect(text).toMatch(/could not be checked/);
     expect(text).toMatch(/shape this client does not recognise/);
@@ -500,7 +531,7 @@ describe("an unreadable or unreachable probe is reported as unknown, not as abse
 
     expect(text).toMatch(/could not be checked/);
     expect(text).toMatch(/could not be fetched just now/);
-    expect(text).not.toContain("No store has that exact name");
+    expect(text).not.toMatch(/No store/);
   });
 
   it("a room address is not declared absent from a room list that could not be read", async () => {

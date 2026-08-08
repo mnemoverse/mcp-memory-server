@@ -462,9 +462,9 @@ server.registerTool(
 
     if (items.length === 0 && (since || until || exclude_author)) {
       // A bounded/filtered read that finds nothing is NOT a bad query —
-      // the truthful answer is "nothing new for these filters" (mirrors
-      // memory_list_recent's empty copy; no stats probe, no broaden hint).
-      // Unscoped, it also has to name the rooms it never looked in.
+      // the truthful answer is "nothing new for these filters" (the feed's
+      // filtered head uses the same sentence; no stats probe, no broaden
+      // hint). Unscoped, it also has to name the rooms it never looked in.
       const scopeNote = readScopeNote(await probeScope(searched));
       return {
         content: [
@@ -656,26 +656,38 @@ server.registerTool(
 
     const items = Array.isArray(r?.items) ? r.items : [];
     if (items.length === 0) {
-      // THE SENTENCE ITSELF carries the scope. Both of these were unchanged
-      // from 0.8.0 through two passes of this release — and
-      // "Nothing new since your watermark." is the exact sentence src/scope.ts
-      // was written to eliminate. Appending a note to it produced two voices:
-      // one telling the reader they were caught up, the next explaining that
-      // the first was meaningless. Naming the scope inside the clause makes it
-      // true on its own, and the note becomes an addition rather than a
-      // retraction (review, 2026-08-08).
+      // THE SENTENCE ITSELF carries the scope — and it is selected by EVERY
+      // filter that narrowed the window, not by `since` alone.
+      //
+      // Two prior shapes of this branch were wrong the same way. In 0.8.0 it
+      // printed "Nothing new since your watermark." with no scope in it — the
+      // sentence src/scope.ts was written to eliminate. The first fix put the
+      // scope into the clause but kept choosing BETWEEN the two heads by
+      // looking at `since` only, so {until} alone and {exclude_author} alone
+      // fell to "No memories in ${where} yet." — an emptiness claim about a
+      // store holding a thousand atoms outside the window — and {since, until}
+      // kept the watermark phrasing, which pretends the read reached the
+      // present when `until` stopped it years short (review, 2026-08-08).
+      //
+      // Three heads, one rule: the emptiness claim ("yet") is allowed only
+      // when NOTHING narrowed the window; the watermark phrasing only when
+      // `since` was the whole narrowing; any other filter combination gets the
+      // sentence memory_read's filtered branch uses — the filters are named as
+      // what bounded the result, and nothing is claimed beyond them.
       const scopeNote = readScopeNote(await probeScope(searched));
       const where = scopeLabel(searched);
+      const head =
+        since && !until && !exclude_author
+          ? `Nothing new in ${where} since your watermark.`
+          : since || until || exclude_author
+            ? `Nothing in ${where} matches within the given time/author filters.`
+            : `No memories in ${where} yet.`;
       return {
         content: [
           {
             type: "text" as const,
             text: withDomainEscapeLegend(
-              (since
-                ? `Nothing new in ${where} since your watermark.`
-                : `No memories in ${where} yet.`) +
-                futureSinceNote(since, Date.now()) +
-                scopeNote,
+              head + futureSinceNote(since, Date.now()) + scopeNote,
               searched,
             ),
           },

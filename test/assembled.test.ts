@@ -145,9 +145,12 @@ const COULD_NOT_LOOK = [
   /cannot say whether any room went unsearched/i,
 ];
 
-/** Absence asserted definitively about a named thing. */
+/** Absence asserted definitively about a named thing. The domain-absence
+ *  pattern is broad on purpose: the current sentence carries the "of your own"
+ *  qualifier (its evidence is the caller's own org bucket), and an unqualified
+ *  respelling must count as the same assertion, not slip past the property. */
 const DEFINITE_ABSENCE = [
-  /No store has that exact name/,
+  /No store (?:of your own )?has that exact name/,
   /is not in your list/,
   /You have no shared rooms yet/,
 ];
@@ -160,7 +163,7 @@ const DEFINITE_ABSENCE = [
  * added to it.
  */
 const SPECIFIC_DIAGNOSIS = [
-  /No store has that exact name/,
+  /No store (?:of your own )?has that exact name/,
   /is not the same store as/,
   /is not in your list/,
 ];
@@ -545,10 +548,13 @@ const SITUATIONS: readonly Situation[] = [
     routes: { [READ]: { items: [] }, [STATS]: { domains: ["engineering"] } },
     bounds: { surface: "empty-read", searched: "marketing", mustNotProbe: [ROOMS] },
     meaning(text) {
-      expect(text).toContain("No store has that exact name.");
-      // The absence is narrowed to what is knowable: names match byte-for-byte,
-      // so a store can exist and be unreachable from a clean spelling. Hence
-      // "no store with that exact name", never "no such store".
+      // The absence is narrowed to what is knowable, twice. Names match
+      // byte-for-byte, so a store can exist and be unreachable from a clean
+      // spelling — hence "that exact name", never "no such store". And the
+      // evidence is /memory/stats.domains, which reports the caller's OWN org
+      // bucket only, so the claim carries the "of your own" qualifier the
+      // destructive sibling always had (review, 2026-08-08).
+      expect(text).toContain("No store of your own has that exact name.");
       expect(text).toMatch(/byte-for-byte/);
       expect(text).not.toMatch(/no such (store|domain)/i);
     },
@@ -564,7 +570,7 @@ const SITUATIONS: readonly Situation[] = [
     bounds: { surface: "empty-read", searched: "engineering", mustNotProbe: [ROOMS] },
     meaning(text) {
       expect(mcp.requestTo(READ).body).toMatchObject({ domain: "engineering" });
-      expect(text).toContain("No store has that exact name.");
+      expect(text).toContain("No store of your own has that exact name.");
       // The mechanism is named — a stray space makes a separate store — and the
       // padded twin is NOT named, because `noSuchDomainNote` only claims an
       // exact case-insensitive match and " engineering" is not one. A guess that
@@ -587,7 +593,7 @@ const SITUATIONS: readonly Situation[] = [
       // matched and this sentence would be suppressed — precisely when a stray
       // space had caused the miss.
       expect(mcp.requestTo(READ).body).toMatchObject({ domain: " engineering" });
-      expect(text).toContain("No store has that exact name.");
+      expect(text).toContain("No store of your own has that exact name.");
     },
   },
   {
@@ -611,8 +617,9 @@ const SITUATIONS: readonly Situation[] = [
       expect(text).toMatch(/could not be fetched just now/);
       expect(text).toMatch(/not evidence that the name is wrong/);
       // And the definitive claim is gone: appending the admission to it instead
-      // of replacing it is the exact mistake this release made twice.
-      expect(text).not.toContain("No store has that exact name");
+      // of replacing it is the exact mistake this release made twice. Broad on
+      // purpose — no spelling of the absence claim, qualified or not.
+      expect(text).not.toMatch(/No store/);
     },
   },
   {
@@ -626,7 +633,7 @@ const SITUATIONS: readonly Situation[] = [
     bounds: { surface: "empty-read", searched: "engineering", mustNotProbe: [ROOMS] },
     meaning(text) {
       expect(text).toMatch(/shape this client does not recognise/);
-      expect(text).not.toContain("No store has that exact name");
+      expect(text).not.toMatch(/No store/);
       // A 200 with total_atoms and no domains list is a body that is not core's.
       // Reading it as an empty domain list is how a contract violation became a
       // definitive claim about the caller's stores.
@@ -648,7 +655,7 @@ const SITUATIONS: readonly Situation[] = [
     },
     meaning(text) {
       expect(text).not.toMatch(/is not in your list/);
-      expect(text).not.toContain("No store has that exact name");
+      expect(text).not.toMatch(/No store/);
       // The one piece of advice that must never appear for a room: dropping the
       // domain is the single move guaranteed to lose the content, because an
       // unscoped read does not cover rooms at all.
@@ -704,7 +711,7 @@ const SITUATIONS: readonly Situation[] = [
     meaning(text) {
       expect(mcp.requestTo(RECENT).body).toMatchObject({ domain: CYRILLIC });
       expect(text).toContain(`No memories in "${CYRILLIC}" yet.`);
-      expect(text).toContain("No store has that exact name.");
+      expect(text).toContain("No store of your own has that exact name.");
     },
   },
   {
@@ -721,6 +728,12 @@ const SITUATIONS: readonly Situation[] = [
       expect(text).toMatch(/that watermark is in the FUTURE/);
       expect(text).toMatch(/says nothing about whether you are caught up/);
       expect(text).toMatch(/1 room went unsearched/);
+      // The note's explaining clause is a claim about TIME, not about any
+      // store: "nothing has been written after it yet" asserted absence over
+      // every store — including the room this same answer admits it never
+      // searched — from an admittedly-approximate client clock.
+      expect(text).toContain("a moment that has not happened yet");
+      expect(text).not.toMatch(/nothing has been written/i);
       expect(text.indexOf("FUTURE")).toBeLessThan(text.indexOf(SCOPE_DISCLOSURE));
       // Naive ISO is UTC, as core's schema and this client's own tool
       // descriptions say. Parsing it as LOCAL made this note lie in both
@@ -754,6 +767,23 @@ const SITUATIONS: readonly Situation[] = [
     bounds: { surface: "empty-read", searched: "xroom:room_01ABC", mustNotProbe: [STATS] },
     meaning(text) {
       expect(text).toBe("No memories in that room yet.");
+    },
+  },
+  {
+    id: "j3",
+    what:
+      "memory_list_recent scoped to a room with an `until` bound — a closed window " +
+      "over a room with history must not read as an empty room",
+    tool: "memory_list_recent",
+    args: { domain: "xroom:room_01ABC", until: "2020-01-01T00:00:00Z" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", searched: "xroom:room_01ABC", mustNotProbe: [STATS] },
+    meaning(text) {
+      // The head is chosen by EVERY narrowing filter, not by `since` alone:
+      // selecting on `since` sent {domain, until} to "No memories in that room
+      // yet." — an emptiness claim about a room whose whole history sits after
+      // the bound (review, 2026-08-08).
+      expect(text).toBe("Nothing in that room matches within the given time/author filters.");
     },
   },
   {
@@ -961,6 +991,66 @@ const SITUATIONS: readonly Situation[] = [
     },
   },
   {
+    id: "q",
+    what:
+      "feed bounded by `until` alone — a store with a thousand atoms after the bound " +
+      "must not be told it holds none",
+    tool: "memory_list_recent",
+    args: { until: "2020-01-01T00:00:00Z" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", mustNotProbe: [STATS] },
+    meaning(text) {
+      // The release-critical find of the 0.8.1 truth review: the head was
+      // selected by `since` alone, so {until} fell to "No memories in your own
+      // domains yet." — an emptiness claim the read never established, because
+      // everything newer than the bound was outside the window it searched.
+      expect(text).toContain(
+        "Nothing in your own domains matches within the given time/author filters.",
+      );
+      expect(text).not.toMatch(/No memories in .* yet/);
+      expect(text).not.toContain("since your watermark");
+    },
+  },
+  {
+    id: "q2",
+    what: "feed narrowed by `exclude_author` alone — filtered, not empty",
+    tool: "memory_list_recent",
+    args: { exclude_author: "user_someone_else" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", mustNotProbe: [STATS] },
+    meaning(text) {
+      // Same defect, third spelling: an author filter narrowed the window, so
+      // "yet" — the claim that nothing has ever been written here — is not
+      // establishable from this result.
+      expect(text).toContain(
+        "Nothing in your own domains matches within the given time/author filters.",
+      );
+      expect(text).not.toMatch(/No memories in .* yet/);
+    },
+  },
+  {
+    id: "r",
+    what:
+      "feed with since AND until — a closed window; the watermark phrasing would " +
+      "pretend the read reached the present",
+    tool: "memory_list_recent",
+    args: { since: "2020-01-01T00:00:00Z", until: "2021-01-01T00:00:00Z" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", mustNotProbe: [STATS] },
+    meaning(text) {
+      // "Nothing new … since your watermark." reads as "you are caught up to
+      // now", and `until` may have stopped the read years short of now — there
+      // can be a year of newer entries outside the window. The watermark
+      // phrasing is reserved for the one case where `since` is the whole
+      // narrowing.
+      expect(text).toContain(
+        "Nothing in your own domains matches within the given time/author filters.",
+      );
+      expect(text).not.toContain("since your watermark");
+      expect(text).not.toMatch(/No memories in .* yet/);
+    },
+  },
+  {
     id: "t",
     what: "filtered read scoped to an absent domain — head names the scope, note diagnoses it",
     tool: "memory_read",
@@ -969,7 +1059,7 @@ const SITUATIONS: readonly Situation[] = [
     bounds: { surface: "empty-read", searched: "marketing", mustNotProbe: [ROOMS] },
     meaning(text) {
       expect(text).toContain('Nothing in "marketing" matches within the given time/author filters.');
-      expect(text).toContain("No store has that exact name.");
+      expect(text).toContain("No store of your own has that exact name.");
       // A bounded read that finds nothing is not a bad query, so this branch
       // makes no stats call for the total — only the one that checks the name.
       expect(mcp.calls.filter((c) => c.key === STATS)).toHaveLength(1);
@@ -987,10 +1077,12 @@ const SITUATIONS: readonly Situation[] = [
     meaning(text) {
       expect(text).toContain('Nothing new in "marketing" since your watermark.');
       expect(text).toMatch(/that watermark is in the FUTURE/);
-      expect(text).toContain("No store has that exact name.");
+      expect(text).toContain("No store of your own has that exact name.");
       // Two independent faults, each named once, in the order a reader can act
       // on them. Neither retracts the other.
-      expect(text.indexOf("FUTURE")).toBeLessThan(text.indexOf("No store has that exact name"));
+      expect(text.indexOf("FUTURE")).toBeLessThan(
+        text.indexOf("No store of your own has that exact name"),
+      );
     },
   },
   {
