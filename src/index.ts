@@ -21,6 +21,7 @@ import {
   unsearchedRoomsNote,
   futureSinceNote,
   nearestDomainNote,
+  scopeLabel,
 } from "./scope.js";
 import {
   readRequestBody,
@@ -28,24 +29,12 @@ import {
   writeRequestBody,
   searchedScope,
 } from "./requests.js";
-
-/**
- * How to NAME the scope inside a sentence, so the sentence is true on its own
- * rather than corrected by a paragraph underneath it.
- *
- * "Nothing new since your watermark." was left untouched by the first two
- * passes of this release — the very sentence src/scope.ts's header names as the
- * lie that cost two agents a day. A note was appended to it instead, so the
- * assembled answer read as two voices: one asserting you were caught up, the
- * next saying that assertion was meaningless. The sibling branch in
- * memory_read had it right all along by naming its filters inside the sentence
- * (review, 2026-08-08).
- */
-function scopeLabel(searched: string | undefined): string {
-  if (!searched) return "your own domains";
-  if (searched.startsWith("xroom:")) return "that room";
-  return `"${safeInline(searched)}"`;
-}
+import {
+  domainPhrase,
+  exactLiteral,
+  formatDomainList,
+  withDomainEscapeLegend,
+} from "./names.js";
 
 /**
  * On an empty SCOPED result, say whether the domain name is a casing slip or is
@@ -83,7 +72,7 @@ async function domainMissNote(domain: string): Promise<string> {
     const s = await apiFetch<{ domains?: string[] }>("/memory/stats");
     const known = Array.isArray(s?.domains) ? s.domains : [];
     if (known.includes(domain)) return "";
-    return nearestDomainNote(domain, known, safeInline);
+    return nearestDomainNote(domain, known);
   } catch {
     return "";
   }
@@ -184,14 +173,22 @@ function capResult(
 }
 
 /**
- * Sanitize an untrusted string for safe inline rendering in tool output that a
- * DIFFERENT principal's LLM will read (CN-032 anti-injection). A room name is
- * chosen by the room OWNER but surfaced to a JOINER's assistant on join/invite;
- * core only trims whitespace on it, so quotes/colons/newlines pass. Strip to a
- * conservative charset and collapse whitespace, then cap length. Same treatment
- * `formatAuthorTag` already applies to a server-stamped author.
- * Implementation lives in src/render.ts (shared with the item renderers,
- * testable there); re-imported here for the 15 other call sites.
+ * Two renderers, and which one a value gets is a decision, not a style choice.
+ *
+ * `safeInline` (src/render.ts) SANITISES an untrusted display string for inline
+ * rendering in tool output that a DIFFERENT principal's LLM will read (CN-032
+ * anti-injection). A room name is chosen by the room OWNER but surfaced to a
+ * JOINER's assistant on join/invite; core only trims whitespace on it, so
+ * quotes/colons/newlines pass. Strip to a conservative charset, collapse
+ * whitespace, cap the length. Same treatment `formatAuthorTag` applies to a
+ * server-stamped author. It is lossy on purpose, and everything it renders here
+ * is a value the reader looks at and never has to retype.
+ *
+ * `exactLiteral` / `domainPhrase` (src/names.ts) print a value the reader must
+ * be able to REPRODUCE — a domain name, which the engine matches byte-for-byte
+ * — as a JSON string literal, or refuse to print it. Using safeInline for those
+ * is what this change fixes: it erased exactly the differences (a leading
+ * space, a non-Latin alphabet) that make two stores two stores.
  */
 
 // --- Server setup ---
@@ -284,6 +281,18 @@ server.registerTool(
     const importance =
       typeof r?.importance === "number" ? r.importance.toFixed(2) : "unknown";
 
+    // `Server reason:` is a VERBATIM label, and safeInline made it a lie on
+    // every occurrence: core's only rejection reason is
+    // "Below importance threshold (0.412 < 0.500)", whose parentheses and `<`
+    // are outside the sanitiser's charset — so the relay read "Below importance
+    // threshold 0.412 0.500", with the comparison operator and both delimiters
+    // deleted and the two numbers left unlabelled and order-only. Quoted
+    // exactly instead (src/names.ts). If it will not fit, say THAT rather than
+    // drop the clause: omitting it would report a server that gave no reason.
+    const reasonQuote = r?.reason
+      ? (exactLiteral(r.reason, 400)?.literal ?? "(too long to quote exactly)")
+      : "";
+
     if (r?.stored) {
       return {
         content: [
@@ -332,7 +341,7 @@ server.registerTool(
           // file's own delete message says (reviews, 2026-08-08).
           text:
             `NOT STORED — nothing was saved.` +
-            (r?.reason ? ` Server reason: ${safeInline(r.reason, 200)}.` : ``) +
+            (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
             (importance === "unknown" ? `` : ` Novelty score ${importance}.`) +
             ` Writes are gated on how much a memory adds over what is already in the` +
             ` same domain, so a near-duplicate is refused. If the point is genuinely` +
@@ -462,13 +471,19 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text:
-              // The scope is IN the sentence, not appended after it. This
-              // branch was already the honest one in 0.8.0 — it names its
-              // filters — and it is the model the feed's copy now follows.
+            // The scope is IN the sentence, not appended after it. This
+            // branch was already the honest one in 0.8.0 — it names its
+            // filters — and it is the model the feed's copy now follows.
+            //
+            // The legend wraps the WHOLE message and is added at most once:
+            // `scopeNote` may itself have named a store (a case-twin), and one
+            // explanation of the escaping per answer is the point of it.
+            text: withDomainEscapeLegend(
               `Nothing in ${scopeLabel(searched)} matches within the given time/author filters.` +
-              futureSinceNote(since, Date.now()) +
-              scopeNote,
+                futureSinceNote(since, Date.now()) +
+                scopeNote,
+              searched,
+            ),
           },
         ],
       };
@@ -514,7 +529,12 @@ server.registerTool(
             searched === undefined && rooms.roomsFound,
           );
       return {
-        content: [{ type: "text" as const, text: text + scopeNote }],
+        content: [
+          {
+            type: "text" as const,
+            text: withDomainEscapeLegend(text + scopeNote, searched),
+          },
+        ],
       };
     }
 
@@ -533,7 +553,11 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(text),
+          // Each line's `@"domain"` tag is an exact literal; the legend that
+          // explains an escape belongs to the answer, not to twenty tags.
+          text: capResult(
+            withDomainEscapeLegend(text, ...items.map((it) => it?.domain)),
+          ),
         },
       ],
     };
@@ -655,12 +679,14 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text:
+            text: withDomainEscapeLegend(
               (since
                 ? `Nothing new in ${where} since your watermark.`
                 : `No memories in ${where} yet.`) +
-              futureSinceNote(since, Date.now()) +
-              scopeNote,
+                futureSinceNote(since, Date.now()) +
+                scopeNote,
+              searched,
+            ),
           },
         ],
       };
@@ -812,17 +838,20 @@ server.registerTool(
     const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
     const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
 
-    // Quoting was added here to make a leading space visible, and REMOVED
-    // again once a review showed it cannot: safeInline collapses and trims
-    // whitespace before the quotes go on, so " engineering" and "engineering"
-    // render identically and the list reads like a tool bug. Revealing
-    // whitespace needs escaping rather than quoting, which is a real change
-    // with its own edge cases — deferred to 0.9 rather than shipped as a fix
-    // that isn't one (reviews, 2026-08-08).
-    const domains =
-      Array.isArray(r?.domains) && r.domains.length > 0
-        ? r.domains.map((d) => safeInline(d)).join(", ")
-        : "none reported";
+    // THE surface two other tool descriptions send the reader to "to confirm
+    // the exact domain name before a delete" — so it has to be able to answer
+    // that, and until now it could not.
+    //
+    // Quoting was tried, then withdrawn as a fix that wasn't one: safeInline
+    // collapses and trims whitespace BEFORE the quotes go on, so " engineering"
+    // and "engineering" printed identically and the list read like a tool bug.
+    // The conclusion drawn then — "revealing whitespace needs escaping rather
+    // than quoting" — was right; this is that escaping. Each name is a JSON
+    // string literal, so a leading space, a no-break space, a newline and a
+    // zero-width character are all visible, Cyrillic stays Cyrillic, and two
+    // different names can no longer print as one. Assembly lives in
+    // src/names.ts, where it is unit-tested against those exact inputs.
+    const domains = formatDomainList(r?.domains);
 
     const text = [
       `Memories: ${num(r?.total_atoms)} (${num(r?.episodes)} episodes, ${num(r?.prototypes)} prototypes)`,
@@ -833,7 +862,21 @@ server.registerTool(
       "Counts cover your own domains. Shared rooms are separate stores and are not included — see memory_list_rooms.",
     ].join("\n");
 
-    return { content: [{ type: "text" as const, text }] };
+    return {
+      content: [
+        {
+          type: "text" as const,
+          // Array.isArray, not `?? []`: `domains` is typed as a string[] but
+          // arrives over the wire, and spreading a non-iterable object would
+          // throw here — turning a malformed payload into a dead tool instead
+          // of the "none reported" it degrades to two lines up.
+          text: withDomainEscapeLegend(
+            text,
+            ...(Array.isArray(r?.domains) ? r.domains : []),
+          ),
+        },
+      ],
+    };
   },
 );
 
@@ -940,7 +983,14 @@ server.registerTool(
     );
 
     const count = r?.deleted ?? 0;
-    const domainName = safeInline(r?.domain ?? domain);
+    // The name of a store on a DESTRUCTIVE confirmation, so it is printed
+    // exactly or not at all. safeInline named a different store than the one
+    // acted on: wiping `" project x"` confirmed `"project x"`, and the very next
+    // clause tells the reader that names match byte-for-byte. When the name
+    // cannot be reproduced the sentences fall back to naming nothing, which
+    // still leaves them true.
+    const wiped = r?.domain ?? domain;
+    const wipedName = domainPhrase(wiped, "the domain you passed");
 
     // Zero is NOT a successful wipe, and this line used to read like one.
     // Core echoes back the caller's own string, so "Deleted 0 memories from
@@ -955,11 +1005,13 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text:
-              `NOTHING was deleted — no memories matched domain "${domainName}" in your own ` +
-              `store. Names match byte-for-byte, so check the spelling and case against ` +
-              `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
-              `through this tool at all.`,
+            text: withDomainEscapeLegend(
+              `NOTHING was deleted — no memories matched domain ${wipedName} in your own ` +
+                `store. Names match byte-for-byte, so check the spelling and case against ` +
+                `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
+                `through this tool at all.`,
+              wiped,
+            ),
           },
         ],
       };
@@ -969,7 +1021,10 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain "${domainName}".`,
+          text: withDomainEscapeLegend(
+            `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain ${wipedName}.`,
+            wiped,
+          ),
         },
       ],
     };

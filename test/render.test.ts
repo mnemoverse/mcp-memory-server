@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatAuthorTag,
   formatDateTag,
+  formatDomainTag,
   formatReadItem,
   formatRecentItem,
   formatRecentPage,
@@ -113,5 +114,96 @@ describe("author/date/sanitizer edges", () => {
   it("safeInline keeps the CN-032 charset/cap contract", () => {
     expect(safeInline("  a   b  ", 200)).toBe("a b");
     expect(safeInline("x".repeat(300), 200)).toHaveLength(200);
+  });
+});
+
+/**
+ * The `@domain` tag exists to answer ONE question — "is this memory mine, or
+ * did it come from another store?" — after an unscoped search returned five
+ * different people's "Maria Chen" from five projects (dogfood, 2026-08-07).
+ *
+ * It shipped rendered through `safeInline`, which erases exactly the
+ * differences it was built to show. Everything below is a case where the tag
+ * pointed at the wrong store, or at no store, or at two stores at once.
+ */
+describe("formatDomainTag", () => {
+  it("prints the domain exactly, so a padded store is not shown as the clean one", () => {
+    expect(formatDomainTag(" engineering")).toBe(' @" engineering"');
+    expect(formatDomainTag("engineering")).toBe(' @"engineering"');
+    expect(formatDomainTag(" engineering")).not.toBe(formatDomainTag("engineering"));
+  });
+
+  it("stops hiding a store called ' general' inside the default bucket", () => {
+    // The suppression test ran on the SANITISED value, so " general" became
+    // "general" and the tag disappeared — a memory from a padded store rendered
+    // as if it came from the caller's own default bucket, on the very line
+    // built to tell stores apart.
+    expect(formatDomainTag(" general")).toBe(' @" general"');
+    expect(formatDomainTag("General")).toBe(' @"General"');
+    // Only the literal default bucket is still suppressed, and that is
+    // deliberate: tagging every line "@general" is noise on the common case.
+    expect(formatDomainTag("general")).toBe("");
+    expect(formatDomainTag(undefined)).toBe("");
+    expect(formatDomainTag("")).toBe("");
+  });
+
+  it("keeps two non-Latin stores apart — they used to print as one tag", () => {
+    // safeInline's charset is ASCII \w, so both of these came out as "@:acme":
+    // the disambiguator merged the two stores it exists to separate.
+    const a = formatDomainTag("проект:acme");
+    const b = formatDomainTag("план:acme");
+    expect(a).toBe(' @"проект:acme"');
+    expect(a).not.toBe(b);
+  });
+
+  it("makes an invisible character visible instead of dropping it", () => {
+    expect(formatDomainTag("engineering\u200b")).toBe(' @"engineering\\u200b"');
+    expect(formatDomainTag("team\u00a0eng")).toBe(' @"team\\u00a0eng"');
+  });
+
+  it("renders a tag a reader can turn back into a domain argument", () => {
+    for (const domain of [
+      " engineering",
+      "проект:acme",
+      "a\nb",
+      'say "hi"',
+      "xroom:room_01ABC",
+    ]) {
+      const tag = formatDomainTag(domain);
+      expect(JSON.parse(tag.replace(" @", ""))).toBe(domain);
+    }
+  });
+
+  it("says the name is missing rather than vanishing, when it will not fit", () => {
+    // An ABSENT tag is not neutral: it means "the caller's default bucket". A
+    // name cannot be printed exactly must not be rendered as that claim.
+    const tag = formatDomainTag("x".repeat(400));
+    expect(tag).not.toBe("");
+    expect(tag).toMatch(/cannot be printed exactly/);
+    expect(tag).not.toContain("xxxx");
+  });
+
+  it("carries into the item line", () => {
+    const line = formatReadItem({ content: "x", domain: " engineering" }, 0);
+    expect(line).toContain('@" engineering"');
+  });
+});
+
+describe("the escape legend on a page", () => {
+  it("explains an escaped domain once for the whole feed, not per line", () => {
+    const page = formatRecentPage(
+      [
+        { content: "a", domain: "eng\u200b" },
+        { content: "b", domain: "eng\u200b" },
+      ],
+      null,
+    );
+    expect(page).toContain('@"eng\\u200b"');
+    expect(page.match(/printed as JSON string literals/g)).toHaveLength(1);
+  });
+
+  it("stays silent when every domain printed as itself", () => {
+    const page = formatRecentPage([{ content: "a", domain: "eng" }], null);
+    expect(page).not.toContain("JSON string literals");
   });
 });

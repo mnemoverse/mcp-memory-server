@@ -269,7 +269,13 @@ describe("boundary copy — the load-bearing sentences of 0.8.1", () => {
       "an empty feed must name the scope INSIDE the sentence, not append a note that retracts it",
       "since your watermark.`",
     ],
-    ["the scope label helper must exist", "function scopeLabel("],
+    [
+      // The helper moved to src/scope.ts in the naming fix so the sentence
+      // could be unit-tested at all (test/scope.test.ts → describe scopeLabel).
+      // What this file still has to catch is the handler dropping it.
+      "the scope must still be named INSIDE the sentence",
+      "scopeLabel(searched)",
+    ],
     [
       "a failed write must say NOTHING WAS SAVED, not merely name the mechanism",
       "NOT STORED — nothing was saved.",
@@ -315,5 +321,70 @@ describe("boundary copy — the load-bearing sentences of 0.8.1", () => {
     }
     // And the comments really do still carry the history.
     expect(indexSource).toContain("Nothing new since your watermark.");
+  });
+});
+
+/**
+ * Naming a store: the sanitiser must never be the renderer.
+ *
+ * `safeInline` is lossy and non-injective by design — it is the anti-injection
+ * treatment for a value chosen by a DIFFERENT principal (a room name, an agent
+ * name), which the reader only ever looks at. A domain name is the opposite: the
+ * engine matches it byte-for-byte, so the reader has to be able to send it back.
+ * Rendering one through the other merged `" engineering"` with `"engineering"`
+ * and printed two Cyrillic stores as one name.
+ *
+ * The renderer itself is behaviourally tested (test/names.test.ts), and so are
+ * the sentences that moved into importable modules (test/scope.test.ts,
+ * test/render.test.ts). These are source tripwires for the handlers that could
+ * not move, because importing src/index.ts opens a stdio transport. They catch
+ * the sanitiser coming back; they are not a behavioural guarantee.
+ */
+describe("naming a store", () => {
+  it("never renders a domain through safeInline", () => {
+    for (const banned of [
+      "safeInline(searched",
+      "safeInline(domain",
+      "safeInline(d)",
+      "safeInline(r?.domain",
+      "safeInline(r.reason",
+    ]) {
+      expect(indexSource, `${banned} sends a value the reader must reproduce through the sanitiser`).not.toContain(
+        banned,
+      );
+    }
+  });
+
+  it("keeps safeInline where it belongs — an owner-chosen room name", () => {
+    // The carve-out is deliberate: a room name is a different principal's
+    // string, shown to this one. Reversibility is not its requirement.
+    expect(indexSource).toContain("safeInline(r?.name");
+  });
+
+  it("relays the server's rejection reason exactly, under a label that promises it", () => {
+    // "Server reason: Below importance threshold (0.412 < 0.500)" lost its
+    // parentheses and its `<` to the sanitiser's charset, leaving two unlabelled
+    // numbers in an order-only relation.
+    expect(indexSource).toContain("exactLiteral(r.reason");
+    expect(indexSource).toContain("Server reason:");
+  });
+
+  it("builds the memory_stats domain line with the tested assembler", () => {
+    expect(indexSource).toContain("formatDomainList(r?.domains)");
+  });
+
+  it("names the wiped domain exactly on BOTH destructive branches", () => {
+    expect(indexSource).toContain("domainPhrase(wiped");
+    // zero-row branch, success branch, and the assignment itself.
+    expect((indexSource.match(/wipedName/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("wires the escape legend into every message that can name a store", () => {
+    // read (filtered-empty, empty, results), recent (empty), stats,
+    // delete_domain (zero, success). The recent RESULTS page carries it from
+    // src/render.ts, which is tested there.
+    expect((indexSource.match(/withDomainEscapeLegend\(/g) ?? []).length).toBeGreaterThanOrEqual(
+      6,
+    );
   });
 });

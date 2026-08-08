@@ -80,7 +80,7 @@ zero-width characters handled (`trim()` does not strip those).
   signal is worth surfacing and is on the 0.9 list; this is a removal until
   there is one. (An earlier draft of this entry claimed there was NO floor.
   There is one — it is simply too low to ever mean "I don't know".)
-- **Results carry their domain** (`@project:acme`). An unscoped search for a
+- **Results carry their domain** (`@"project:acme"`). An unscoped search for a
   common name returned five different people's "Maria Chen" from five projects,
   ranked together, with nothing on the line to tell them apart.
 - **Server instructions** (the string clients put in the model's system prompt)
@@ -108,7 +108,9 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite also grew from 60 tests to 116, and the two that mattered most were
+The suite also grew from 60 tests to 189 (this number was written as 116 while
+the count was 119, then the naming fix added 70 more — a countable claim nobody
+was counting), and the two that mattered most were
 replaced rather than added to. The wire contract is now pinned by calling the
 real body builders (`src/requests.ts`) and comparing against 0.8.0's bodies for
 every domain shape — whitespace, non-breaking and zero-width spaces, padded room
@@ -156,7 +158,9 @@ trim breaks 6.
   promised recovery "until it is unarchived" when core has archive with no
   inverse); and the `NOT STORED` prediction that "rewording will score the same
   or lower", which is probably backwards, since novelty falls as similarity
-  rises.
+  rises. Of the three, the FIRST was later done properly rather than left
+  withdrawn — see "a name is printed exactly, or not at all" below. The other
+  two stand withdrawn.
 - **`NOT STORED` no longer states a cause it cannot see.** A live surface answers
   `{"stored":false}` with no reason and no score; the mechanism is now named only
   when the server named it.
@@ -197,8 +201,10 @@ about exactly this failure mode and the fix committed it thirteen times.
   Removed.
 - **The domain hint lied about non-Latin names.** The sanitiser's charset is
   ASCII, so `"проект:acme"` rendered as `":acme"` and the note asserted facts
-  about a name that exists nowhere. It now stays silent whenever sanitising
-  would change the name.
+  about a name that exists nowhere. The immediate fix was to stay silent
+  whenever sanitising would change the name — which silenced the most useful
+  sentence in the module for an entire alphabet. It now NAMES the store, because
+  the renderer changed; see below.
 - **`memory_feedback`'s zero answer blamed deletion.** The tool takes no
   `domain`, and the engine defaults to `"general"` — so the ordinary way to get
   zero is rating atoms that live in a room. The atoms exist and the ids are
@@ -215,10 +221,65 @@ about exactly this failure mode and the fix committed it thirteen times.
   They are now counted with an explicit "cannot be read at all".
 - **`memory_stats` hid whitespace in domain names.** Joining bare names made a
   leading space invisible — the exact defect that creates an unreachable store —
-  so the check we point callers at could not reveal what it was for. Names are
-  now quoted.
+  so the check we point callers at could not reveal what it was for. Quoting was
+  tried and withdrawn as a fix that wasn't one; the working fix is below.
 - **`memory_write` printed `importance 0.00` for an unknown score**, the same
   `?? 0` lie fixed in `memory_stats` in this release.
+
+### Fixed after review — a name is printed exactly, or not at all
+
+One function was doing two incompatible jobs. `safeInline` is an anti-injection
+SANITISER: it maps every character outside `[\w .@:+/-]` to a space, collapses
+runs of whitespace, trims the ends and truncates. That is right for a value the
+reader only looks at and never retypes — a room name chosen by its owner, an
+agent name chosen by a connector. It is wrong for a value the engine matches
+BYTE-FOR-BYTE, and every place this release names a domain was using it:
+
+- `" engineering"` and `"engineering"` printed the same string. The `@domain`
+  tag this release added exists to tell stores apart, and it merged the two
+  stores that a stray space creates — the founding defect of the release,
+  reproduced by the fix for it. Worse, `" general"` sanitised to `general` and
+  was then SUPPRESSED as the default bucket, so a memory from a padded store
+  rendered as if it came from the caller's own.
+- `"проект:acme"` and `"план:acme"` both printed `@:acme`. Two stores, one
+  output string, and a name that exists nowhere.
+- `memory_stats` could not answer the question two tool descriptions send the
+  reader there to ask ("confirm the exact domain name before a delete"), because
+  the list was sanitised before it was printed.
+- `memory_delete_domain` confirmed a wipe of `"project x"` when what was wiped
+  was `" project x"` — a destructive confirmation naming the wrong store, one
+  clause before telling the reader that names match byte-for-byte.
+- `Nothing in "engineering" matches…` was a sentence about a store the search
+  never touched, and a whitespace-only scope rendered as `""`.
+- `Server reason: Below importance threshold (0.412 < 0.500)` — core's only
+  rejection reason — was relayed as `Below importance threshold 0.412 0.500`,
+  the comparison operator and both delimiters deleted from a quote whose label
+  promises it verbatim.
+
+Names now go through a second renderer (`src/names.ts`), which prints a value as
+a **JSON string literal** or refuses to print it. `JSON.parse(literal) === value`
+for every input — that is the contract, and it is asserted mechanically rather
+than by sampling characters, because a renderer that satisfies it cannot merge
+two names into one string. Quotes make padding visible; control characters,
+zero-width characters, bidi overrides and no-break spaces become `\uXXXX`;
+non-ASCII letters pass through, so a Cyrillic name stays itself. It is still
+one line with no unescaped quote, which is what the injection surface needs.
+
+Consequences worth stating plainly:
+
+- **Nothing is truncated.** A cut name is not reproducible, so a name too long
+  to print exactly is not printed: sentences fall back to "the domain you
+  passed", the `memory_stats` list COUNTS what it could not name (dropping it
+  would assert a store does not exist), and the `@domain` tag says the name is
+  missing rather than disappearing — an absent tag means "the default bucket".
+- **A `\uXXXX` escape appears only when one was needed**, and any answer that
+  contains one carries a single closing clause explaining that the escape is one
+  character and the quotes are not part of the name.
+- **The non-Latin case-twin diagnosis works again.** It had been silenced for
+  every name the ASCII sanitiser would rewrite; it now names both stores.
+- **Room names keep `safeInline`, deliberately.** They are a different
+  principal's string shown to this one, and reversibility is not their
+  requirement.
 
 ### Known and NOT fixed here
 

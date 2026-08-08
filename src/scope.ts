@@ -22,6 +22,42 @@
  * stdio transport, matching render.ts and teaching.ts.
  */
 
+import { domainPhrase, exactLiteral, withDomainEscapeLegend } from "./names.js";
+
+/**
+ * How to NAME the scope inside a sentence, so the sentence is true on its own
+ * rather than corrected by a paragraph underneath it.
+ *
+ * "Nothing new since your watermark." was left untouched by the first two
+ * passes of this release — the very sentence this module's header names as the
+ * lie that cost two agents a day. A note was appended to it instead, so the
+ * assembled answer read as two voices: one asserting you were caught up, the
+ * next saying that assertion was meaningless. The sibling branch in memory_read
+ * had it right all along by naming its filters inside the sentence (review,
+ * 2026-08-08).
+ *
+ * The name inside that sentence then went through safeInline, which made the
+ * sentence false in the case that matters most: a read on `" engineering"` — the
+ * padded second store this release is about — answered `Nothing in
+ * "engineering"`, naming a DIFFERENT store, and a whitespace-only scope printed
+ * as `""`, i.e. as no scope at all. It is now the exact literal (src/names.ts),
+ * and when a name cannot be reproduced the sentence names nothing rather than
+ * naming something else.
+ *
+ * A room address stays unnamed ("that room") — unchanged, and deliberately: the
+ * address is already in the caller's hand, and the room's NAME belongs to
+ * another principal, so it gets safeInline where it is printed at all.
+ *
+ * Lives here rather than in index.ts so the sentence can be unit-tested: this is
+ * the module about saying where we looked, and index.ts opens a stdio transport
+ * on import.
+ */
+export function scopeLabel(searched: string | undefined): string {
+  if (!searched) return "your own domains";
+  if (searched.startsWith("xroom:")) return "that room";
+  return domainPhrase(searched);
+}
+
 /**
  * "Nothing new since your watermark" is also what you get for a watermark in
  * the FUTURE — a mixed-up timezone or a bad relative-date calculation reads
@@ -71,17 +107,17 @@ function parseAsUtc(iso: string): number | null {
  * A scoped read that finds nothing looks identical whether the domain is empty
  * or MISSPELLED — and a casing slip silently creates a second, permanent shard
  * of what the writer believes is one bucket (dogfood, 2026-08-07). When we can
- * name a domain that differs only in case, or one that is obviously the
- * intended neighbour, saying so is the difference between a dead end and a fix.
+ * name a domain that differs only in case, saying so is the difference between a
+ * dead end and a fix.
  *
- * Deliberately conservative: only an exact case-insensitive match or a clear
- * prefix relationship counts. A fuzzy guess that names the wrong domain would
- * be worse than silence, because the reader would trust it.
+ * Deliberately conservative: ONLY an exact case-insensitive match counts. The
+ * prefix rule this comment used to advertise is gone — see the body — because a
+ * fuzzy guess that names the wrong domain is worse than silence: the reader
+ * trusts it.
  */
 export function nearestDomainNote(
   domain: string,
   knownDomains: readonly string[],
-  sanitize: (s: string | undefined | null) => string,
 ): string {
   // The RAW name, exactly as searched. This used to trim — a second copy of
   // the mistake the caller had already made: a read on " engineering" searched
@@ -92,33 +128,35 @@ export function nearestDomainNote(
   if (!wanted) return "";
   const lower = wanted.toLowerCase();
 
-  // Match on the RAW values, render only sanitized ones. A domain name is
-  // caller-chosen and, for the twin, comes back from storage — both can carry
-  // newlines or instruction-shaped text, and this note lands in a model's
-  // context. Same treatment room names already get (CodeRabbit, #65).
-  const safeWanted = sanitize(wanted);
-
-  // The case-twin note NAMES two stores, so it fires only when both names
-  // survive sanitising unchanged: safeInline's charset is ASCII, so a Cyrillic
-  // domain — ordinary in this workspace — came out as ":acme" and the note then
-  // stated facts about a name existing nowhere; two different Cyrillic names
-  // could even render identically and be declared different stores.
+  // Match on the RAW values, print them through the EXACT renderer.
   //
-  // The guard used to sit at the top of the function and silenced EVERYTHING,
-  // including the fall-through — so a padded or non-Latin name got no diagnosis
-  // at all, output byte-identical to "the store exists, your query merely
-  // missed" (reviews, 2026-08-08). It belongs on the branch that prints names,
-  // and only there: the fall-through below names nothing and is always safe.
-  const canName = safeWanted === wanted;
-  const caseTwin = canName
-    ? knownDomains.find(
-        (d) => d !== wanted && d.toLowerCase() === lower && sanitize(d) === d,
-      )
+  // This branch names two stores and invites the reader to act on one of them,
+  // so it may only print a name it can reproduce. It used to render through
+  // safeInline and guard the branch with `sanitize(x) === x`, which was correct
+  // in spirit and expensive in practice: safeInline's charset is ASCII, so
+  // every Cyrillic name — ordinary in this workspace — failed the guard and the
+  // most useful sentence this module has went silent for a whole alphabet. (An
+  // even earlier draft printed through the sanitiser without the guard, and
+  // asserted facts about ":acme", a name that exists nowhere.)
+  //
+  // src/names.ts prints exactly or returns null, so the guard is now the
+  // renderer itself and "проект" can be named as "проект". Both sides are
+  // checked: naming a twin we cannot reproduce would send the reader to a
+  // store whose name we just invented.
+  const wantedLiteral = exactLiteral(wanted);
+  const twin = wantedLiteral
+    ? knownDomains
+        .map((d) => ({ name: d, exact: exactLiteral(d) }))
+        .find(
+          (c) => c.name !== wanted && c.name.toLowerCase() === lower && c.exact !== null,
+        )
     : undefined;
-  if (caseTwin) {
-    return (
-      `\n\nDomain names are matched exactly, including case: "${safeWanted}" is not ` +
-      `the same store as "${caseTwin}", which does exist. Did you mean that one?`
+  if (wantedLiteral && twin?.exact) {
+    return withDomainEscapeLegend(
+      `\n\nDomain names are matched exactly, including case: ${wantedLiteral.literal} is not ` +
+        `the same store as ${twin.exact.literal}, which does exist. Did you mean that one?`,
+      wanted,
+      twin.name,
     );
   }
 
@@ -133,14 +171,17 @@ export function nearestDomainNote(
   // whose name carries a leading space or a zero-width character is real but
   // unreachable from a clean spelling. Hence "no store with that exact name",
   // never "no such store".
-  // NO pointer to memory_stats here. A previous draft ended "— memory_stats
-  // quotes each name so you can see them", and quoting was added there for
-  // exactly that purpose. It does not work: the sanitiser collapses and trims
-  // whitespace BEFORE the quotes go on, so " engineering" and "engineering"
-  // print identically. Sending the reader to a check that cannot reveal the
-  // thing closed the loop — told no such name exists, told to verify, sees the
-  // name, concludes it is right (reviews, 2026-08-08). Making stats reveal
-  // whitespace is a real fix and is deferred; promising it here was not.
+  // NO pointer to memory_stats here, and the reason has CHANGED. A previous
+  // draft ended "— memory_stats quotes each name so you can see them", and that
+  // was removed because it could not work: the sanitiser collapsed and trimmed
+  // whitespace BEFORE the quotes went on, so " engineering" and "engineering"
+  // printed identically, and the reader was sent to a check that could not
+  // reveal the thing (reviews, 2026-08-08). memory_stats now prints exact
+  // literals (src/names.ts), so that objection is gone — the check works.
+  // Whether this sentence should carry the pointer again is a copy decision and
+  // not part of the renderer change; its absence stays pinned by
+  // test/scope.test.ts until someone decides. What must not come back is a
+  // pointer to a surface that cannot answer.
   return (
     `\n\nNo store has that exact name. Names match byte-for-byte, so a stray space, ` +
     `a different case, or an invisible character makes a separate store — one that ` +

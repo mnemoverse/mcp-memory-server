@@ -11,6 +11,12 @@
  * the line are simply omitted.
  */
 
+import {
+  MAX_DOMAIN_TAG_LITERAL,
+  exactLiteral,
+  withDomainEscapeLegend,
+} from "./names.js";
+
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
   principal?: string | null;
@@ -41,9 +47,16 @@ export type RecentItem = {
 
 /**
  * Sanitize a string for inline interpolation into tool output (CN-032:
- * hostile connectors choose their own agent_name). Charset/cap identical
- * to index.ts's safeInline — re-exported here so both render paths share
- * one implementation.
+ * hostile connectors choose their own agent_name; a room name is chosen by its
+ * OWNER and shown to a JOINER's model). The single implementation, imported by
+ * index.ts and injected into src/scope.ts.
+ *
+ * NOT for anything the reader must reproduce. This is lossy and non-injective
+ * by design — non-ASCII becomes spaces, whitespace is collapsed and trimmed,
+ * the tail is cut — so two distinct values can come out as one string and a
+ * padded value comes out as its clean twin. For a domain name, an id, or
+ * anything else that gets compared or sent back, use src/names.ts
+ * (`exactLiteral`), which prints exactly or refuses to print.
  */
 export function safeInline(s: string | undefined | null, cap = 200): string {
   return (s ?? "")
@@ -66,7 +79,8 @@ export function formatAuthorTag(p?: Provenance | null): string {
 }
 
 /**
- * ` @domain` — which store the memory actually came from.
+ * ` @"domain"` — which store the memory actually came from, printed so it can
+ * be re-sent.
  *
  * Absent before 0.8.1, and its absence was a real trap: an unscoped search for
  * a common name returned five different people's "Maria Chen" from five
@@ -74,14 +88,26 @@ export function formatAuthorTag(p?: Provenance | null): string {
  * apart (dogfood, 2026-08-07). A reader could not answer "is this mine?"
  * without re-querying scoped.
  *
- * Omitted when the server doesn't send it, and omitted for the caller's own
- * default bucket — labelling everything "@general" would be noise on the
- * common case.
+ * The tag went out through `safeInline`, which defeated the one job it has. It
+ * is a DISAMBIGUATOR between stores whose names differ by a space or a
+ * character set, and the sanitiser erases exactly those differences:
+ * `"проект:acme"` and `"план:acme"` both printed `@:acme`, merging the two
+ * stores the tag exists to separate. Worse, `" general"` sanitised to `general`
+ * and was then SUPPRESSED by the check below, so a memory from a padded store
+ * rendered as if it came from the caller's default bucket. Now the value is
+ * printed as an exact JSON literal (src/names.ts) and only the literal string
+ * `"general"` is suppressed.
+ *
+ * Still omitted when the server doesn't send a domain, and for the caller's own
+ * default bucket — labelling everything `@"general"` would be noise on the
+ * common case. When the literal will not fit, the tag says so rather than
+ * disappearing: an absent tag means "the default bucket", which would be a
+ * false statement about the store.
  */
 export function formatDomainTag(domain?: string): string {
-  const d = safeInline(domain, 64);
-  if (!d || d === "general") return "";
-  return ` @${d}`;
+  if (!domain || domain === "general") return "";
+  const exact = exactLiteral(domain, MAX_DOMAIN_TAG_LITERAL);
+  return exact ? ` @${exact.literal}` : ` @(domain cannot be printed exactly)`;
 }
 
 /**
@@ -166,5 +192,11 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   const tail = cursorOk
     ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`
     : `\n\n(end of feed — nothing older)`;
-  return lines.join("\n\n") + tail;
+  // The escape legend belongs to the PAGE, not to each tag: a feed can carry
+  // twenty lines and the explanation is only useful once. Absent entirely
+  // unless some domain on this page actually needed an escape.
+  return withDomainEscapeLegend(
+    lines.join("\n\n") + tail,
+    ...items.map((it) => it?.domain),
+  );
 }
