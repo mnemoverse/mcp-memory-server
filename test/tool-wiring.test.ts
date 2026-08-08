@@ -104,6 +104,50 @@ function forwardedParams(
   return declared.filter((p) => body[p] !== undefined);
 }
 
+/**
+ * The HANDLER-to-builder link.
+ *
+ * forwardedParams above calls the builders directly, which proves the builders
+ * forward — and proves nothing about whether the handlers hand them the
+ * parameters they advertise. CodeRabbit caught that on PR #65: if a handler
+ * stops passing `until`, those tests still pass, because the test supplies
+ * `until` to the builder itself. Losing the link while moving a check to where
+ * it was testable is the same mistake this whole release is about.
+ *
+ * This closes the gap the cheap way — asserting each handler's builder call
+ * mentions every parameter it destructures. It is a TRIPWIRE, not a guarantee:
+ * a source check cannot see a value that is renamed or shadowed on the way in.
+ * The real fix is to connect a client over the SDK's in-memory transport and
+ * invoke the tools for real, which needs src/index.ts to stop opening a stdio
+ * transport on import. That is filed for 0.9 rather than rushed here.
+ */
+function builderCall(block: string, builder: string): string {
+  const at = block.indexOf(`${builder}({`);
+  expect(at, `${builder} is not called in this handler`).toBeGreaterThan(-1);
+  return braceBody(block, at);
+}
+
+describe("handler -> builder forwarding", () => {
+  const CASES: Array<[tool: string, builder: string]> = [
+    ["memory_read", "readRequestBody"],
+    ["memory_list_recent", "recentRequestBody"],
+    ["memory_write", "writeRequestBody"],
+  ];
+
+  for (const [tool, builder] of CASES) {
+    it(`${tool} hands every advertised parameter to ${builder}`, () => {
+      const block = toolBlock(tool);
+      const call = builderCall(block, builder);
+      for (const p of declaredParams(block)) {
+        // `confirm` is a Zod safety interlock, validated before the handler
+        // runs and never part of a request body.
+        if (p === "confirm") continue;
+        expect(call, `${p} is advertised but not passed to ${builder}`).toContain(p);
+      }
+    });
+  }
+});
+
 describe("memory_list_recent", () => {
   const block = toolBlock("memory_list_recent");
 
