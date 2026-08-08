@@ -6,12 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The
 project is pre-1.0, so a MINOR bump may change behaviour.
 
 **What counts as a PATCH here**, stated precisely because 0.8.1 needed the line
-drawn: a patch may change the WORDING a tool returns, but never where data is
-written or read from, and never a tool's name, input schema or annotations. An
-MCP tool's output *is* text, so a release that only fixes untrue sentences is a
-patch even though every result line looks different afterwards. Anything that
-moves data — a domain normalisation, a default, a scope — is a MINOR, however
-obviously correct it seems.
+drawn — and restated because the first version of this paragraph forbade
+something 0.8.1 then went and did.
+
+A patch may change TEXT: what a tool returns, and what a tool or a parameter says
+*about itself*. An MCP tool's output is text, and so is a description — both land
+in a model's context and nowhere else — so a release that only fixes untrue
+sentences is a patch even though every result line looks different afterwards.
+0.8.1 rewrote five parameter descriptions and four tool descriptions on exactly
+that reasoning.
+
+A patch may NOT change SHAPE or ROUTING: no tool added, removed or renamed; no
+parameter added, removed, renamed, retyped, or made optional or required; no
+annotation flipped; and nothing that moves data — a domain normalisation, a
+default, a scope — however obviously correct it seems. The earlier wording said
+"never a tool's input schema", which reads as forbidding the description strings
+too, since a description *is* part of the published JSON schema. The line is
+between the schema's SHAPE and its PROSE, and it is the shape that is frozen in a
+patch.
 
 This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
@@ -19,11 +31,27 @@ git history and the GitHub releases are the record.
 
 ## [0.8.1] — unreleased
 
-An honesty pass. Every result line looks different afterwards, but no data moves
-and no schema changes — this release fixes places where the server was saying
-something untrue. Prompted by an incident, then by dogfooding the whole surface
-with ten agents, then by three adversarial reviews that found thirteen more
-false statements *inside the fix itself*.
+An honesty pass. Every result line looks different afterwards, and nine
+descriptions with them, but no data moves and no tool or parameter changes shape
+— this release fixes places where the server was saying something untrue.
+Prompted by an incident, then by dogfooding the whole surface with ten agents
+(#64), then by adversarial reviews that kept finding false statements *inside the
+fix itself*.
+
+**How many, and where each number can be checked**, because a release about
+unverifiable claims is in no position to make one. Round one found **thirteen**;
+they are the ten bullets under "false statements the first draft introduced" —
+where the two destructive tools share a bullet and count as two — plus the
+`domain`-trimming revert described in the next paragraph, and the withdrawn "no
+relevance floor" claim, which is corrected in "Changed" rather than listed as a
+bullet. Round two is the **eight** bullets under "Fixed in the second review
+round" — and not all of them are one statement each: one groups three smaller
+fixes, and one groups three claims withdrawn rather than repaired. A later
+inventory read every string in the client against the engine source and found
+**six** places where a name was printed by a renderer that could not reproduce it
+("a name is printed exactly, or not at all", six bullets) and **seven** false
+claims produced by a single probe shape ("unknown is not the same as none", five
+bullets, of which the first lists three).
 
 One thing was cut for exactly that reason: an earlier draft trimmed whitespace
 off `domain` before sending it. It looked like a pure win — names match
@@ -32,9 +60,16 @@ But core deliberately rejects a non-canonical room address, so trimming
 `" xroom:room_01ABC"` normalised past that guard and the write would have landed
 in the **room's** store, visible to every member, where 0.8.0 hard-failed. It
 also silently relocated padded personal domains while `memory_delete_domain`
-kept sending the raw name. Normalisation returns in 0.9.0, with
-`memory_delete_domain` included, room addresses deliberately exempt, and
-zero-width characters handled (`trim()` does not strip those).
+kept sending the raw name.
+
+The revert is enforced, the return is not scheduled. What holds today is
+`test/requests.test.ts`, which compares every send path against 0.8.0's bodies for
+padded, non-breaking, zero-width and room-address domains — a coercion cannot be
+deleted again without failing. What normalisation should look like when it comes
+back (`memory_delete_domain` included, room addresses exempt, zero-width
+characters handled — `trim()` does not strip those) is written down here and
+**nowhere else**: it is not on the 0.9 issue (#64) and has no issue of its own, so
+"returns in 0.9.0" would be a promise with nothing behind it.
 
 ### Fixed — an empty answer now describes its scope instead of asserting absence
 
@@ -48,12 +83,21 @@ zero-width characters handled (`trim()` does not strip those).
   read used to end "…or drop the domain filter to search all domains". When the
   domain is a room, dropping it is the one move that guarantees the content
   stays hidden. A test used to *require* that wording; it now forbids it.
-- **A future `since` is named as such**, with the current server time. It used
-  to read exactly like "you're caught up".
-- **A misspelled domain is distinguished from an empty one.** Domain names match
-  byte-for-byte, so a casing slip silently opens a second permanent store; an
-  empty scoped read now says "that is not the same store as X, which does
-  exist".
+- **A future `since` is named as such**, with **this client's clock** — not the
+  server's, which this client cannot read. It used to read exactly like "you're
+  caught up". The first draft of this bullet and of the note itself said "the
+  current server time"; that was corrected during review and a test now forbids
+  the phrase (see "Fixed after review" below).
+- **A CASING slip is distinguished from an empty store.** Domain names match
+  byte-for-byte, so `"Project:Acme"` silently opens a second permanent store
+  beside `"project:acme"`. An empty scoped read says "that is not the same store
+  as X, which does exist" — under two conditions, both narrower than this bullet
+  originally claimed: a known domain must differ from the one searched **in case
+  only**, and both names must be printable exactly (they now are for any name the
+  engine can hold, including Cyrillic — see "a name is printed exactly"). A twin
+  that differs by a space or a zero-width character is NOT diagnosed; that read
+  gets the name-free "No store has that exact name", and the gap is listed under
+  "Known and NOT fixed here".
 - **`memory_stats` no longer renders a missing field as `0`.** "Associations: 0"
   could read as "this memory has learned nothing" when the server simply hadn't
   answered. Unknown now says unknown; the jargon is glossed; a footer notes that
@@ -77,9 +121,10 @@ zero-width characters handled (`trim()` does not strip those).
   fictional, and month-old notes at "73%" for "what's new". It also wasn't a
   percentage of anything, since positive feedback pushes the score above 1.0 and
   reads showed "112%". Rank order still carries the ranking. A dependable
-  signal is worth surfacing and is on the 0.9 list; this is a removal until
-  there is one. (An earlier draft of this entry claimed there was NO floor.
-  There is one — it is simply too low to ever mean "I don't know".)
+  signal is worth surfacing (#64) and depends on core growing a usable floor
+  first (mnemoverse-core#449); this is a removal until there is one. (An earlier
+  draft of this entry claimed there was NO floor. There is one — it is simply too
+  low to ever mean "I don't know".)
 - **Results carry their domain** (`@"project:acme"`). An unscoped search for a
   common name returned five different people's "Maria Chen" from five projects,
   ranked together, with nothing on the line to tell them apart.
@@ -108,11 +153,20 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite also grew from 60 tests to 279 (the number in this paragraph was
-written as 116 while the count was 119, then the naming fix added 70 more, then
-the harness below replaced 17 and added 41, then the knowledge fix added 28, then
-the assembled-answer file added 38 — a countable claim nobody was counting), and
-the ones that mattered most were replaced rather than added to.
+The suite grew from **31 tests at 0.8.0 to 279**, and the ones that mattered most
+were replaced rather than added to. Every number in that sentence is reproducible
+— `git archive <ref> | tar -x -C tmp && (cd tmp && npx vitest run)` — and here is
+the whole curve, measured that way: `main` **31**, the commit before the gate
+**60**, the gate itself **116**, then **119**, **189** after the naming fix,
+**213** after the harness (which replaced 17 tests and added 41), **241** after
+the probe-state fix, **279** with the assembled-answer file.
+
+Two corrections to this paragraph's own history, kept rather than swapped, because
+the release is about the habit of swapping them. It said the suite "grew from 60
+tests": 60 is a mid-branch count taken at the commit that wrote the sentence, not
+0.8.0's, which is 31. And it said the "116" it once carried had been wrong at the
+time — it was not; 116 was exact when written and went stale three tests later.
+
 The wire contract is now pinned by calling the real body builders
 (`src/requests.ts`) and comparing against 0.8.0's bodies for every domain shape —
 whitespace, non-breaking and zero-width spaces, padded room addresses. The guard
@@ -232,16 +286,28 @@ test, and replacing it with the entry-point idiom each fail it.
   promised recovery "until it is unarchived" when core has archive with no
   inverse); and the `NOT STORED` prediction that "rewording will score the same
   or lower", which is probably backwards, since novelty falls as similarity
-  rises. Of the three, the first TWO were later done properly rather than left
-  withdrawn — see "a name is printed exactly, or not at all" and "unknown is not
-  the same as none" below. Only the third stands withdrawn. The archived-rooms
-  claim came back in a different place: not as a count beside a list of readable
-  rooms (both objections above still hold there), but as its own sentence for the
-  state where EVERY room is archived — where staying silent is not available,
-  because it either dangles a colon or lets the answer claim the memory is empty.
-- **`NOT STORED` no longer states a cause it cannot see.** A live surface answers
-  `{"stored":false}` with no reason and no score; the mechanism is now named only
-  when the server named it.
+  rises. What became of each, since "withdrawn" did not stay true for two of
+  them: the FIRST was later done properly — `memory_stats` prints exact literals
+  now, so the check a note pointed at can answer (see "a name is printed exactly,
+  or not at all"). The SECOND came back only in part: not as a count beside a list
+  of readable rooms, where both objections above still stand, but as its own
+  sentence for the state where EVERY room is archived — where staying silent is
+  not available, because it either dangles a colon or lets the answer claim the
+  memory is empty. In the mixed case archived rooms are still unmentioned, which
+  is listed under "Known and NOT fixed here". The THIRD stands withdrawn and is
+  not coming back; the shipped `NOT STORED` message predicts nothing about a
+  retry.
+- **`NOT STORED` no longer quotes a verdict nobody gave.** A live surface answers
+  `{"stored":false}` with no reason and no score, and the first draft asserted a
+  specific rejection anyway. The server's reason and the novelty score are now
+  printed only when the server sent them. Precisely what stayed unconditional:
+  the sentence naming the *mechanism* — writes are gated on what a memory adds
+  over the same domain — because that is a statement about core, not an inference
+  from this response. `/memory/write` refuses for exactly one reason (two branches
+  in the engine, both "Below importance threshold"); the batch endpoint has other
+  failure paths, and this client does not call it. An earlier version of this
+  bullet said "the mechanism is now named only when the server named it", which
+  described a draft that did not carry that sentence at all.
 - **Smaller ones:** the feedback zero-branch dropped an invented frequency
   ("most often"); the neutral line stopped implying 0 leaves ranking alone,
   which this file's own comment forbids; the room boundary moved into the
@@ -252,7 +318,10 @@ test, and replacing it with the entry-point idiom each fail it.
 
 Three adversarial reviews read every new string against the engine code. What
 they found is listed here rather than quietly corrected, because the release is
-about exactly this failure mode and the fix committed it thirteen times.
+about exactly this failure mode and the fix committed it thirteen times — the ten
+bullets below, counting the destructive-tools bullet as the two tools it names,
+plus the `domain`-trim revert described at the top of the 0.8.1 section and the
+"no relevance floor" correction under "Changed".
 
 - **The first-contact greeting told a rooms-only account its memory was empty.**
   `total_atoms` counts the personal org only, so an invited teammate with three
@@ -268,15 +337,25 @@ about exactly this failure mode and the fix committed it thirteen times.
 - **The NOT STORED advice described a gate that does not exist.** It told the
   caller to rewrite the content as a cleaner factual statement. The gate scores
   geometric novelty against the nearest existing memory — rejection means *too
-  similar to something already stored* — so a rewrite scores the same or lower,
-  and the text ended with "write it again", looping a compliant agent. Worst in
-  the case it was written for: a correction is by nature similar to what it
-  corrects. It now names the real mechanism and points at delete-then-write.
+  similar to something already stored* — so rewriting the same fact does not
+  address what was measured, and the text ended with "write it again", looping a
+  compliant agent. Worst in the case it was written for: a correction is by nature
+  similar to what it corrects (mnemoverse-core#450). The shipped message names the
+  real mechanism and asks for what is DIFFERENT rather than a restatement. Two
+  things this bullet used to claim and no longer does: that "a rewrite scores the
+  same or lower" — asserted as fact, probably backwards, and withdrawn in the
+  round above — and that the message "points at delete-then-write", which was
+  removed before shipping because the blocking memory can be a room atom that
+  `memory_delete` cannot touch. There is no such advice in the text.
 - **"The closest existing domain" was invented.** It named the first element of
   an unordered query result with any prefix relation, so it was not a nearest
   neighbour, could differ between identical calls, and let a one-character
   domain be the "closest" match for every name starting with that letter.
-  Removed.
+  Removed. The function kept the name `nearestDomainNote` for the rest of the
+  release and is now `noSuchDomainNote`, after what it actually builds: the
+  disclosure for the "no store with that exact name" state, which either names an
+  exact case-insensitive twin or names nothing at all. Nothing in it searches for
+  a nearest anything.
 - **The domain hint lied about non-Latin names.** The sanitiser's charset is
   ASCII, so `"проект:acme"` rendered as `":acme"` and the note asserted facts
   about a name that exists nowhere. The immediate fix was to stay silent
@@ -367,8 +446,9 @@ Consequences worth stating plainly:
 
 The release's own thesis, applied to the place it was still broken: every probe
 answered with a **string plus a boolean**, and a falsy string is how this client
-spelled both "there is nothing" and "we could not look". Six false claims came
-out of that one shape.
+spelled both "there is nothing" and "we could not look". Seven false claims came
+out of that one shape — five bullets, the first of which lists three. (This
+paragraph said "six" and did not add up.)
 
 - **A `/memory/rooms` body that was not an array became an empty room list.** So
   a contract violation was reported to the reader as fact, three different ways:
@@ -416,17 +496,165 @@ type-level guarantees checked by making the compiler reject them.
 
 ### Known and NOT fixed here
 
-- **Cross-language recall is absent, not degraded.** Measured on production:
-  an English query against English content scored a clean hit; a Russian query
-  against Russian content ranked the right answer two points above the wrong
-  one; an English query against the *same fact stored in Russian* returned
-  **zero**. Core-side (English-only production embedder, ASCII-only concept
-  extraction) — tracked for 0.9.
-- No supersede/update semantics: a correction competes with the fact it
-  corrects, and under ordinary phrasing the stale one can win.
-- No batch write.
-- The hosted claude.ai connector reports a rejected write as
-  `{"stored":false}` with no reason, and has no delete tools at all.
+Complete as of this release, including the things the fix itself deliberately left
+alone. Each entry says what is not known or not done, not merely that something is
+"limited"; where a gap has an issue, the issue is named, and where it has none,
+that is said too.
+
+#### In the engine — behaviour this client can only describe, not repair
+
+- **Cross-language recall is absent, not degraded** (mnemoverse-core#448).
+  Measured on production, one domain, one minute apart: an English query against
+  English content scored a clean hit; a Russian query against Russian content
+  ranked the right answer two points above the wrong one; an English query against
+  the *same fact stored in Russian* returned **zero**. Causes are core-side
+  (English-only production embedder, ASCII-only concept extraction). The connector
+  cannot detect it, so a silo reads exactly like a genuine absence.
+- **There is a relevance floor and it is too low to mean anything**
+  (mnemoverse-core#449). `min_relevance` defaults to 0.3, so a query about
+  something never stored still returns near-neighbours at scores indistinguishable
+  from real hits. This is why 0.8.1 removed the percentage rather than explaining
+  it; a signal worth showing depends on core growing a usable floor first. Related
+  and also unfixed: `top_k` is not a bound (the same query at 1 / 5 / 20 returned
+  6 / 7 / 4 items) and relevance exceeds 1.0 after positive feedback.
+- **The importance gate silently rejects corrections, and its scoring is
+  incoherent** (mnemoverse-core#450). A correction is phrased like its target and
+  therefore scores as a near-duplicate; the stale fact stays as the sole record.
+  Measured beside it: `"ok"` was stored at importance 0.44, above two substantive
+  project facts. 0.8.1 makes the rejection loud (`NOT STORED`) and can do no more
+  than that.
+- **Archived rooms are invisible to a member, and nothing here reopens one.** Core
+  filters `is_archived = FALSE` out of the member query and hard-codes
+  `archived=false` on joined rows, so a member of an archived room cannot see it in
+  any list. 0.8.1 speaks only in the state where EVERY room the caller has is
+  archived; in the MIXED case the scope note still names the readable rooms and
+  says nothing about the archived ones, for the two reasons recorded in
+  `src/scope.ts` (that clause only ever rendered for owners, and it promised a
+  recovery that does not exist). Archiving has no inverse anywhere in the data
+  plane, this client or the portal, so the sentence deliberately offers no way
+  back. No issue filed for the member-visibility asymmetry.
+
+#### Surface this connector does not have yet — waiting for a MINOR (#64)
+
+- **No batch write.** Eight decisions in one conversation is eight round trips,
+  each demanding a content/domain/concepts decision. The single most requested fix
+  from the dogfood.
+- **No supersede/update semantics.** There is no update verb: a correction becomes
+  a competing atom, and under ordinary phrasing the stale one can win (measured:
+  53% vs 52%; at `top_k: 1` the stale one alone). Needs core#450.
+- **No `until` on `memory_list_recent`.** The feed takes `since` only, so "what
+  happened on Monday" has no complete answer — `memory_read` takes both bounds but
+  requires a query and cannot promise completeness. Neither tool documents that
+  the bounds are inclusive (they are; established by reverse-engineering
+  timestamps out of the pagination cursor).
+- **No room fan-out.** 0.8.1 makes an unscoped read *say* it did not cover rooms.
+  It still does not cover them: there is no single call meaning "what's new in any
+  room I'm in". Rooms are separate tenants, so this is cross-tenant querying with
+  per-room access checks and cursors across orgs — plus a product question about
+  whether room traffic should land in a personal feed at all.
+- **Hosted claude.ai connector parity.** That surface reports a rejected write as
+  `{"stored":false}` with no reason, never shows a score, caps content at 5,000
+  characters against 10,000 here, uses `memory_ids` where this uses `atom_ids`, and
+  **has no delete tools at all** — 10 tools against the 12 registered here.
+  Storage is provably identical; the two front doors are not. Owned by neither this
+  repo nor core.
+- **`memory_stats` lists every domain with no counts and no filter** (~55 on the
+  dogfood account, spanning unrelated projects). Two agents called it unhelpful.
+  Per-domain counts need core.
+- **`exclude_author` takes a value this tool set cannot supply.** The parameter
+  reaches the engine correctly and works if the caller knows a `principal` from
+  somewhere else (the REST API), but no tool here ever renders one — `render.ts`
+  deliberately never prints it, since it may be an email — so a model working from
+  these results has nothing to pass, and a guess like `"me"` filters nothing,
+  silently. 0.8.1's fix was to say exactly that in both descriptions; the
+  parameter stays, because removing it is a schema change.
+- **Domain normalisation is not scheduled.** See the trim revert at the top of this
+  section: the plan exists only in this file, with no issue.
+
+#### Sentences this release did not make honest
+
+Each of these was reached during the release, examined against the engine, and
+left — because the fix changes behaviour rather than wording, or because the
+obvious fix would introduce a different false claim. They are listed so the next
+release does not have to find them again.
+
+- **A count that is missing is still rendered as zero, and zero as an absence
+  claim.** Four sites: `memory_feedback`'s `updated_count ?? 0`, which answers
+  "none of those ids matched a memory in your own domains"; `memory_delete`'s
+  falsy `!deleted`, which answers "Nothing was deleted"; `memory_delete_domain`'s
+  `deleted ?? 0`, which answers "NOTHING was deleted"; and `memory_read`'s
+  `search_time_ms ?? 0`, which prints a fabricated `(0ms)`. Core sends all four
+  fields today, so none is reachable through core — but `apiFetch` converts a 204
+  or an empty body into `{}`, and its own note records that FastAPI DELETE handlers
+  may switch to 204, at which point a successful delete would report that nothing
+  was deleted. This is the defect `memory_stats` and `memory_write` fixed in this
+  release, left standing on the three surfaces that turn the zero into a
+  *sentence* — where it is worse, because a wrong number is not a claim about the
+  world and "NOTHING was deleted" is — and on the one that prints it as a
+  measurement.
+- **`(end of feed — nothing older)` also means "there is more and I would not
+  print the cursor".** The end-of-feed line is chosen by one boolean that folds
+  "the server sent no cursor" together with "the server sent one that failed the
+  shape check". Could-not-render spelled exactly like does-not-exist — this
+  release's own subject, in the one place it did not reach. A third branch needs a
+  third sentence.
+- **A bare 404 on `/memory/recent` is reported as a deployment fact.** The message
+  says the service "does not support the recent-entries feed yet". Engine 404s
+  carry an error `code`, so a real room-404 is excluded, but a gateway, a proxy or
+  a wrong `MNEMOVERSE_API_URL` produces the same bare 404 and is indistinguishable
+  from here. The boolean was renamed to `bare404` so the code stops asserting it;
+  the sentence still does.
+- **Room addresses are printed through the lossy sanitiser.** `safeInline` is
+  correct for a room NAME (another principal's string, looked at and never
+  retyped), and it is what room addresses, roles, scopes, vault aliases and author
+  tags still get. An address is different in kind: the note *instructs* the reader
+  to send it back. Divergence is unreachable today — core mints `room_<ULID>` and
+  400s any non-canonical spelling, and vault aliases are charset-validated — and
+  nothing in this repo pins that. The correct pattern is validate-then-print-raw,
+  but the existing fallback then says "the server did not return a usable address",
+  which would become a NEW false claim when the server returned one and this client
+  refused it. So the fallback has to change with it.
+- **`memory_delete` prints the caller's `atom_id` raw.** A padded or newline-
+  bearing id lands unrendered in the diagnosis of a miss whose cause may be that
+  very padding. The fix is the same exact-literal renderer the domain names now
+  use.
+- **`memory_delete_domain` names whatever the server echoed.** It prints
+  `r.domain` and falls back to the value sent. Core echoes the path parameter, so
+  the two agree today; a server that echoed something else would have a
+  destructive confirmation name a store the caller never passed, one clause before
+  telling them names match byte-for-byte.
+- **"check that your API key is set" is offered where no key means no response.**
+  Both room handlers suggest it when the server returns no usable address —
+  reachable only after a 2xx, and `apiFetch` throws before sending anything when
+  the key is missing. The advice points at a condition that cannot hold.
+- **`vault_list` claims an absence over an incomplete scope.** "No secrets are
+  stored in your Vault yet" is derived from a list route that skips every
+  secret-atom without a reachable `secret:{alias}` external ref, so an account
+  whose secrets were stored by another path is told it has none. The count in the
+  populated case understates for the same reason.
+- **The future-watermark note claims a frequency.** "a timezone slip is the usual
+  cause" is a statistic this project does not have — the same class as the "most
+  often" deleted from `memory_feedback`'s zero branch in this release, left
+  standing on the other surface.
+- **The case-twin diagnosis covers case only.** A read on `" engineering"` while
+  `"engineering"` exists gets the name-free "No store has that exact name", not a
+  padding-twin diagnosis. Extending the rule to whitespace and zero-width
+  characters is a behaviour decision; `memory_stats` now closes the loop by
+  printing both names exactly.
+- **The `memory_stats` pointer was not restored to that diagnosis.** It was cut
+  because the surface could not answer; it can now, and re-adding the pointer is a
+  copy decision nobody has made. Its absence stays pinned by a test so it cannot
+  drift back unnoticed.
+- **A room with neither `role` nor `scope` renders an empty parenthetical** —
+  `- "last-quarter" () [archived] — …`. Cosmetic; asserts nothing false.
+
+#### In this repository
+
+- **CI never typechecks a test file.** `tsconfig.json`'s `include` is `src/**`, so
+  `tsc --noEmit` — the typecheck `test.yml` runs — does not cover `test/`. Every
+  type-level guarantee this release added is therefore verified by the suite it
+  gates but not by the gate itself. Three consecutive stages reported it; it needs
+  a `tsconfig.test.json` and a second workflow step.
 
 ## [0.8.0] — 2026-08-06
 

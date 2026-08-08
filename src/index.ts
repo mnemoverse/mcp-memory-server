@@ -314,22 +314,35 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          // Two things this deliberately does NOT do any more.
+          // WHAT IS CONDITIONAL HERE, stated exactly, because a previous
+          // version of this comment claimed more than the code does.
           //
-          // It does not assert the CAUSE when the server sent none. The gate
-          // rejects on novelty — too close to an existing memory — but a live
-          // surface answers {"stored":false} with no reason and no score, and
-          // stating a specific verdict there was a claim on zero evidence, in
-          // the release about not doing that. The cause is named only when the
-          // server named it.
+          // Conditional: the SERVER'S VERDICT and the SCORE. `Server reason:`
+          // is printed only when `reason` came back, and `Novelty score` only
+          // when a numeric `importance` did — a live surface answers
+          // `{"stored":false}` with neither, and quoting a verdict nobody sent
+          // would be a claim on zero evidence.
           //
-          // It does not predict the retry. "Rewording will score the same or
-          // lower" was asserted as fact and is probably BACKWARDS: novelty
-          // decreases with similarity to the blocking memory, so a reworded
-          // sentence is usually LESS similar and scores HIGHER. And the
-          // delete-then-write advice is impossible for a room write — the
-          // blocker is a room atom, which memory_delete cannot touch, as this
-          // file's own delete message says (reviews, 2026-08-08).
+          // Unconditional: the MECHANISM sentence below, and it is not derived
+          // from this response. It is a statement about core: `/memory/write`
+          // refuses for exactly one reason — the importance gate, scoring
+          // geometric novelty against the nearest existing atom in the same
+          // domain, with "Below importance threshold (x < y)" as its only text
+          // (two branches in memory_engine, one reason). The BATCH endpoint has
+          // other failure paths; this client does not call it. So for any
+          // rejection this client can receive, that sentence is true whether or
+          // not the server bothered to say why. The earlier comment here read
+          // "the cause is named only when the server named it", which describes
+          // a draft that did not carry this sentence at all.
+          //
+          // NOT PRESENT AT ALL: a prediction about the retry. "Rewording will
+          // score the same or lower" was asserted as fact and is probably
+          // BACKWARDS — novelty decreases with similarity to the blocking
+          // memory, so a reworded sentence is usually LESS similar and scores
+          // HIGHER. And the delete-then-write advice an earlier draft carried is
+          // impossible for a room write: the blocker is a room atom, which
+          // memory_delete cannot touch, as this file's own delete message says
+          // (reviews, 2026-08-08).
           text:
             `NOT STORED — nothing was saved.` +
             (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
@@ -515,6 +528,10 @@ server.registerTool(
     // read results).
     const lines = items.map((item, i) => formatReadItem(item, i));
 
+    // `?? 0` prints a FABRICATED `(0ms)` when the server sent no timing — the
+    // same class as "Associations: 0" for an unknown count, which memory_stats
+    // fixed in this release. Untouched here and recorded in CHANGELOG's "Known
+    // and NOT fixed here" with the other three.
     const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
     const text = lines.join("\n\n") + `\n\n(${searchMs}ms)`;
 
@@ -605,14 +622,24 @@ server.registerTool(
         },
       );
     } catch (e) {
-      // Graceful degradation while the server side rolls out: a 404 from
-      // core means the /memory/recent endpoint is not deployed yet — say
-      // so instead of surfacing a raw HTTP error.
-      const endpointAbsent =
+      // Graceful degradation while the server side rolls out: a 404 with no
+      // error `code` in the body is what an undeployed /memory/recent looks
+      // like, so degrade to a usable alternative instead of surfacing a raw
+      // HTTP error.
+      //
+      // NAMED FOR WHAT IT TESTS. This was `endpointAbsent`, which asserted a
+      // deployment fact the check cannot establish: every engine 404 carries a
+      // `code`, so a real room-404 is excluded, but a gateway, a proxy or a
+      // wrong MNEMOVERSE_API_URL produces the same bare 404 and is
+      // indistinguishable from here. The MESSAGE below still states the
+      // deployment cause outright, which is more than this boolean knows —
+      // listed in CHANGELOG's "Known and NOT fixed here" rather than papered
+      // over with a hedge.
+      const bare404 =
         e instanceof Error &&
         e.message.startsWith("Mnemoverse API error 404:") &&
         !e.message.includes('"code"');
-      if (endpointAbsent) {
+      if (bare404) {
         return {
           content: [
             {
@@ -868,9 +895,19 @@ server.registerTool(
     },
   },
   async ({ atom_id }) => {
-    // Core API returns { deleted: <count>, atom_id }. count == 0 means
-    // the atom didn't exist (or was already removed). count >= 1 means
-    // it was deleted.
+    // Core API returns { deleted: <count>, atom_id }, so today a falsy
+    // `deleted` means the count came back 0 — nothing in the caller's own store
+    // carried that id.
+    //
+    // The check below is `!r?.deleted`, which is falsy-not-zero: a MISSING
+    // field lands in the same branch as a real 0. `apiFetch` turns a 204 or an
+    // empty body into `{}` (see its own note that FastAPI DELETE handlers may
+    // switch to 204), so under that response a successful delete would report
+    // "nothing was deleted". Unknown rendered as zero, then zero rendered as an
+    // absence claim — the same family as `updated_count ?? 0` in
+    // memory_feedback and `deleted ?? 0` in memory_delete_domain. Left as it
+    // stands and listed in CHANGELOG's "Known and NOT fixed here"; it is a
+    // behaviour fix, not a wording one.
     const r = await apiFetch<{ deleted?: number; atom_id?: string }>(
       `/memory/atoms/${encodeURIComponent(atom_id)}`,
       { method: "DELETE" },
@@ -946,6 +983,10 @@ server.registerTool(
       { method: "DELETE" },
     );
 
+    // `?? 0` again: a missing `deleted` field becomes 0 and then becomes the
+    // "NOTHING was deleted" claim below. Core sends the count, so this is not
+    // reachable through core today — recorded with the other two in CHANGELOG's
+    // "Known and NOT fixed here".
     const count = r?.deleted ?? 0;
     // The name of a store on a DESTRUCTIVE confirmation, so it is printed
     // exactly or not at all. safeInline named a different store than the one
@@ -953,8 +994,15 @@ server.registerTool(
     // clause tells the reader that names match byte-for-byte. When the name
     // cannot be reproduced the sentences fall back to naming nothing, which
     // still leaves them true.
-    const wiped = r?.domain ?? domain;
-    const wipedName = domainPhrase(wiped, "the domain you passed");
+    //
+    // NOT called `wiped`, which is what it was: on the zero branch nothing was
+    // wiped, and the value is whatever the server echoed — core echoes the path
+    // parameter back, so it equals what we sent, but a server that echoed
+    // something else would have this handler name a store the caller never
+    // passed, one clause before telling them names match byte-for-byte. The
+    // fallback to `domain` is the value that actually went over the wire.
+    const reportedDomain = r?.domain ?? domain;
+    const reportedName = domainPhrase(reportedDomain, "the domain you passed");
 
     // Zero is NOT a successful wipe, and this line used to read like one.
     // Core echoes back the caller's own string, so "Deleted 0 memories from
@@ -970,11 +1018,11 @@ server.registerTool(
           {
             type: "text" as const,
             text: withDomainEscapeLegend(
-              `NOTHING was deleted — no memories matched domain ${wipedName} in your own ` +
+              `NOTHING was deleted — no memories matched domain ${reportedName} in your own ` +
                 `store. Names match byte-for-byte, so check the spelling and case against ` +
                 `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
                 `through this tool at all.`,
-              wiped,
+              reportedDomain,
             ),
           },
         ],
@@ -986,8 +1034,8 @@ server.registerTool(
         {
           type: "text" as const,
           text: withDomainEscapeLegend(
-            `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain ${wipedName}.`,
-            wiped,
+            `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain ${reportedName}.`,
+            reportedDomain,
           ),
         },
       ],

@@ -125,7 +125,7 @@ export function formatDateTag(createdAt?: string): string {
 
 /**
  * One memory_read result line:
- * `N. content (concepts) @domain [by X] · 2026-08-01 21:04Z\n   id: <uuid>`
+ * `N. content (concepts) @"domain" [by X] · 2026-08-01 21:04Z\n   id: <uuid>`
  *
  * The id sits on its own indented line: full-width (feedback/delete need
  * the EXACT id, truncation would break them) without crowding the content
@@ -187,7 +187,17 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   const lines = items.map((it, i) => formatRecentItem(it, i));
   // Defense-in-depth (CN-032 posture): the cursor is server-supplied and
   // interpolated into instructional text — only echo it when it matches the
-  // opaque urlsafe-base64 shape ours always has.
+  // opaque urlsafe-base64 shape ours always has. Core mirrors the same regex on
+  // its side, so a cursor that fails here is a contract violation, not a value.
+  //
+  // KNOWN DEFECT, not fixed in 0.8.1 and recorded in the CHANGELOG: this one
+  // boolean decides an existence claim about a different thing. `false` means
+  // EITHER "the server said there is nothing older" OR "the server said there IS
+  // more and I refuse to print the token", and both print `(end of feed —
+  // nothing older)`. That is could-not-render spelled exactly like does-not-
+  // exist — the collision this release is about, surviving in the one place the
+  // fix did not reach. It needs a third branch and therefore a new sentence,
+  // which is a behaviour change.
   const cursorOk = nextCursor != null && /^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor);
   const tail = cursorOk
     ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`

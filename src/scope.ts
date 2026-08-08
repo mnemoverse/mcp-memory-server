@@ -108,18 +108,29 @@ function parseAsUtc(iso: string): number | null {
 }
 
 /**
- * A scoped read that finds nothing looks identical whether the domain is empty
- * or MISSPELLED — and a casing slip silently creates a second, permanent shard
- * of what the writer believes is one bucket (dogfood, 2026-08-07). When we can
- * name a domain that differs only in case, saying so is the difference between a
- * dead end and a fix.
+ * The disclosure for the {@link NamedScope} arm `no-such-domain`: the caller
+ * scoped a read to a domain that is not in `/memory/stats.domains`.
  *
- * Deliberately conservative: ONLY an exact case-insensitive match counts. The
- * prefix rule this comment used to advertise is gone — see the body — because a
- * fuzzy guess that names the wrong domain is worse than silence: the reader
- * trusts it.
+ * WHAT IT DOES, which is not what it was called. Until 0.8.1 this was
+ * `nearestDomainNote`, and the name outlived the behaviour twice over: the
+ * "nearest"/prefix guess it was named for was deleted as unsound (see the body),
+ * and even before that it was never a nearest-neighbour search. What remains is
+ * two branches, and neither is a proximity search:
+ *
+ *   1. an EXACT case-insensitive twin, when one exists in the known list and
+ *      both names can be printed reproducibly — the casing slip that silently
+ *      forks a namespace, which is the one miss a reader can act on
+ *      (dogfood, 2026-08-07);
+ *   2. otherwise a NAME-FREE statement that no store carries that exact name,
+ *      which is always safe to say and must never go quiet — silence here is
+ *      byte-identical to "the store is there, your query merely missed".
+ *
+ * Deliberately conservative: only case differs. A whitespace or zero-width twin
+ * (`" engineering"` beside `"engineering"`) is NOT diagnosed here — extending the
+ * rule is a behaviour decision, and `memory_stats` closes that loop by printing
+ * both names exactly. Recorded in CHANGELOG's "Known and NOT fixed here".
  */
-export function nearestDomainNote(
+export function noSuchDomainNote(
   domain: string,
   knownDomains: readonly string[],
 ): string {
@@ -164,7 +175,8 @@ export function nearestDomainNote(
     );
   }
 
-  // NO "closest match" any more. It named the FIRST element of an unordered
+  // NO "closest match" — the branch the old function NAME advertised, deleted
+  // rather than repaired. It named the FIRST element of an unordered
   // `SELECT DISTINCT domain` having any prefix relation in either direction —
   // so it was not a nearest neighbour, it could differ between two identical
   // calls, and a one-character domain became the confidently-named "closest"
@@ -175,6 +187,7 @@ export function nearestDomainNote(
   // whose name carries a leading space or a zero-width character is real but
   // unreachable from a clean spelling. Hence "no store with that exact name",
   // never "no such store".
+  //
   // NO pointer to memory_stats here, and the reason has CHANGED. A previous
   // draft ended "— memory_stats quotes each name so you can see them", and that
   // was removed because it could not work: the sanitiser collapsed and trimmed
@@ -597,7 +610,7 @@ async function probeNamedScope(
   }
   const known = domains as string[];
   if (known.includes(name)) return { state: "present", name };
-  return { state: "no-such-domain", name, note: nearestDomainNote(name, known) };
+  return { state: "no-such-domain", name, note: noSuchDomainNote(name, known) };
 }
 
 /**

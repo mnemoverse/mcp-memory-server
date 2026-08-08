@@ -1,13 +1,27 @@
 /**
- * Pins the rendered item contract introduced with the #404 temporal work.
+ * Pins the rendered item contract — the #404 temporal work, plus everything
+ * 0.8.1 added to or removed from a result line.
  *
- * The two load-bearing promises:
+ * What this file guarantees, in the order the cases appear:
  * 1. Every item with an atom_id renders the FULL id — memory_feedback and
  *    memory_delete are uncallable without exact ids, and the tool
  *    description has promised them all along (the pre-#404 render never
  *    delivered any: the standing dead-id bug).
  * 2. created_at renders as a compact UTC date tag — a reader cannot
  *    reason about recency it cannot see.
+ * 3. NO relevance score reaches a reader, on either surface, at any value
+ *    (0.8.1 removal — see the cases in `formatReadItem`).
+ * 4. The human `principal` is never surfaced, only agent identity, and a
+ *    hostile agent name is sanitised (CN-032).
+ * 5. `@"domain"` is an EXACT literal: two stores that differ by a space, a
+ *    case or an alphabet render as two tags, an unprintable name says so
+ *    instead of vanishing, and every tag round-trips through JSON.parse.
+ * 6. The escape legend appears at most once per page, and only when some
+ *    domain on that page actually needed an escape.
+ *
+ * Not pinned here: `formatRecentPage`'s end-of-feed wording, beyond the two
+ * happy paths below — see the known defect noted at `cursorOk` in
+ * src/render.ts.
  */
 import { describe, expect, it } from "vitest";
 
@@ -24,7 +38,7 @@ import {
 const ID = "ee5f3a08-2321-4100-9a4b-91ff820c2f96";
 
 describe("formatReadItem", () => {
-  it("renders relevance, content, concepts, author, date and the FULL id", () => {
+  it("renders content, concepts, author, date and the FULL id — and no score", () => {
     const line = formatReadItem(
       {
         atom_id: ID,
@@ -40,11 +54,16 @@ describe("formatReadItem", () => {
     expect(line).toContain("[by codex · external]");
     expect(line).toContain("· 2026-08-01 21:04Z");
     expect(line).toContain(`id: ${ID}`); // full, untruncated — feedback/delete need it
-    // NO score, as of 0.8.1: `relevance` has no floor (so it can never say
-    // "I don't know") and exceeds 1.0 after positive feedback (so reads
-    // showed "112%"). Rank order carries the ranking; the number claimed a
-    // confidence it does not have. Guard against it coming back before there
-    // is a signal worth trusting.
+    // NO score, as of 0.8.1. There IS a relevance floor — core's
+    // `min_relevance` defaults to 0.3 — and this comment used to say there was
+    // none, which is the claim src/render.ts and the CHANGELOG both withdrew
+    // (review, 2026-08-08). The true statement is that the floor is too low to
+    // ever mean "I don't know": a query about something never stored still comes
+    // back with near-neighbours at scores indistinguishable from real hits
+    // (mnemoverse/mnemoverse-core#449). And the number exceeds 1.0 after
+    // positive feedback, so reads showed "112%". Rank order carries the ranking;
+    // the percentage claimed a confidence it does not have. Guard against it
+    // coming back before there is a signal worth trusting.
     expect(line).not.toMatch(/\[\d+%\]/);
   });
 
@@ -60,8 +79,22 @@ describe("formatReadItem", () => {
   });
 
   it("omits the date tag for items without created_at", () => {
-    const line = formatReadItem({ atom_id: ID, content: "x", relevance: 0.5 }, 0);
-    expect(line).not.toContain("·");
+    // The fixture carries an EXTERNAL author on purpose. `·` is also the
+    // separator inside `[by X · external]`, so a bare `not.toContain("·")` on an
+    // author-less fixture passed without ever isolating the date tag — the
+    // assertion did not test what the case is named for. Assert the date SHAPE.
+    const line = formatReadItem(
+      {
+        atom_id: ID,
+        content: "x",
+        relevance: 0.5,
+        provenance: { agent_name: "codex", is_external: true },
+      },
+      0,
+    );
+    expect(line).toContain("[by codex · external]");
+    expect(line).not.toMatch(/·\s*\d{4}-\d{2}-\d{2}/);
+    expect(line).not.toMatch(/\d{2}:\d{2}Z/);
   });
 });
 

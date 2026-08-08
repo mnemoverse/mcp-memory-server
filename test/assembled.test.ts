@@ -566,7 +566,7 @@ const SITUATIONS: readonly Situation[] = [
       expect(mcp.requestTo(READ).body).toMatchObject({ domain: "engineering" });
       expect(text).toContain("No store has that exact name.");
       // The mechanism is named — a stray space makes a separate store — and the
-      // padded twin is NOT named, because `nearestDomainNote` only claims an
+      // padded twin is NOT named, because `noSuchDomainNote` only claims an
       // exact case-insensitive match and " engineering" is not one. A guess that
       // named the wrong store would be worse than the mechanism, since the
       // reader trusts a named store. So: no quoted name at all on this page.
