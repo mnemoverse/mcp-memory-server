@@ -83,7 +83,12 @@ export function nearestDomainNote(
   knownDomains: readonly string[],
   sanitize: (s: string | undefined | null) => string,
 ): string {
-  const wanted = domain.trim();
+  // The RAW name, exactly as searched. This used to trim — a second copy of
+  // the mistake the caller had already made: a read on " engineering" searched
+  // the padded store, then this checked "engineering", matched it, and the one
+  // sentence that would have explained the miss was suppressed precisely when a
+  // stray space had caused it (review, 2026-08-08).
+  const wanted = domain;
   if (!wanted) return "";
   const lower = wanted.toLowerCase();
 
@@ -93,17 +98,23 @@ export function nearestDomainNote(
   // context. Same treatment room names already get (CodeRabbit, #65).
   const safeWanted = sanitize(wanted);
 
-  // STAY SILENT when sanitising CHANGES the name. safeInline's charset uses
-  // ASCII \w, so a Cyrillic domain — ordinary in this workspace — renders as
-  // something else entirely: "проект:acme" came out as ":acme", and the note
-  // then stated facts about a name that exists nowhere. Two different Cyrillic
-  // domains could even render identically and be declared different stores
-  // (review, 2026-08-08). No note beats a note about the wrong name.
-  if (safeWanted !== wanted) return "";
-
-  const caseTwin = knownDomains.find(
-    (d) => d !== wanted && d.toLowerCase() === lower && sanitize(d) === d,
-  );
+  // The case-twin note NAMES two stores, so it fires only when both names
+  // survive sanitising unchanged: safeInline's charset is ASCII, so a Cyrillic
+  // domain — ordinary in this workspace — came out as ":acme" and the note then
+  // stated facts about a name existing nowhere; two different Cyrillic names
+  // could even render identically and be declared different stores.
+  //
+  // The guard used to sit at the top of the function and silenced EVERYTHING,
+  // including the fall-through — so a padded or non-Latin name got no diagnosis
+  // at all, output byte-identical to "the store exists, your query merely
+  // missed" (reviews, 2026-08-08). It belongs on the branch that prints names,
+  // and only there: the fall-through below names nothing and is always safe.
+  const canName = safeWanted === wanted;
+  const caseTwin = canName
+    ? knownDomains.find(
+        (d) => d !== wanted && d.toLowerCase() === lower && sanitize(d) === d,
+      )
+    : undefined;
   if (caseTwin) {
     return (
       `\n\nDomain names are matched exactly, including case: "${safeWanted}" is not ` +
@@ -122,10 +133,18 @@ export function nearestDomainNote(
   // whose name carries a leading space or a zero-width character is real but
   // unreachable from a clean spelling. Hence "no store with that exact name",
   // never "no such store".
+  // NO pointer to memory_stats here. A previous draft ended "— memory_stats
+  // quotes each name so you can see them", and quoting was added there for
+  // exactly that purpose. It does not work: the sanitiser collapses and trims
+  // whitespace BEFORE the quotes go on, so " engineering" and "engineering"
+  // print identically. Sending the reader to a check that cannot reveal the
+  // thing closed the loop — told no such name exists, told to verify, sees the
+  // name, concludes it is right (reviews, 2026-08-08). Making stats reveal
+  // whitespace is a real fix and is deferred; promising it here was not.
   return (
-    `\n\nNo store has that exact name. Names match byte-for-byte, so a stray space ` +
-    `or an invisible character makes a different store — memory_stats quotes each ` +
-    `name so you can see them.`
+    `\n\nNo store has that exact name. Names match byte-for-byte, so a stray space, ` +
+    `a different case, or an invisible character makes a separate store — one that ` +
+    `exists and holds its own memories.`
   );
 }
 
@@ -164,9 +183,18 @@ export function formatUnsearchedRoomsNote(
   rooms: readonly RoomSummary[],
   sanitize: (s: string | undefined | null) => string,
 ): string {
+  // Archived rooms are excluded, and NO clause counts them. A clause was added
+  // in this release and removed again in the same release, because it covered
+  // only rooms the caller OWNS: core filters archived rooms out of the member
+  // query entirely and hard-codes archived=false on joined rows, so for the
+  // invited teammate this whole release is built around it never rendered — it
+  // did not fix the case it was written for. It also promised recovery "until
+  // it is unarchived", and core has archive with no inverse: no route, no store
+  // method, no tool (reviews, 2026-08-08). Both halves wrong. The real fix is
+  // core-side and is filed there; the gap is recorded in the changelog rather
+  // than papered over with a sentence that only works for owners.
   const live = rooms.filter((r) => !r?.archived);
-  const archived = rooms.length - live.length;
-  if (live.length === 0 && archived === 0) return "";
+  if (live.length === 0) return "";
 
   const shown = live.slice(0, MAX_LISTED).map((r) => {
     const name = sanitize(r?.name) || "(unnamed room)";
@@ -176,20 +204,13 @@ export function formatUnsearchedRoomsNote(
   });
   const rest = live.length - shown.length;
   const more = rest > 0 ? `\n  …and ${rest} more (memory_list_rooms)` : "";
-  const archivedClause =
-    archived > 0
-      ? `\nPlus ${archived} archived room${archived === 1 ? "" : "s"}, which cannot be ` +
-        `read at all — content in there is unreachable until it is unarchived.`
-      : "";
 
-  const head =
-    live.length > 0
-      ? `Shared rooms are separate stores and are NOT included in an unscoped read — ` +
-        `${live.length} room${live.length === 1 ? "" : "s"} went unsearched:\n${shown.join("\n")}${more}\n` +
-        `Re-run with domain set to one of these to read it.`
-      : `Shared rooms are separate stores and are NOT included in an unscoped read.`;
-
-  return `\n\nScope: your own domains only. ${head}${archivedClause}`;
+  return (
+    `\n\nScope: your own domains only. Shared rooms are separate stores and are NOT ` +
+    `included in an unscoped read — ${live.length} room${live.length === 1 ? "" : "s"} ` +
+    `went unsearched:\n${shown.join("\n")}${more}\n` +
+    `Re-run with domain set to one of these to read it.`
+  );
 }
 
 /**
@@ -204,18 +225,27 @@ export function formatUnsearchedRoomsNote(
 export async function unsearchedRoomsNote(
   fetchRooms: () => Promise<unknown>,
   sanitize: (s: string | undefined | null) => string,
-): Promise<string> {
+): Promise<{ note: string; roomsFound: boolean }> {
   try {
     const rooms = await fetchRooms();
-    return formatUnsearchedRoomsNote(
-      Array.isArray(rooms) ? (rooms as RoomSummary[]) : [],
-      sanitize,
-    );
+    const list = Array.isArray(rooms) ? (rooms as RoomSummary[]) : [];
+    return {
+      note: formatUnsearchedRoomsNote(list, sanitize),
+      // The caller needs TWO facts, and they are not the same fact: whether to
+      // print a caveat, and whether rooms are KNOWN to hold content. Deriving
+      // the second from "is the note non-empty" made a failed probe look like
+      // proof that rooms exist, which then suppressed the first-contact
+      // greeting for a genuinely new account (review, 2026-08-08).
+      roomsFound: list.length > 0,
+    };
   } catch {
-    return (
-      `\n\nScope: your own domains only. Shared rooms are separate stores and are NOT ` +
-      `included in an unscoped read; the room list could not be fetched just now, so ` +
-      `check memory_list_rooms and re-run with domain set.`
-    );
+    return {
+      note:
+        `\n\nScope: your own domains only. Shared rooms are separate stores and are NOT ` +
+        `included in an unscoped read; the room list could not be fetched just now, so ` +
+        `check memory_list_rooms and re-run with domain set.`,
+      // We could not look. That is not evidence either way.
+      roomsFound: false,
+    };
   }
 }

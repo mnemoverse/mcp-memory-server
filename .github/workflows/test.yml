@@ -1,0 +1,59 @@
+name: test
+
+# The test gate this repository did not have.
+#
+# Discovered 2026-08-08 by fire-testing the 0.8.1 branch: four user-facing
+# messages were reverted to their old wording, minus 32 lines, and the suite
+# stayed 60/60 green — then a grep showed why it didn't matter either way.
+# `.github/` contained no reference to vitest at all. release.yml,
+# verify-configs.yml and release-sync-check.yml were the only workflows, and
+# none of them ran a test. There are no git hooks. So the entire suite ran only
+# when a human happened to type `npm test`, on a package that publishes to npm
+# and whose instructions land verbatim in a model's system prompt.
+#
+# Two deliberate choices:
+#
+#   TZ IS PINNED, AND NOT TO UTC. The timezone fix in 0.8.1 (an offset-less
+#   timestamp must be read as UTC, because that is what the engine does) is
+#   invisible under TZ=UTC — with the bug reintroduced, the suite passes there.
+#   A runner defaults to UTC, so a UTC-only run would have shipped that bug
+#   green. The matrix runs a zone east of UTC, one west, and UTC itself, since
+#   each catches a different half.
+#
+#   NO `paths:` FILTER. verify-configs scopes itself to the files it checks,
+#   which is right for a drift check. Tests are not a drift check: a change
+#   anywhere in src/ can break them, and a filter is one refactor away from
+#   silently excusing the file that broke.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Lisbon is UTC+0/+1, New York is UTC-4/-5. Between them and UTC the
+        # naive-timestamp behaviour is pinned from both sides and the middle.
+        tz: ["UTC", "Europe/Lisbon", "America/New_York"]
+    env:
+      TZ: ${{ matrix.tz }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test (TZ=${{ matrix.tz }})
+        run: npm test

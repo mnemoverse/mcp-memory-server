@@ -199,7 +199,12 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     expect(indexSource.match(/\+ scopeNote|scopeNote,$/gm)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
-  it("NEVER normalises the domain it sends to the server", () => {
+  // The wire contract itself is pinned by test/requests.test.ts, which compares
+  // real built bodies against 0.8.0's for every domain shape. This source check
+  // is only a tripwire for the pattern coming back into a handler; it is NOT
+  // the guarantee. The previous version of this test WAS the guarantee, and a
+  // deleted coercion walked straight past it (reviews, 2026-08-08).
+  it("keeps handlers free of ad-hoc domain normalisation", () => {
     // 0.8.1 briefly trimmed `domain` at the edge of each handler. Two reviews
     // killed it (2026-08-08): core deliberately 400s a non-canonical room
     // address so a write "can't be mis-routed and tagged with a spoofed xroom
@@ -208,16 +213,21 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     // 0.8.0 hard-failed. It also silently relocated padded personal domains
     // while memory_delete_domain kept sending the raw value.
     //
-    // So the wire value is untouched, and only the LOCAL choice of which
-    // explanation to attach to an empty result is normalised. This test is the
-    // guard: re-introducing the trim on a send path must fail here.
-    expect(indexSource).not.toMatch(/const domain = rawDomain\?\.trim\(\)/);
+    // No handler may `.trim()` a domain at all — not for the wire, and not for
+    // a local decision either. A trimmed copy used only for wording still
+    // desynced from the value that was searched, which silenced the diagnosis
+    // in the release's own founding case and, for a whitespace-only domain,
+    // claimed a scope that had not been searched.
+    expect(indexSource).not.toMatch(/domain\?\.trim\(\)/);
     expect(indexSource).not.toMatch(/domain: rawDomain/);
 
-    // The local, never-sent normalisation, in memory_read and memory_list_recent.
-    expect(indexSource.match(/const scopeKey = domain\?\.trim\(\) \|\| null/g)).toHaveLength(2);
-    // And the write still sends exactly what 0.8.0 sent.
-    expect(indexSource).toContain('domain: domain || "general"');
+    // Bodies are built by the pure, tested module — not assembled inline where
+    // a coercion can quietly go missing.
+    for (const builder of ["readRequestBody(", "recentRequestBody(", "writeRequestBody("]) {
+      expect(indexSource).toContain(builder);
+    }
+    // And every decision about the result uses the same value that was sent.
+    expect(indexSource.match(/const searched = searchedScope\(domain\)/g)).toHaveLength(2);
   });
 });
 
@@ -241,5 +251,69 @@ describe("install-command canon", () => {
     );
     expect(readme).toContain(flat);
     expect(snippet).toContain(flat);
+  });
+});
+
+describe("boundary copy — the load-bearing sentences of 0.8.1", () => {
+  // A review reverted FOUR of these messages to their 0.8.0 wording, deleted 32
+  // lines, and the suite stayed 60/60 green (2026-08-08). The copy IS this
+  // release, and it had no mechanical protection at all.
+  //
+  // These are source assertions, and that is a real limitation, stated rather
+  // than hidden: src/index.ts opens a stdio transport on import, so its
+  // handlers cannot be invoked from a unit test. A tripwire that catches
+  // deletion is worth having; it is not a behavioural guarantee. Moving these
+  // strings into an importable module is the proper fix and is on the 0.9 list.
+  const REQUIRED: Array<[why: string, needle: string]> = [
+    [
+      "an empty feed must name the scope INSIDE the sentence, not append a note that retracts it",
+      "since your watermark.`",
+    ],
+    ["the scope label helper must exist", "function scopeLabel("],
+    [
+      "a failed write must say NOTHING WAS SAVED, not merely name the mechanism",
+      "NOT STORED — nothing was saved.",
+    ],
+    [
+      "a delete that hit nothing must not claim the memory never existed",
+      "memories in shared rooms CANNOT be deleted through this tool",
+    ],
+    [
+      "a zero-row domain wipe must not read like a successful wipe",
+      "NOTHING was deleted",
+    ],
+    [
+      "zero feedback must not blame deletion when scope is the likely cause",
+      "cannot reach room atoms",
+    ],
+    [
+      "memory_stats must distinguish unknown from zero",
+      '"unknown"',
+    ],
+  ];
+
+  for (const [why, needle] of REQUIRED) {
+    it(why, () => {
+      expect(indexSource).toContain(needle);
+    });
+  }
+
+  it("does not reinstate the sentences these replaced", () => {
+    // Comments are stripped first. Several of the replaced sentences are QUOTED
+    // in the comments that explain why they were replaced — that is the record
+    // of what went wrong and must stay. Only the code is checked.
+    const code = indexSource
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    for (const gone of [
+      '"Nothing new since your watermark."',
+      '"No memories here yet."',
+      "`No memory found with id ${atom_id}.`",
+      "Feedback recorded for ${count}",
+    ]) {
+      expect(code, `${gone} came back`).not.toContain(gone);
+    }
+    // And the comments really do still carry the history.
+    expect(indexSource).toContain("Nothing new since your watermark.");
   });
 });

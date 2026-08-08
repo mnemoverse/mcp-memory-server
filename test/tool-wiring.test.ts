@@ -15,6 +15,11 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  readRequestBody,
+  recentRequestBody,
+  writeRequestBody,
+} from "../src/requests.js";
 
 const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
 
@@ -57,27 +62,46 @@ function braceBody(block: string, from: number): string {
 }
 
 /**
- * Keys the handler puts into the JSON request body.
+ * Keys the handler actually puts into the request body — measured by CALLING
+ * the builder, not by pattern-matching the source.
  *
- * Two spellings count, because both are in use: a plain `name: value` entry,
- * and the conditional spread `...(name ? { name } : {})` that memory_read uses
- * to keep the body byte-identical for callers who pass no filters.
+ * This used to brace-match `body: JSON.stringify({ … })` inside src/index.ts.
+ * That was honest about its own fragility (it asserted the anchor existed, so
+ * it would fail loudly rather than pass from the wrong text) and it did exactly
+ * that when the bodies moved into src/requests.ts. Reading them from the real
+ * functions is strictly better: it survives a reformat, and it checks the value
+ * that ships instead of the text that describes it.
+ *
+ * Every declared parameter gets a type-appropriate sentinel, because a body
+ * builder may legitimately drop a falsy value (`limit: 0` becomes the default)
+ * and a test that fed `undefined` everywhere would pass while forwarding
+ * nothing.
  */
-function forwardedParams(block: string): string[] {
-  // Assert the anchor was found rather than letting indexOf return -1 and
-  // brace-match some unrelated object earlier in the block: that path produces
-  // a PASS from the wrong text, which is the one outcome this file must not
-  // have. If the handler stops building the body inline (`JSON.stringify(body)`),
-  // this fails loudly and someone updates the pattern deliberately.
-  const open = block.indexOf("body: JSON.stringify({");
-  expect(open, "body: JSON.stringify({ … }) not found — the handler shape changed").toBeGreaterThan(-1);
-  // Brace-match rather than searching for a closing token: a conditional
-  // spread ends in `: {}),`, which contains the obvious `}),` sentinel and
-  // would truncate the object at its first filter.
-  const literal = braceBody(block, open + "body: JSON.stringify(".length);
-  const plain = [...literal.matchAll(/^\s+([a-z_]+)[:,]/gm)].map((m) => m[1]);
-  const spread = [...literal.matchAll(/\.\.\.\(\s*([a-z_]+)\s*\?/g)].map((m) => m[1]);
-  return [...new Set([...plain, ...spread])];
+const SENTINEL: Record<string, unknown> = {
+  query: "sentinel-query",
+  content: "sentinel-content",
+  concepts: ["sentinel-concept"],
+  domain: "sentinel-domain",
+  order_by: "recency",
+  since: "2026-08-01T00:00:00Z",
+  until: "2026-08-02T00:00:00Z",
+  exclude_author: "sentinel-author",
+  top_k: 7,
+  limit: 11,
+  cursor: "sentinel-cursor",
+};
+
+function forwardedParams(
+  build: (a: never) => Record<string, unknown>,
+  declared: string[],
+): string[] {
+  const args: Record<string, unknown> = {};
+  for (const p of declared) {
+    expect(SENTINEL, `no sentinel defined for the new parameter "${p}"`).toHaveProperty(p);
+    args[p] = SENTINEL[p];
+  }
+  const body = build(args as never);
+  return declared.filter((p) => body[p] !== undefined);
 }
 
 describe("memory_list_recent", () => {
@@ -97,8 +121,9 @@ describe("memory_list_recent", () => {
   it("forwards every advertised parameter — none may be declared and dropped", () => {
     // Subset, not equality: a handler may also send constants the caller never
     // supplies. What must never happen is the other direction.
-    const forwarded = forwardedParams(block);
-    for (const p of declaredParams(block)) {
+    const declared = declaredParams(block);
+    const forwarded = forwardedParams(recentRequestBody, declared);
+    for (const p of declared) {
       expect(forwarded, `${p} is advertised but never sent`).toContain(p);
     }
   });
@@ -121,7 +146,19 @@ describe("memory_read", () => {
     expect(declared).toContain("since");
     expect(declared).toContain("until");
     expect(declared).toContain("exclude_author");
-    const forwarded = forwardedParams(block);
+    const forwarded = forwardedParams(readRequestBody, declared);
+    for (const p of declared) {
+      expect(forwarded, `${p} is advertised but never sent`).toContain(p);
+    }
+  });
+});
+
+describe("memory_write", () => {
+  const block = toolBlock("memory_write");
+
+  it("forwards every advertised parameter", () => {
+    const declared = declaredParams(block);
+    const forwarded = forwardedParams(writeRequestBody, declared);
     for (const p of declared) {
       expect(forwarded, `${p} is advertised but never sent`).toContain(p);
     }

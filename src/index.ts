@@ -12,18 +12,46 @@ import {
   type ReadItem,
   type RecentItem,
 } from "./render.js";
-import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
+import {
+  SERVER_INSTRUCTIONS,
+  buildReadEmptyResponse,
+  NO_MATCH_MESSAGE,
+} from "./teaching.js";
 import {
   unsearchedRoomsNote,
   futureSinceNote,
   nearestDomainNote,
 } from "./scope.js";
+import {
+  readRequestBody,
+  recentRequestBody,
+  writeRequestBody,
+  searchedScope,
+} from "./requests.js";
 
 /**
- * On an empty SCOPED result, say whether the domain name is a casing slip or a
- * near-miss. One extra call, only on the zero-result path — the same shape as
- * the existing first-contact probe. Never throws: a failed probe just means no
- * extra help, which is the status quo.
+ * How to NAME the scope inside a sentence, so the sentence is true on its own
+ * rather than corrected by a paragraph underneath it.
+ *
+ * "Nothing new since your watermark." was left untouched by the first two
+ * passes of this release — the very sentence src/scope.ts's header names as the
+ * lie that cost two agents a day. A note was appended to it instead, so the
+ * assembled answer read as two voices: one asserting you were caught up, the
+ * next saying that assertion was meaningless. The sibling branch in
+ * memory_read had it right all along by naming its filters inside the sentence
+ * (review, 2026-08-08).
+ */
+function scopeLabel(searched: string | undefined): string {
+  if (!searched) return "your own domains";
+  if (searched.startsWith("xroom:")) return "that room";
+  return `"${safeInline(searched)}"`;
+}
+
+/**
+ * On an empty SCOPED result, say whether the domain name is a casing slip or is
+ * simply not there. One extra call, only on the zero-result path — the same
+ * shape as the existing first-contact probe. Never throws: a failed probe just
+ * means no extra help, which is the status quo.
  *
  * ROOMS ARE EXCLUDED FROM THE STATS PROBE, and that exclusion is the whole
  * reason this release exists. `memory_stats` reports personal domains only —
@@ -33,6 +61,9 @@ import {
  * member of: the exact false-absence claim being fixed, reintroduced by the
  * fix (CodeRabbit, #65). Room addresses are checked against the ROOM list
  * instead, where they actually live.
+ *
+ * The argument is the RAW domain that was searched, never a trimmed copy —
+ * see the note at the top of memory_read for what desyncing those two cost.
  */
 async function domainMissNote(domain: string): Promise<string> {
   try {
@@ -243,11 +274,7 @@ server.registerTool(
       reason?: string;
     }>("/memory/write", {
       method: "POST",
-      body: JSON.stringify({
-        content,
-        concepts: concepts || [],
-        domain: domain || "general",
-      }),
+      body: JSON.stringify(writeRequestBody({ content, concepts, domain })),
     });
 
     // "unknown", not 0.00, when the server didn't send a score — the same rule
@@ -287,13 +314,29 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
+          // Two things this deliberately does NOT do any more.
+          //
+          // It does not assert the CAUSE when the server sent none. The gate
+          // rejects on novelty — too close to an existing memory — but a live
+          // surface answers {"stored":false} with no reason and no score, and
+          // stating a specific verdict there was a claim on zero evidence, in
+          // the release about not doing that. The cause is named only when the
+          // server named it.
+          //
+          // It does not predict the retry. "Rewording will score the same or
+          // lower" was asserted as fact and is probably BACKWARDS: novelty
+          // decreases with similarity to the blocking memory, so a reworded
+          // sentence is usually LESS similar and scores HIGHER. And the
+          // delete-then-write advice is impossible for a room write — the
+          // blocker is a room atom, which memory_delete cannot touch, as this
+          // file's own delete message says (reviews, 2026-08-08).
           text:
-            `NOT STORED — nothing was saved. The gate rejected it as too close to ` +
-            `something already in this domain (${r?.reason ?? "no reason given"}; novelty ` +
-            `score ${importance}). Rewording the same fact will score the same or lower. ` +
-            `If it is genuinely new, write what is DIFFERENT rather than the whole fact ` +
-            `again. If it CORRECTS an existing memory, there is no update — find the old ` +
-            `one with memory_read and remove it with memory_delete, then write the new one.`,
+            `NOT STORED — nothing was saved.` +
+            (r?.reason ? ` Server reason: ${safeInline(r.reason, 200)}.` : ``) +
+            (importance === "unknown" ? `` : ` Novelty score ${importance}.`) +
+            ` Writes are gated on how much a memory adds over what is already in the` +
+            ` same domain, so a near-duplicate is refused. If the point is genuinely` +
+            ` new, write what is DIFFERENT rather than restating the whole fact.`,
         },
       ],
     };
@@ -374,29 +417,32 @@ server.registerTool(
     },
   },
   async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
-    // The request body passes `domain` through UNCHANGED (see the note in
-    // memory_write: normalising here changes which store is searched, which is
-    // a behaviour change, not a wording one). What IS normalised is only the
-    // local decision about which EXPLANATION to attach to an empty result —
-    // `scopeKey` below. That never leaves the process.
-    const scopeKey = domain?.trim() || null;
+    // ONE value, used for the request AND for every decision about it.
+    //
+    // A previous draft sent the raw string but decided the wording from a
+    // TRIMMED copy, and the two disagreed in the release's own founding case:
+    // a read on " engineering" searched the padded store (correct) while the
+    // diagnosis checked "engineering", found it, and stayed silent — so the
+    // one note that would have said "a stray space makes a different store"
+    // was suppressed exactly when a stray space had made a different store.
+    // For a whitespace-only domain it went the other way and claimed the
+    // search had covered the caller's own domains when it had covered none
+    // (reviews, 2026-08-08).
+    //
+    // `|| undefined` is what 0.8.0 sent and must stay: core filters on
+    // `domain is not None`, not on truthiness, so passing "" through would
+    // become `WHERE domain = ''` — a store that cannot exist — turning a
+    // search of every domain into a guaranteed miss. That is data movement,
+    // not wording, and it does not belong in a patch.
+    const searched = searchedScope(domain);
     const r = await apiFetch<{
       items?: ReadItem[];
       search_time_ms?: number;
     }>("/memory/read", {
       method: "POST",
-      body: JSON.stringify({
-        query,
-        top_k: top_k || 5,
-        domain,
-        include_associations: true,
-        // #404 temporal dimension — omitted entirely when unused so the
-        // request body stays byte-identical for existing callers.
-        ...(order_by ? { order_by } : {}),
-        ...(since ? { since } : {}),
-        ...(until ? { until } : {}),
-        ...(exclude_author ? { exclude_author } : {}),
-      }),
+      body: JSON.stringify(
+        readRequestBody({ query, top_k, domain, order_by, since, until, exclude_author }),
+      ),
     });
 
     const items = Array.isArray(r?.items) ? r.items : [];
@@ -406,18 +452,21 @@ server.registerTool(
       // the truthful answer is "nothing new for these filters" (mirrors
       // memory_list_recent's empty copy; no stats probe, no broaden hint).
       // Unscoped, it also has to name the rooms it never looked in.
-      const scopeNote = scopeKey
-        ? await domainMissNote(scopeKey)
-        : await unsearchedRoomsNote(
+      const scopeNote = searched
+        ? await domainMissNote(searched)
+        : (await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
-          );
+          )).note;
       return {
         content: [
           {
             type: "text" as const,
             text:
-              "Nothing matching within the given time/author filters." +
+              // The scope is IN the sentence, not appended after it. This
+              // branch was already the honest one in 0.8.0 — it names its
+              // filters — and it is the model the feed's copy now follows.
+              `Nothing in ${scopeLabel(searched)} matches within the given time/author filters.` +
               futureSinceNote(since, Date.now()) +
               scopeNote,
           },
@@ -439,19 +488,31 @@ server.registerTool(
       // with three full rooms and no personal writes would otherwise be told
       // "nothing has been saved yet" — and then contradicted by the note right
       // underneath (review, 2026-08-08).
-      const scopeNote = scopeKey
-        ? await domainMissNote(scopeKey)
+      const rooms = searched
+        ? { note: "", roomsFound: false }
         : await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
           );
-      const text = await buildReadEmptyResponse(
-        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-        scopeKey !== null,
-        // A non-empty unscoped note means rooms exist — or that we could not
-        // check, in which case suppressing the greeting is the safe error.
-        scopeKey === null && scopeNote !== "",
-      );
+      const scopeNote = searched ? await domainMissNote(searched) : rooms.note;
+      // A SPECIFIC diagnosis replaces the generic advice; it does not follow
+      // it. "Try a broader query, or a different domain." printed first, then
+      // "that is not the same store as X, which does exist" — so a model
+      // reading top-down went off to widen a query against a store that does
+      // not exist, which is the wasted loop this release exists to end
+      // (review, 2026-08-08).
+      const text = searched && scopeNote
+        ? NO_MATCH_MESSAGE
+        : await buildReadEmptyResponse(
+            () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+            searched !== undefined,
+            // Rooms are only KNOWN to exist when the probe succeeded and found
+            // some. A failed probe returns a non-empty note too, and treating
+            // that as "rooms exist" told a genuinely new account "that is not
+            // the whole picture" on no evidence — and withheld the one message
+            // that teaches how to save a first memory.
+            searched === undefined && rooms.roomsFound,
+          );
       return {
         content: [{ type: "text" as const, text: text + scopeNote }],
       };
@@ -536,23 +597,18 @@ server.registerTool(
     },
   },
   async ({ domain, since, until, exclude_author, limit, cursor }) => {
-    // As in memory_read: `domain` reaches the server untouched; only the local
-    // choice of explanation is normalised.
-    const scopeKey = domain?.trim() || null;
+    // ONE value for the request and for every decision about it — see the note
+    // at the top of memory_read.
+    const searched = searchedScope(domain);
     let r: { items?: RecentItem[]; next_cursor?: string | null };
     try {
       r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
         "/memory/recent",
         {
           method: "POST",
-          body: JSON.stringify({
-            domain: domain || undefined,
-            since: since || undefined,
-            until: until || undefined,
-            exclude_author: exclude_author || undefined,
-            limit: limit || 20,
-            cursor: cursor || undefined,
-          }),
+          body: JSON.stringify(
+            recentRequestBody({ domain, since, until, exclude_author, limit, cursor }),
+          ),
         },
       );
     } catch (e) {
@@ -580,23 +636,29 @@ server.registerTool(
 
     const items = Array.isArray(r?.items) ? r.items : [];
     if (items.length === 0) {
-      // An empty UNSCOPED feed must say where it looked. Rooms are separate
-      // stores and are never covered here, so a bare "nothing new" is a false
-      // claim about the world (incident 2026-08-07 — see src/scope.ts).
-      const scopeNote = scopeKey
-        ? await domainMissNote(scopeKey)
-        : await unsearchedRoomsNote(
+      // THE SENTENCE ITSELF carries the scope. Both of these were unchanged
+      // from 0.8.0 through two passes of this release — and
+      // "Nothing new since your watermark." is the exact sentence src/scope.ts
+      // was written to eliminate. Appending a note to it produced two voices:
+      // one telling the reader they were caught up, the next explaining that
+      // the first was meaningless. Naming the scope inside the clause makes it
+      // true on its own, and the note becomes an addition rather than a
+      // retraction (review, 2026-08-08).
+      const scopeNote = searched
+        ? await domainMissNote(searched)
+        : (await unsearchedRoomsNote(
             () => apiFetch<unknown>("/memory/rooms"),
             safeInline,
-          );
+          )).note;
+      const where = scopeLabel(searched);
       return {
         content: [
           {
             type: "text" as const,
             text:
               (since
-                ? "Nothing new since your watermark."
-                : "No memories here yet.") +
+                ? `Nothing new in ${where} since your watermark.`
+                : `No memories in ${where} yet.`) +
               futureSinceNote(since, Date.now()) +
               scopeNote,
           },
@@ -623,7 +685,7 @@ server.registerTool(
   "memory_feedback",
   {
     description:
-      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results.",
+      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
     inputSchema: {
       atom_ids: z
         .array(z.string())
@@ -676,11 +738,15 @@ server.registerTool(
           {
             type: "text" as const,
             text:
+              // No frequency claim. "Most often that means…" was a statistic
+              // we do not have (review, 2026-08-08); the causes are listed as
+              // possibilities, with the one the caller cannot otherwise guess
+              // first because it is invisible from the tool surface.
               "No feedback was recorded — none of those ids matched a memory in your own " +
-              "domains. Most often that means the ids came from a shared room: this tool " +
-              "cannot reach room atoms (it takes no domain argument), so rating them is a " +
-              "no-op. Otherwise the memory was deleted, or the id came from somewhere " +
-              "other than a memory_read result.",
+              "domains. Possible causes: the ids came from a shared room (this tool takes " +
+              "no domain argument and cannot reach room atoms, so rating them is a no-op); " +
+              "the memory was deleted; or the id came from somewhere other than a " +
+              "memory_read result.",
           },
         ],
       };
@@ -700,7 +766,12 @@ server.registerTool(
         ? `Recorded +${outcome} (helpful) for ${noun} — they should surface sooner next time.`
         : outcome < 0
           ? `Recorded ${outcome} (unhelpful) for ${noun} — they should fade.`
-          : `Recorded 0 (neutral) for ${noun}. Logged as a recall that was neither useful nor wrong; use +1 or -1 when you want the ranking to move.`;
+          // Neutral says nothing about the effect, in either direction. The
+          // previous wording ("use +1 or -1 when you want the ranking to move")
+          // implied 0 leaves ranking alone — which the comment above forbids,
+          // since dogfooding saw a neutral rating move a score UP by about five
+          // points (review, 2026-08-08).
+          : `Recorded 0 (neutral) for ${noun} — logged as a recall that was neither useful nor wrong. Use +1 or -1 to express a direction.`;
     return {
       content: [{ type: "text" as const, text }],
     };
@@ -741,14 +812,16 @@ server.registerTool(
     const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
     const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
 
-    // QUOTE each name. Joining bare strings with ", " made a leading or
-    // trailing space invisible — and since names match byte-for-byte, an
-    // accidental " engineering" is a real, separate, unreachable store whose
-    // only symptom is a read that finds nothing. The check we point callers at
-    // could not reveal the thing it was meant to reveal (review, 2026-08-08).
+    // Quoting was added here to make a leading space visible, and REMOVED
+    // again once a review showed it cannot: safeInline collapses and trims
+    // whitespace before the quotes go on, so " engineering" and "engineering"
+    // render identically and the list reads like a tool bug. Revealing
+    // whitespace needs escaping rather than quoting, which is a real change
+    // with its own edge cases — deferred to 0.9 rather than shipped as a fix
+    // that isn't one (reviews, 2026-08-08).
     const domains =
       Array.isArray(r?.domains) && r.domains.length > 0
-        ? r.domains.map((d) => `"${safeInline(d)}"`).join(", ")
+        ? r.domains.map((d) => safeInline(d)).join(", ")
         : "none reported";
 
     const text = [
@@ -770,7 +843,7 @@ server.registerTool(
   "memory_delete",
   {
     description:
-      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. To clear an entire topic at once, use memory_delete_domain instead.",
+      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. Reaches your own domains only: memories in shared rooms CANNOT be deleted through this tool. To clear an entire topic at once, use memory_delete_domain instead.",
     inputSchema: {
       atom_id: z
         .string()
@@ -834,7 +907,7 @@ server.registerTool(
   "memory_delete_domain",
   {
     description:
-      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). For a single wrong or stale memory, memory_delete is the right tool.",
+      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). Names match byte-for-byte, including case, and shared rooms cannot be wiped through this tool. For a single wrong or stale memory, memory_delete is the right tool.",
     inputSchema: {
       domain: z
         .string()

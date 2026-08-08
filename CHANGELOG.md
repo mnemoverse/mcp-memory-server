@@ -93,6 +93,79 @@ zero-width characters handled (`trim()` does not strip those).
 - Two `domain` descriptions were simply false — "omit to search across all
   domains" / "omit for all your domains". Rooms were never in that "all".
 
+### Added — the test gate this repository did not have
+
+`.github/` contained no reference to `vitest`. Three workflows, none of them
+running a test; no git hooks. The whole suite ran only when a human typed it, on
+a package that publishes to npm and whose instructions land verbatim in a
+model's system prompt. Found by fire-testing, not by reading: four of this
+release's own messages were reverted to their old wording, 32 lines deleted, and
+the suite stayed green — then a grep showed it would not have mattered either
+way.
+
+`test.yml` now runs typecheck and tests on every push and pull request, across
+**three timezones**. Not a stylistic choice: the naive-timestamp fix below is
+invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
+UTC-only job would have shipped that bug green.
+
+The suite also grew from 60 tests to 116, and the two that mattered most were
+replaced rather than added to. The wire contract is now pinned by calling the
+real body builders (`src/requests.ts`) and comparing against 0.8.0's bodies for
+every domain shape — whitespace, non-breaking and zero-width spaces, padded room
+addresses. The guard it replaced was a regex asserting the ABSENCE of a `trim()`,
+which cannot catch a DELETED coercion — and a deleted coercion is what shipped.
+Both sabotages now fail loudly: removing `|| undefined` breaks 3 tests, adding a
+trim breaks 6.
+
+### Fixed in the second review round
+
+- **The lying sentence was still there.** `"Nothing new since your watermark."`
+  went untouched through two passes — the exact sentence `src/scope.ts`'s header
+  names as the failure that cost two agents a day. A note had been appended to
+  it instead, so the answer read as two voices: one saying you were caught up,
+  the next saying that claim was meaningless. The scope is now **inside** the
+  clause ("Nothing new in your own domains since your watermark"), which is what
+  the sibling branch in `memory_read` had been doing correctly all along.
+- **The revert had moved a read.** Restoring 0.8.0's send behaviour dropped
+  `|| undefined` on `memory_read`, so `domain: ""` became `WHERE domain = ''` — a
+  store that cannot exist — turning a search of every domain into a guaranteed
+  miss. Core filters on `domain is not None`, not on truthiness.
+- **A trimmed copy for wording desynced from the value searched.** A read on
+  `" engineering"` searched the padded store but checked `"engineering"` for its
+  diagnosis, found it, and stayed silent — suppressing the one note that says a
+  stray space makes a different store, precisely when a stray space had. For a
+  whitespace-only domain it went the other way and claimed the search had
+  covered the caller's own domains when it had covered none. There is now one
+  value, used for the request and for every statement about it.
+- **Generic advice preceded the specific diagnosis.** "Try a broader query, or a
+  different domain." printed first, then "that is not the same store as X, which
+  does exist" — so a model reading top-down went off to widen a query against a
+  store that does not exist. A diagnosis now replaces the advice rather than
+  following it.
+- **The greeting fired on a failed probe.** Rooms were treated as existing
+  whenever the room note was non-empty, and the failure branch returns a
+  non-empty note — so a genuinely new account whose first read coincided with a
+  `/memory/rooms` blip was told "that is not the whole picture" on no evidence,
+  and lost the one message that teaches how to save a first memory.
+- **Three claims were withdrawn rather than repaired**, because they did not
+  work: quoting domain names in `memory_stats` (the sanitiser trims whitespace
+  before the quotes go on, so `" engineering"` and `"engineering"` print
+  identically — and a note pointed readers there to verify); the archived-rooms
+  count (core hides archived rooms from the member query entirely, so it only
+  ever rendered for owners — not the reader this release is about — and it
+  promised recovery "until it is unarchived" when core has archive with no
+  inverse); and the `NOT STORED` prediction that "rewording will score the same
+  or lower", which is probably backwards, since novelty falls as similarity
+  rises.
+- **`NOT STORED` no longer states a cause it cannot see.** A live surface answers
+  `{"stored":false}` with no reason and no score; the mechanism is now named only
+  when the server named it.
+- **Smaller ones:** the feedback zero-branch dropped an invented frequency
+  ("most often"); the neutral line stopped implying 0 leaves ranking alone,
+  which this file's own comment forbids; the room boundary moved into the
+  descriptions of `memory_feedback`, `memory_delete` and `memory_delete_domain`,
+  where it is read *before* acting rather than confessed afterwards.
+
 ### Fixed after review — false statements the first draft introduced
 
 Three adversarial reviews read every new string against the engine code. What
