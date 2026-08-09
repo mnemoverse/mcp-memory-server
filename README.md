@@ -200,11 +200,16 @@ If it doesn't remember: check that the client was fully restarted and the config
 |------|-------------|
 | `memory_write` | Store a memory — insight, preference, lesson learned |
 | `memory_read` | Search memories by natural language query (optional recency ordering, time bounds, author exclusion) |
-| `memory_list_recent` | List newest memories first — no query; `since` watermark + cursor paging |
+| `memory_list_recent` | List newest memories first — no query; `since`/`until` bounds (inclusive) + cursor paging |
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
 | `memory_delete` | Permanently delete a single memory by `atom_id` |
 | `memory_delete_domain` | Wipe an entire domain (requires `confirm: true` safety interlock) |
+| `memory_create_room` | Create a shared memory room; its address works as a `domain` on write/read |
+| `memory_invite_to_room` | Mint a one-time invite (code + link) for a room you own |
+| `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
+| `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
+| `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |
 
 ## Ideas: What to Remember
 

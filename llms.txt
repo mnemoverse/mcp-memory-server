@@ -19,13 +19,13 @@ Search memories by natural language query. Returns most relevant stored memories
 
 Parameters:
 - query (string, required): Natural language query — what are you looking for? 1-5000 chars.
-- top_k (integer, optional, default 5): Max results to return. Range: 1-50.
+- top_k (integer, optional, default 5): Requested number of results, 1-50. Not a hard cap: association expansion can return more, and the relevance floor can return fewer.
 - domain (string, optional): Filter by domain namespace.
 - order_by (string, optional): "relevance" (default) or "recency" — matched set newest-first.
 - since / until (ISO-8601 strings, optional): inclusive created_at bounds; naive = UTC.
-- exclude_author (string, optional): drop memories written by this principal ("everyone but me" in shared rooms).
+- exclude_author (string, optional): drop memories written by this author principal. Results never show a principal, so only pass one known from elsewhere (e.g. the REST API); a guess like "me" silently filters nothing.
 
-Returns: List of memories with relevance scores, concepts, domain, created_at, and id (pass ids to memory_feedback / memory_delete).
+Returns: List of memories ranked best-match-first (no numeric score is shown) with content, concepts, domain, author tag, created_at, and id (pass ids to memory_feedback / memory_delete).
 
 ### memory_list_recent
 
@@ -33,7 +33,9 @@ List the newest memories first — no search query. Resuming after a break or ca
 
 Parameters:
 - domain (string, optional): e.g. a room address "xroom:...".
-- since (ISO-8601 string, optional): only entries at/after this instant — your novelty watermark.
+- since (ISO-8601 string, optional): only entries at/after this instant (inclusive) — your novelty watermark.
+- until (ISO-8601 string, optional): only entries at/before this instant (inclusive) — pair with since to read a closed window.
+- exclude_author (string, optional): drop entries written by this author principal — same caveat as on memory_read: results never show a principal, so a guess like "me" filters nothing.
 - limit (integer, optional, default 20): page size, 1-100.
 - cursor (string, optional): opaque cursor from the previous page — stable paging, no skips or duplicates.
 

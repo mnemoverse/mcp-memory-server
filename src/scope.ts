@@ -652,8 +652,14 @@ async function probeNamedScope(
 
 /**
  * Build the {@link ReadScope} for one read: where it looked, and what we know
- * about what it therefore did not cover. One probe, on the zero-result path
- * only, exactly as before.
+ * about what it therefore did not cover. One GET per call — the room list for
+ * an unscoped read or an `xroom:` address, `/memory/stats` for a plain domain
+ * — and callers reach it on zero-result paths only. That is MORE probing than
+ * 0.8.0 did, not "exactly as before" (an earlier version of this comment):
+ * 0.8.0 made no probe at all on a domain-scoped, room-scoped or filtered read
+ * and none anywhere in the feed; only the plain unscoped read probed stats.
+ * The added reads are disclosed in the 0.8.1 CHANGELOG entry, rate cost
+ * included.
  *
  * `searched` must be the value that went over the wire — `searchedScope(domain)`
  * — so that the diagnosis and the request can never describe different stores.

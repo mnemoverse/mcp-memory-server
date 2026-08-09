@@ -16,6 +16,12 @@ sentences is a patch even though every result line looks different afterwards.
 0.8.1 rewrote five parameter descriptions and four tool descriptions on exactly
 that reasoning.
 
+A patch may add a READ-ONLY PROBE — an extra GET a handler consults so that a
+sentence it prints can be true — and MUST say so in its entry. A probe changes
+no stored state, but it is not free: reads spend rate budget even where they
+are quota-exempt, so an undisclosed probe is a cost the caller pays without
+being told. 0.8.1 adds such probes; the disclosure is in its entry below.
+
 A patch may NOT change SHAPE or ROUTING: no tool added, removed or renamed; no
 parameter added, removed, renamed, retyped, or made optional or required; no
 annotation flipped; and nothing that moves data — a domain normalisation, a
@@ -37,6 +43,20 @@ descriptions with them, but no data moves and no tool or parameter changes shape
 Prompted by an incident, then by dogfooding the whole surface with ten agents
 (#64), then by adversarial reviews that kept finding false statements *inside the
 fix itself*.
+
+"No data moves" is true and incomplete without this: 0.8.1 ADDS READ-ONLY
+PROBES. To say what an empty answer did not cover, the zero-result paths of
+`memory_read` and `memory_list_recent` now consult `GET /memory/rooms` and/or
+`GET /memory/stats` before answering. 0.8.0 probed nothing on a domain-scoped,
+room-scoped or filtered read and nothing anywhere in the feed — only the plain
+unscoped read probed stats. Now every zero-result answer probes once, and the
+plain unscoped `memory_read` probes twice (the room list for the scope note,
+stats for the first-contact greeting; the feed never greets, so it stays at
+one). The request the caller asked for is byte-identical for every input, and
+the probes are GETs under the same auth scope that change nothing and do not
+count against the daily quota — but they are NOT rate-limit exempt, so against
+the free tier's 60 requests/minute an empty read now spends 2-3 requests where
+0.8.0 spent 1-2. Answers with results are untouched.
 
 **How many, and where each number can be checked**, because a release about
 unverifiable claims is in no position to make one. Round one found **thirteen**;
@@ -522,6 +542,46 @@ as it did before. On the same pass the three tools no test had ever invoked
 tests through the harness; until then, hard-coding `vault_list`'s list to `[]`
 left the whole suite green.
 
+### Fixed after review, wave 3
+
+A third adversarial wave ran over the finished branch. One line per theme; two
+of them — the room-name renderer and the unreadable-body guards — are the
+follow-ups already described at length in the sections above.
+
+- **Feed head honesty.** The feed's empty head was selected by `since` alone,
+  so `until` or `exclude_author` on their own produced "No memories in … yet."
+  — an emptiness claim about a store the filters merely narrowed. The head is
+  now chosen by EVERY filter that narrowed the window, and an empty CONTINUED
+  page (a cursor was passed) speaks about the continuation, never the store.
+- **Room names print exactly, or not at all.** Two live rooms named "проект"
+  and "план" both rendered "(unnamed room)"; room names moved to the
+  exact-literal renderer, and an archived room's list line stopped instructing
+  the read core refuses with a 403 (see "a name is printed exactly").
+- **Gloss corrections.** Four sentences described a nicer engine than the one
+  that ships: the truncation hint recommended shrinking `top_k` (not a cap, by
+  this release's own description); the feedback-zero line described a neutral
+  record the engine does not keep; "Hebbian edges" was glossed as links
+  between memories when core counts concept-concept links; and
+  `memory_delete`'s miss asserted a room atom "still exists", which this
+  client cannot know — it now claims only the boundary.
+- **Legend-vs-cap ordering.** The escape legend was appended before the size
+  cap, and the cap truncates from the end — so exactly the pages long enough
+  to need the legend lost it. It is applied to the capped text now, and a cap
+  that removes every escaped name drops the legend with it.
+- **Vault/items shape guards.** A 200 whose body lacks the array core always
+  sends stopped rendering as an empty list: `memory_read`, the feed and
+  `vault_list` answer "unreadable", never "absent" (the follow-up above).
+- **Description tests.** Every advertised tool and parameter description is
+  pinned through `tools/list`; inverting or deleting one now goes red.
+- **The gate itself.** Request bodies are compared SERIALIZED, so
+  byte-identical is what is asserted, not deep equality; the feed's bare-404
+  guard is pinned from both sides; the eastern CI leg moved to Asia/Tokyo,
+  because Europe/Lisbon is UTC+0 from late October to late March and left the
+  future-watermark diagnosis unguarded east of UTC for five months; and
+  `test/` itself is now typechecked (`tsconfig.test.json`,
+  `npm run typecheck:test`, a CI step) — closing the gap an earlier version of
+  this entry recorded under "In this repository".
+
 ### Known and NOT fixed here
 
 Complete as of this release, including the things the fix itself deliberately left
@@ -570,11 +630,6 @@ that is said too.
 - **No supersede/update semantics.** There is no update verb: a correction becomes
   a competing atom, and under ordinary phrasing the stale one can win (measured:
   53% vs 52%; at `top_k: 1` the stale one alone). Needs core#450.
-- **No `until` on `memory_list_recent`.** The feed takes `since` only, so "what
-  happened on Monday" has no complete answer — `memory_read` takes both bounds but
-  requires a query and cannot promise completeness. Neither tool documents that
-  the bounds are inclusive (they are; established by reverse-engineering
-  timestamps out of the pagination cursor).
 - **No room fan-out.** 0.8.1 makes an unscoped read *say* it did not cover rooms.
   It still does not cover them: there is no single call meaning "what's new in any
   room I'm in". Rooms are separate tenants, so this is cross-tenant querying with
@@ -675,14 +730,6 @@ release does not have to find them again.
   drift back unnoticed.
 - **A room with neither `role` nor `scope` renders an empty parenthetical** —
   `- "last-quarter" () [archived] — …`. Cosmetic; asserts nothing false.
-
-#### In this repository
-
-- **CI never typechecks a test file.** `tsconfig.json`'s `include` is `src/**`, so
-  `tsc --noEmit` — the typecheck `test.yml` runs — does not cover `test/`. Every
-  type-level guarantee this release added is therefore verified by the suite it
-  gates but not by the gate itself. Three consecutive stages reported it; it needs
-  a `tsconfig.test.json` and a second workflow step.
 
 ## [0.8.0] — 2026-08-06
 

@@ -40,8 +40,13 @@ import {
 } from "./names.js";
 
 /**
- * What we know about the scope this read actually covered — one probe on the
- * zero-result path, returning a VALUE rather than a sentence-or-empty-string.
+ * What we know about the scope this read actually covered — a VALUE rather
+ * than a sentence-or-empty-string. Costs one GET (rooms or stats, chosen by
+ * the scope) and runs on zero-result paths only — but it is not that path's
+ * only probe: the plain unscoped empty read also hands buildReadEmptyResponse
+ * a stats call for the first-contact greeting, so that answer makes two
+ * probes where 0.8.0 made one, and the scoped/filtered answers make one where
+ * 0.8.0 made none. Disclosed in the 0.8.1 CHANGELOG entry.
  *
  * This replaces `domainMissNote`, whose `catch { return ""; }` made three
  * different states share one spelling: the store is there and the query missed,
