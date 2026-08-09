@@ -507,6 +507,21 @@ and would have thrown inside a renderer.
 Fire-tested: ten sabotages of the four changed files, each caught, and the two
 type-level guarantees checked by making the compiler reject them.
 
+A follow-up inside this release reached the last family the substitution had:
+the RESULT ARRAYS themselves. `Array.isArray(x) ? x : []` turned a 200 whose
+body did not carry the array core always sends into an empty listing, and the
+empty listing into a sentence about the world — `memory_read` and
+`memory_list_recent` fed such a body to the whole zero-result machinery (head
+sentence, scope probe, diagnosis), and `vault_list` answered "No secrets are
+stored in your Vault yet.", an absence claim about the Vault derived from a
+body this client could not read. All three now answer the way the room list
+already does — the body came back in a shape this client does not recognise,
+which is not evidence of absence — and a genuinely empty array answers exactly
+as it did before. On the same pass the three tools no test had ever invoked
+(`vault_list`, `memory_create_room`, `memory_invite_to_room`) got behavioural
+tests through the harness; until then, hard-coding `vault_list`'s list to `[]`
+left the whole suite green.
+
 ### Known and NOT fixed here
 
 Complete as of this release, including the things the fix itself deliberately left

@@ -69,8 +69,11 @@ const STATS = "GET /memory/stats";
 const ROOMS = "GET /memory/rooms";
 const FEEDBACK = "POST /memory/feedback";
 const JOIN = "POST /memory/rooms/join";
+const VAULT = "GET /vault/secrets";
+const CREATE_ROOM = "POST /memory/rooms";
 const del = (id: string) => `DELETE /memory/atoms/${encodeURIComponent(id)}`;
 const wipe = (d: string) => `DELETE /memory/domain/${encodeURIComponent(d)}`;
+const invites = (id: string) => `POST /memory/rooms/${encodeURIComponent(id)}/invites`;
 
 /** Which endpoints the handler consulted — the evidence behind its claim. */
 const probed = () => mcp.calls.map((c) => c.key);
@@ -1068,5 +1071,225 @@ describe("room names, printed exactly", () => {
     // "(unnamed room)" would still print distinguishably — inside quotes.
     expect(text).toContain("- (unnamed room)");
     expect(text).not.toContain('"(unnamed room)"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A 200 whose body is not core's shape is UNREADABLE, never empty (truth F13).
+ *
+ * Every guard tested here replaces `Array.isArray(x) ? x : []`, which turned a
+ * body this client could not read into an empty list, and the empty list into
+ * an absence claim — "nothing found", "no memories yet", "No secrets are
+ * stored in your Vault yet." `classifyRooms` and the stats domains guard
+ * closed that substitution for rooms and domains; these are the three list
+ * surfaces the family fix had stopped short of.
+ */
+describe("a result body this client cannot read is never an absence claim", () => {
+  it("memory_read: a 200 with no items array is not 'nothing found'", async () => {
+    for (const payload of [{}, { nope: true }, { items: "many" }, null] as Route[]) {
+      mcp.reset().on(READ, payload);
+
+      const text = await mcp.callText("memory_read", { query: "anything" });
+      const label = JSON.stringify(payload);
+
+      expect(text, label).toContain(
+        "The search result came back in a shape this client does not recognise",
+      );
+      expect(text, label).toContain("not evidence that nothing matched");
+      expect(text, label).not.toContain(NO_MATCH_MESSAGE);
+      expect(text, label).not.toContain("nothing has been saved yet");
+      // And no probes: there is no zero-result to diagnose. (With no stub for
+      // stats or rooms, a probe would also fail callText as unrouted.)
+      expect(probed(), label).toEqual([READ]);
+    }
+  });
+
+  it("memory_read: filters do not turn an unreadable body into 'nothing matches the filters'", async () => {
+    mcp.on(READ, { nope: true });
+
+    const text = await mcp.callText("memory_read", {
+      query: "anything",
+      since: "2020-01-01T00:00:00Z",
+    });
+
+    expect(text).toContain("shape this client does not recognise");
+    expect(text).not.toContain("matches within the given time/author filters");
+  });
+
+  it("memory_list_recent: a 200 with no items array is not an empty feed", async () => {
+    for (const payload of [{}, { nope: true }] as Route[]) {
+      mcp.reset().on(RECENT, payload);
+
+      const text = await mcp.callText("memory_list_recent", {});
+      const label = JSON.stringify(payload);
+
+      expect(text, label).toContain(
+        "The recent-entries feed came back in a shape this client does not recognise",
+      );
+      expect(text, label).toContain("not evidence that there is nothing to list");
+      expect(text, label).not.toMatch(/No memories in .* yet/);
+      expect(probed(), label).toEqual([RECENT]);
+    }
+  });
+
+  it("memory_list_recent: a watermark does not turn an unreadable body into 'nothing new'", async () => {
+    mcp.on(RECENT, { nope: true });
+
+    const text = await mcp.callText("memory_list_recent", {
+      since: "2020-01-01T00:00:00Z",
+    });
+
+    expect(text).toContain("shape this client does not recognise");
+    expect(text).not.toContain("Nothing new");
+    expect(text).not.toContain("since your watermark");
+  });
+
+  it("vault_list: a 200 with no secrets array is not an empty vault", async () => {
+    // The demonstrated gap: this response used to print "No secrets are stored
+    // in your Vault yet." — an absence claim about the Vault derived from a
+    // body this client could not read.
+    for (const payload of [{}, { nope: true }, { secrets: "three" }] as Route[]) {
+      mcp.reset().on(VAULT, payload);
+
+      const text = await mcp.callText("vault_list");
+      const label = JSON.stringify(payload);
+
+      expect(text, label).toContain(
+        "The secret list came back in a shape this client does not recognise",
+      );
+      expect(text, label).toContain("not evidence that none are stored");
+      expect(text, label).not.toContain("No secrets are stored");
+    }
+  });
+
+  it("genuinely empty arrays keep their plain answers — the guard does not overreach", async () => {
+    mcp.on(READ, { items: [] }).on(ROOMS, []).on(STATS, { total_atoms: 42 });
+    expect(await mcp.callText("memory_read", { query: "x" })).toContain(NO_MATCH_MESSAGE);
+
+    mcp.reset().on(RECENT, { items: [] }).on(ROOMS, []);
+    expect(await mcp.callText("memory_list_recent", {})).toContain(
+      "No memories in your own domains yet.",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * vault_list, invoked (tests-lens F5): no test ever called this tool, and
+ * hard-coding its list to [] left the whole suite green — a populated vault
+ * answering "No secrets are stored" would have shipped undetected.
+ */
+describe("vault_list, invoked", () => {
+  it("a genuinely empty vault keeps the absence claim — the body answered", async () => {
+    mcp.on(VAULT, { secrets: [] });
+
+    expect(await mcp.callText("vault_list")).toBe(
+      "No secrets are stored in your Vault yet.",
+    );
+  });
+
+  it("a populated vault lists aliases and purposes — and nothing else", async () => {
+    mcp.on(VAULT, {
+      secrets: [
+        {
+          alias: "github-token",
+          context: "CI deploys",
+          created_at: "2026-08-01",
+          // Never sent by core — planted so a future edit that prints extra
+          // fields fails here rather than shipping a value to a model context.
+          value: "hunter2-SHOULD-NEVER-PRINT",
+        },
+        { alias: "openai-key" },
+      ],
+    });
+
+    const text = await mcp.callText("vault_list");
+
+    expect(text).toContain(
+      "Your Vault secrets (2) — alias and purpose only, never the value:",
+    );
+    expect(text).toContain("- github-token — CI deploys");
+    expect(text).toContain("- openai-key");
+    expect(text).not.toContain("hunter2");
+    expect(text).not.toContain("No secrets are stored");
+  });
+
+  it("an HTTP failure is a tool error, not an empty vault", async () => {
+    mcp.on(VAULT, httpError(503, "upstream down"));
+
+    const res = await mcp.call("vault_list");
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("Mnemoverse API error 503");
+    expect(res.text).not.toContain("No secrets are stored");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The room lifecycle tools, invoked (tests-lens F5): memory_create_room and
+ * memory_invite_to_room had never been called by a test. The exact-name echo
+ * is pinned in "room names, printed exactly" above; these pin the actionable
+ * halves — the address a caller re-sends, and the invite hand-off.
+ */
+describe("the room lifecycle tools, invoked", () => {
+  it("a successful create names the address the caller will re-send", async () => {
+    mcp.on(CREATE_ROOM, {
+      room_id: "room_01ABC",
+      address: "xroom:room_01ABC",
+      name: "me-and-olya",
+    });
+
+    const text = await mcp.callText("memory_create_room", {
+      name: "me-and-olya",
+      description: "shared notes",
+    });
+
+    expect(mcp.requestTo(CREATE_ROOM).body).toEqual({
+      name: "me-and-olya",
+      description: "shared notes",
+    });
+    expect(text).toContain(
+      'Created shared room "me-and-olya". Address: xroom:room_01ABC',
+    );
+    expect(text).toContain('pass domain="xroom:room_01ABC" on memory_write / memory_read');
+    expect(text).toContain('memory_invite_to_room with room_id="room_01ABC"');
+  });
+
+  it("memory_invite_to_room forwards the server's ready-to-send message", async () => {
+    mcp.on(invites("room_01ABC"), {
+      share_message: "Join my room: https://mnemoverse.com/join?code=mnvr_xyz",
+      join_url: "https://mnemoverse.com/join?code=mnvr_xyz",
+      code: "mnvr_xyz",
+    });
+
+    const text = await mcp.callText("memory_invite_to_room", {
+      room_id: "room_01ABC",
+      scope: "read",
+      expires_in_days: 3,
+    });
+
+    expect(mcp.requestTo(invites("room_01ABC")).body).toEqual({
+      scope: "read",
+      expires_in_days: 3,
+    });
+    expect(text).toContain(
+      "Invite ready. Forward this message to the person you're inviting:",
+    );
+    expect(text).toContain("Join my room: https://mnemoverse.com/join?code=mnvr_xyz");
+  });
+
+  it("a failed invite is a tool error, not an invite", async () => {
+    mcp.on(invites("room_NOPE"), httpError(404, '{"detail":"Room not found"}'));
+
+    const res = await mcp.call("memory_invite_to_room", { room_id: "room_NOPE" });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("Mnemoverse API error 404");
+    expect(res.text).not.toContain("Invite ready");
   });
 });

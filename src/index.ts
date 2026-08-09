@@ -165,6 +165,35 @@ function capResult(
 }
 
 /**
+ * A 200 whose body does not carry the array core always sends for a listing.
+ *
+ * Reading such a body as an EMPTY list is the substitution this release exists
+ * to remove: `Array.isArray(x) ? x : []` turned "this client could not read
+ * the response" into "there is nothing there" — an absence claim on zero
+ * evidence. `classifyRooms` (src/scope.ts) and the stats domains guard closed
+ * it for rooms and domains; this builder is the same answer for the remaining
+ * list surfaces (search results, the feed, the vault), phrased the way the
+ * room list already phrases it. The three parts are the subject, what the body
+ * is NOT ("a list of your rooms"), and the absence it is NOT evidence of
+ * ("you have none") — so every consumer states its own boundary while the
+ * sentence stays one sentence everywhere (truth F13, 2026-08-08).
+ */
+function unreadableListReply(subject: string, notA: string, absence: string) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text:
+          `${subject} came back in a shape this client does not recognise — so this ` +
+          `is not ${notA}, and it is not evidence that ${absence}. Retry; ` +
+          `if it persists, the memory service is answering this call in a shape this ` +
+          `client cannot read.`,
+      },
+    ],
+  };
+}
+
+/**
  * Two renderers, and which one a value gets is a decision, not a style choice.
  *
  * `safeInline` (src/render.ts) SANITISES an untrusted display string for inline
@@ -467,7 +496,21 @@ server.registerTool(
       ),
     });
 
-    const items = Array.isArray(r?.items) ? r.items : [];
+    // `items` must be a REAL array before anything below may speak. Core's
+    // read response always carries one on a 200, so a body without it is not
+    // core's answer — and the old `Array.isArray(r?.items) ? r.items : []`
+    // fed exactly that body to the entire zero-result machinery: head
+    // sentence, scope probe, diagnosis. An absence claim derived from a body
+    // this client could not read — the substitution classifyRooms removed for
+    // rooms, one level up from the probes (truth F13, 2026-08-08).
+    const items = r?.items;
+    if (!Array.isArray(items)) {
+      return unreadableListReply(
+        "The search result",
+        "a list of matches",
+        "nothing matched",
+      );
+    }
 
     if (items.length === 0 && (since || until || exclude_author)) {
       // A bounded/filtered read that finds nothing is NOT a bad query —
@@ -663,7 +706,17 @@ server.registerTool(
       throw e;
     }
 
-    const items = Array.isArray(r?.items) ? r.items : [];
+    // Same guard as memory_read: a 200 without an items array is UNREADABLE,
+    // not empty — and the feed's empty heads below are precisely the absence
+    // claims that must not be derived from it (truth F13, 2026-08-08).
+    const items = r?.items;
+    if (!Array.isArray(items)) {
+      return unreadableListReply(
+        "The recent-entries feed",
+        "an empty feed",
+        "there is nothing to list",
+      );
+    }
     if (items.length === 0) {
       // THE SENTENCE ITSELF carries the scope — and it is selected by EVERY
       // filter that narrowed the window, not by `since` alone.
@@ -1312,18 +1365,14 @@ server.registerTool(
     // unreadable body to `unknown`, never to `none`.
     const rooms = classifyRooms(await apiFetch<unknown>("/memory/rooms"), safeInline);
     if (rooms.state === "unknown") {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text:
-              "The room list came back in a shape this client does not recognise — so this " +
-              "is not a list of your rooms, and it is not evidence that you have none. Retry; " +
-              "if it persists, the memory service is answering this call in a shape this " +
-              "client cannot read.",
-          },
-        ],
-      };
+      // Byte-identical to the inline wording this replaces — the builder is
+      // shared so the four list surfaces answer the unreadable case with one
+      // sentence, not four drifting ones.
+      return unreadableListReply(
+        "The room list",
+        "a list of your rooms",
+        "you have none",
+      );
     }
     if (rooms.state === "none") {
       return {
@@ -1406,7 +1455,19 @@ server.registerTool(
         concepts?: string[];
       }>;
     }>("/vault/secrets");
-    const list = Array.isArray(r?.secrets) ? r.secrets : [];
+    // A 200 missing the `secrets` array used to print "No secrets are stored
+    // in your Vault yet." — an absence claim about the Vault derived from a
+    // body this client could not read. The family fix (classifyRooms, the
+    // domains guard) had stopped one tool short of here (truth F13,
+    // 2026-08-08). A genuinely empty array keeps the absence claim below.
+    const list = r?.secrets;
+    if (!Array.isArray(list)) {
+      return unreadableListReply(
+        "The secret list",
+        "a list of your Vault secrets",
+        "none are stored",
+      );
+    }
     if (list.length === 0) {
       return {
         content: [
