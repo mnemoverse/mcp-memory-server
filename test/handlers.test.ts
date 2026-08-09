@@ -264,6 +264,33 @@ describe("an empty answer describes the scope it searched", () => {
     expect(text).toContain("No store of your own has that exact name.");
   });
 
+  it("a domain ENDING in a trim-strippable character goes out raw and is diagnosed raw", async () => {
+    // The trimEnd() variant of the founding case (tests-lens F7). " engineering"
+    // above pins the leading side, so a reintroduced `.trim()` or `.trimStart()`
+    // fails there — but a `.trimEnd()` would sail past it, and the ZWSP cases
+    // elsewhere cannot catch any trim at all (U+200B is not JS whitespace).
+    // Newline and NBSP are exactly what the trim family strips. Both halves in
+    // one test because they must come from ONE value: the raw bytes on the
+    // wire, and the raw literal in the sentence — a trimmed copy in either
+    // place would find the clean twin in stats and name the wrong store, or
+    // suppress the diagnosis precisely when the stray character caused the miss.
+    for (const [name, literal] of [
+      ["engineering\n", '"engineering\\n"'],
+      // NBSP as an escape on purpose - a literal one is exactly as invisible
+      // in this file as it is in tool output (see ZWSP_NAME above).
+      ["engineering\u00a0", '"engineering\\u00a0"'],
+    ] as const) {
+      mcp.reset().on(RECENT, { items: [] }).on(STATS, { domains: ["engineering"] });
+
+      const text = await mcp.callText("memory_list_recent", { domain: name });
+
+      expect(mcp.requestTo(RECENT).body, literal).toMatchObject({ domain: name });
+      expect(text, literal).toContain(`No memories in ${literal} yet.`);
+      expect(text, literal).toContain("No store of your own has that exact name.");
+      expect(legends(text), literal).toBe(1);
+    }
+  });
+
   it("a room address is checked against the ROOM list, never against stats", async () => {
     // CodeRabbit #65: memory_stats reports personal domains only, so probing it
     // for an `xroom:` address would answer "No store of your own has that exact
@@ -1304,6 +1331,50 @@ describe("a result body this client cannot read is never an absence claim", () =
     expect(await mcp.callText("memory_list_recent", {})).toContain(
       "No memories in your own domains yet.",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The feed's two kinds of 404, pinned from both sides (tests-lens F2): the
+ * guard that separates them — a 404 whose body carries no JSON error `code` —
+ * had no test on its narrowing half, so replacing it with `true` left the
+ * whole suite green. Under that change every per-request 404 (a room 404
+ * carries a `code`) would degrade into "the service does not support the feed
+ * yet": a deployment claim about an engine that answered, plus advice to use
+ * memory_read as an "approximation" for a request that failed for its own
+ * stated reason.
+ */
+describe("the recent feed's 404s: a missing endpoint and a per-request error are different answers", () => {
+  it("a BARE 404 — no error code in the body — degrades to the missing-endpoint sentence", async () => {
+    // What an undeployed /memory/recent looks like: the framework's plain 404,
+    // no JSON error envelope.
+    mcp.on(RECENT, httpError(404, "Not Found"));
+
+    const text = await mcp.callText("memory_list_recent", {});
+
+    expect(text).toContain(
+      "The memory service does not support the recent-entries feed yet.",
+    );
+    expect(text).toContain("memory_read");
+  });
+
+  it("a 404 WITH an error code in the body is surfaced as the error it is", async () => {
+    // What a real engine 404 looks like — every engine 404 carries a `code`.
+    // The endpoint exists and answered about THIS request, so the degrade
+    // sentence would be false on both clauses.
+    mcp.on(
+      RECENT,
+      httpError(404, '{"detail":{"code":"room_not_found","message":"Room not found"}}'),
+    );
+
+    const res = await mcp.call("memory_list_recent", { domain: "xroom:room_NOPE" });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("Mnemoverse API error 404");
+    expect(res.text).toContain("room_not_found");
+    expect(res.text).not.toContain("does not support the recent-entries feed");
   });
 });
 

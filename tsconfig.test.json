@@ -1,0 +1,17 @@
+{
+  // Typechecks test/ — which the main tsconfig deliberately excludes so the
+  // published dist/ is built from src/ alone. Without this, `npx tsc --noEmit`
+  // says nothing about ~6800 lines of test code, and a test file containing
+  // `const broken: number = "x"` passes the gate (tests-lens F10, 2026-08-08).
+  // Run via `npm run typecheck:test`; CI runs it as its own step.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    // The main config roots at src/ for a clean dist/ layout; nothing is
+    // emitted here, so the root widens to cover test/ as well.
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

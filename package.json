@@ -20,6 +20,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck:test": "tsc -p tsconfig.test.json",
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",

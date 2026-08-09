@@ -45,9 +45,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Lisbon is UTC+0/+1, New York is UTC-4/-5. Between them and UTC the
-        # naive-timestamp behaviour is pinned from both sides and the middle.
-        tz: ["UTC", "Europe/Lisbon", "America/New_York"]
+        # Tokyo is UTC+9 with no DST, New York is UTC-4/-5. Between them and
+        # UTC the naive-timestamp behaviour is pinned from both sides and the
+        # middle. NOT Europe/Lisbon: it is UTC+0 from late October to late
+        # March, so for ~5 months the matrix would have no eastern zone and the
+        # future-watermark diagnosis would go unguarded on exactly the side
+        # where a genuinely future watermark parses into the past.
+        tz: ["UTC", "Asia/Tokyo", "America/New_York"]
     env:
       TZ: ${{ matrix.tz }}
     steps:
@@ -67,6 +71,11 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      # The main tsconfig includes src/ only, so the step above says nothing
+      # about the test files themselves (tests-lens F10, 2026-08-08).
+      - name: Typecheck tests
+        run: npm run typecheck:test
 
       - name: Test (TZ=${{ matrix.tz }})
         run: npm test

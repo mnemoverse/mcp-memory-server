@@ -11,6 +11,15 @@
  * makes one of these fail, that change moves data and belongs in a MINOR
  * release — do not update the expectation to match new behaviour without
  * bumping the version. That is the whole point of the file.
+ *
+ * THE ASSERTION MATCHES THE CLAIM. "Byte-identical" is a statement about the
+ * SERIALIZED body — what JSON.stringify(body) puts on the wire — so every
+ * matrix case compares serialized forms, not just deep equality: `toEqual`
+ * is key-order-insensitive and treats an `undefined`-valued key as equal to
+ * an absent one, so it alone could stay green through a reordering or a
+ * `domain: undefined` that starts being serialized as `null`. The expected
+ * object literals below are written in 0.8.0's key order, and {@link wire}
+ * compares the exact bytes.
  */
 
 import { describe, it, expect } from "vitest";
@@ -20,6 +29,10 @@ import {
   writeRequestBody,
   searchedScope,
 } from "../src/requests.js";
+
+/** The bytes fetch would send: serialization drops `undefined`-valued keys and
+ *  preserves the literal's key order, exactly like the real request path. */
+const wire = (body: unknown): string => JSON.stringify(body);
 
 /** Every domain shape that has been a real finding on this branch. */
 const DOMAINS: Array<[label: string, value: string | undefined]> = [
@@ -64,22 +77,24 @@ describe("readRequestBody matches 0.8.0 for every domain shape", () => {
   for (const [label, value] of DOMAINS) {
     it(`domain: ${label}`, () => {
       const body = readRequestBody({ query: "q", domain: value });
-      expect(body).toEqual({
-        query: "q",
-        top_k: 5,
-        domain: value || undefined,
-        include_associations: true,
-      });
+      expect(wire(body)).toBe(
+        wire({
+          query: "q",
+          top_k: 5,
+          domain: value || undefined,
+          include_associations: true,
+        }),
+      );
     });
   }
 
-  it("omits the temporal keys entirely when unused", () => {
-    expect(Object.keys(readRequestBody({ query: "q" })).sort()).toEqual([
-      "domain",
-      "include_associations",
-      "query",
-      "top_k",
-    ]);
+  it("omits the temporal keys entirely when unused — serialized, they do not exist", () => {
+    // The old assertion sorted Object.keys, which said nothing about the wire:
+    // an in-memory `domain: undefined` key vanishes at serialization, and key
+    // ORDER is part of byte-identity. These are the exact bytes 0.8.0 sent.
+    expect(wire(readRequestBody({ query: "q" }))).toBe(
+      '{"query":"q","top_k":5,"include_associations":true}',
+    );
   });
 
   it("includes each temporal key only when passed", () => {
@@ -90,12 +105,11 @@ describe("readRequestBody matches 0.8.0 for every domain shape", () => {
       until: "2026-08-02",
       exclude_author: "someone",
     });
-    expect(body).toMatchObject({
-      order_by: "recency",
-      since: "2026-08-01",
-      until: "2026-08-02",
-      exclude_author: "someone",
-    });
+    expect(wire(body)).toBe(
+      '{"query":"q","top_k":5,"include_associations":true,' +
+        '"order_by":"recency","since":"2026-08-01","until":"2026-08-02",' +
+        '"exclude_author":"someone"}',
+    );
   });
 
   it("defaults top_k to 5 and never clamps a caller's value", () => {
@@ -107,20 +121,23 @@ describe("readRequestBody matches 0.8.0 for every domain shape", () => {
 describe("recentRequestBody matches 0.8.0 for every domain shape", () => {
   for (const [label, value] of DOMAINS) {
     it(`domain: ${label}`, () => {
-      expect(recentRequestBody({ domain: value })).toEqual({
-        domain: value || undefined,
-        since: undefined,
-        until: undefined,
-        exclude_author: undefined,
-        limit: 20,
-        cursor: undefined,
-      });
+      expect(wire(recentRequestBody({ domain: value }))).toBe(
+        wire({
+          domain: value || undefined,
+          since: undefined,
+          until: undefined,
+          exclude_author: undefined,
+          limit: 20,
+          cursor: undefined,
+        }),
+      );
     });
   }
 
-  it("defaults limit to 20", () => {
+  it("defaults limit to 20 — and an unfiltered page serializes to limit alone", () => {
     expect(recentRequestBody({}).limit).toBe(20);
     expect(recentRequestBody({ limit: 100 }).limit).toBe(100);
+    expect(wire(recentRequestBody({}))).toBe('{"limit":20}');
   });
 });
 
@@ -130,11 +147,13 @@ describe("writeRequestBody matches 0.8.0 for every domain shape", () => {
       // "general" is 0.8.0's explicit default for a missing domain — NOT a
       // normalisation. A padded name is written as given, because trimming it
       // would relocate the caller's data on an automatic ^0.8 upgrade.
-      expect(writeRequestBody({ content: "c", domain: value })).toEqual({
-        content: "c",
-        concepts: [],
-        domain: value || "general",
-      });
+      expect(wire(writeRequestBody({ content: "c", domain: value }))).toBe(
+        wire({
+          content: "c",
+          concepts: [],
+          domain: value || "general",
+        }),
+      );
     });
   }
 

@@ -50,6 +50,14 @@ const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
 );
+const requestsSource = readFileSync(
+  new URL("../src/requests.ts", import.meta.url),
+  "utf8",
+);
+const namesSource = readFileSync(
+  new URL("../src/names.ts", import.meta.url),
+  "utf8",
+);
 
 // That these instructions REACH a connected client — the wiring the source
 // check `toContain("{ instructions: SERVER_INSTRUCTIONS }")` could only guess at
@@ -312,7 +320,7 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
   // padded name surviving to the wire and an empty one being dropped
   // (test/tool-wiring.test.ts) and the raw name driving the diagnosis
   // (test/handlers.test.ts); this shows there is no third path.
-  it("keeps handlers free of ad-hoc domain normalisation", () => {
+  it("keeps handlers and request builders free of ad-hoc domain normalisation", () => {
     // 0.8.1 briefly trimmed `domain` at the edge of each handler. Two reviews
     // killed it (2026-08-08): core deliberately 400s a non-canonical room
     // address so a write "can't be mis-routed and tagged with a spoofed xroom
@@ -326,9 +334,36 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     // desynced from the value that was searched, which silenced the diagnosis
     // in the release's own founding case and, for a whitespace-only domain,
     // claimed a scope that had not been searched.
-    expect(indexSource).not.toMatch(/domain\?\.trim\(\)/);
-    expect(indexSource).not.toMatch(/domain: rawDomain/);
-    expect(indexSource).not.toMatch(/domain\.trim\(\)/);
+    //
+    // The needle set is wider than `.trim()` (tests-lens F7): the trim
+    // siblings, `.normalize()`, the case-folds and the replace family are the
+    // same mistake in other spellings, and the request BUILDERS are scanned
+    // too — since 0.8.1 the bodies are assembled in src/requests.ts, so a
+    // coercion there never appears in index.ts at all. Best-effort like every
+    // denylist: the behavioural pins are the raw-name wire + diagnosis tests
+    // (test/tool-wiring.test.ts "a domain crosses the handler untouched";
+    // test/handlers.test.ts "the diagnosis uses the RAW name" and "a domain
+    // ENDING in a trim-strippable character goes out raw and is diagnosed
+    // raw", which a `.trimEnd()` cannot get past).
+    const sources = { "src/index.ts": indexSource, "src/requests.ts": requestsSource };
+    for (const [file, source] of Object.entries(sources)) {
+      // Any method-call normalisation, on any spelling of the domain value
+      // that has existed on this branch (the raw arg, the searched copy, the
+      // server echo, the briefly-introduced rename).
+      expect(
+        source,
+        `${file} normalises a domain via a method call`,
+      ).not.toMatch(
+        /\b(?:domain|searched|reportedDomain|rawDomain)\??\.(?:trim|trimStart|trimEnd|normalize|toLowerCase|toUpperCase|replace|replaceAll)\s*\(/,
+      );
+      // Helper-call variants: trim(domain), normalizeDomain(searched), …
+      expect(source, `${file} normalises a domain via a helper`).not.toMatch(
+        /\b(?:trim|normali[sz]e|clean|canonical)\w*\s*\(\s*(?:a\.)?(?:domain|searched|reportedDomain|rawDomain)\b/i,
+      );
+      expect(source, `${file} renames the raw value on the way in`).not.toMatch(
+        /domain: rawDomain/,
+      );
+    }
     // The two checks that used to follow — that the builders are called, and
     // that both handlers derive their decision from `searchedScope(domain)` —
     // were counts over the source. Both are now consequences of a behavioural
@@ -415,17 +450,47 @@ describe("the record of what went wrong stays in the source", () => {
  */
 describe("naming a store", () => {
   it("never renders a domain through safeInline", () => {
+    // BEST-EFFORT, BY CONSTRUCTION. Each needle is a call site that really
+    // existed, spelled with the variable name the value carries TODAY — and a
+    // rename leaves a needle guarding a ghost while the reintroduction walks
+    // past it, which is exactly what happened here (tests-lens F6): the list
+    // still said `safeInline(wiped` after the variable became `reportedDomain`,
+    // and `safeInline(d)` after that call site moved into src/names.ts, so
+    // `safeInline(reportedDomain)` on the wipe confirmation matched nothing.
+    // Keep the needles in sync with the variable names when they change. The
+    // REAL guards are behavioural and catch what this list misses — for the
+    // wipe confirmation, four of them fail on a reintroduction:
+    // test/handlers.test.ts "a destructive confirmation names the store it
+    // acted on, byte for byte", "a successful wipe carries the legend that
+    // decodes the store it names", "carries the legend on every OTHER message
+    // that can name a store", and test/assembled.test.ts (o2), the zero-row
+    // wipe of an invisibly-named store.
     for (const banned of [
       "safeInline(searched",
       "safeInline(domain",
-      "safeInline(d)",
+      "safeInline(reportedDomain",
       "safeInline(r?.domain",
+      "safeInline(r.domain",
+      "safeInline(r?.reason",
       "safeInline(r.reason",
-      "safeInline(wiped",
     ]) {
       expect(indexSource, `${banned} sends a value the reader must reproduce through the sanitiser`).not.toContain(
         banned,
       );
     }
+    // And the exact-rendering module may not CALL the sanitiser at all — its
+    // whole contract is "print exactly or not at all", so a safeInline call in
+    // src/names.ts (the file the stale `safeInline(d)` needle's call site
+    // moved into) is wrong for ANY argument, whatever the variable name. The
+    // module's comments contrast the two tools by name on purpose, so the
+    // needles here are the call and the import, not the word.
+    expect(
+      namesSource,
+      "src/names.ts calls the sanitiser — its contract is print-exactly-or-not-at-all",
+    ).not.toContain("safeInline(");
+    expect(
+      namesSource,
+      "src/names.ts imports from render.ts — the sanitiser has no business here",
+    ).not.toMatch(/from\s+["']\.\/render/);
   });
 });
