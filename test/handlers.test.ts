@@ -1257,6 +1257,12 @@ describe("a result body this client cannot read is never an absence claim", () =
         "The search result came back in a shape this client does not recognise",
       );
       expect(text, label).toContain("not evidence that nothing matched");
+      // The tail must not attribute the unreadable 200 to "the memory service"
+      // — this client cannot establish who answered: a gateway, a proxy, or a
+      // mis-set MNEMOVERSE_API_URL produces the same 200. The shared builder
+      // means this pin covers the feed and vault_list too.
+      expect(text, label).toContain("whatever answered this call");
+      expect(text, label).not.toContain("the memory service is answering");
       expect(text, label).not.toContain(NO_MATCH_MESSAGE);
       expect(text, label).not.toContain("nothing has been saved yet");
       // And no probes: there is no zero-result to diagnose. (With no stub for

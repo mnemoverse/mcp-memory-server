@@ -93,7 +93,7 @@
       },
       {
         "name": "memory_list_recent",
-        "description": "List the newest memories first — no search query; supports domain, since-watermark, and cursor paging."
+        "description": "List the newest memories first — no search query; filter by domain and a since/until time window, page with a cursor."
       },
       {
         "name": "memory_feedback",
@@ -101,7 +101,7 @@
       },
       {
         "name": "memory_stats",
-        "description": "Show how many memories are stored, which domains exist, and average quality scores."
+        "description": "Show how many memories are stored, which domains exist, and the average valence and importance scores."
       },
       {
         "name": "memory_delete",

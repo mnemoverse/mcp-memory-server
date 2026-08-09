@@ -173,13 +173,18 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite grew from **31 tests at 0.8.0 to 279**, and the ones that mattered most
+The suite grew from **31 tests at 0.8.0 to 337**, and the ones that mattered most
 were replaced rather than added to. Every number in that sentence is reproducible
 — `git archive <ref> | tar -x -C tmp && (cd tmp && npx vitest run)` — and here is
 the whole curve, measured that way: `main` **31**, the commit before the gate
 **60**, the gate itself **116**, then **119**, **189** after the naming fix,
 **213** after the harness (which replaced 17 tests and added 41), **241** after
-the probe-state fix, **279** with the assembled-answer file.
+the probe-state fix, **279** with the assembled-answer file — and through the
+third review wave: **284** with the head-selection fix, **289** with the
+cursor-page head, **301** with the room-name renderer, **303** with the gloss
+corrections, **315** with the unreadable-body guards, **320** with the
+legend-after-cap fix, **323** when the fire-drill gaps closed, **337** with the
+description pins.
 
 Two corrections to this paragraph's own history, kept rather than swapped, because
 the release is about the habit of swapping them. It said the suite "grew from 60
@@ -221,8 +226,8 @@ the confusion this whole release is about.
 The two test files that read `src/index.ts` as text carried 41 tests between them;
 they now carry 29, and `test/tool-wiring.test.ts` no longer reads the source at
 all — its parameter list comes from `tools/list`, as a model sees it, and its
-values come out of the request the handler actually sent. 53 behavioural tests
-live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
+values come out of the request the handler actually sent. 86 behavioural tests
+(77 + 9) live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
 assertion is labelled in place with the reason no call can establish it (chiefly
 the "never" rules: no handler sends a name the reader must reproduce through the
 lossy sanitiser, and none normalises a domain).
@@ -245,7 +250,7 @@ was meaningless, a head promising "that is not the whole picture:" with nothing
 after the colon, a first-contact greeting printed above an admission that the room
 list could not be fetched. Each individual clause in those answers was true.
 `test/assembled.test.ts` therefore asserts PROPERTIES of the finished string, over
-34 situations — the ones named in the incident and the ones only the matrix
+41 situations — the ones named in the incident and the ones only the matrix
 reaches: no absence claimed beyond the scope that was searched, nothing left
 dangling, one emptiness explained once, every named store reproducible
 byte-for-byte, and generic advice never standing in front of a specific diagnosis
@@ -651,6 +656,12 @@ that is said too.
   these results has nothing to pass, and a guess like `"me"` filters nothing,
   silently. 0.8.1's fix was to say exactly that in both descriptions; the
   parameter stays, because removing it is a schema change.
+- **The zero-result probes have no timeout.** They go out through bare `fetch`
+  with no deadline, so a hung `/memory/rooms` or `/memory/stats` endpoint can
+  stall an empty answer for minutes — on a probe the caller never asked for. The
+  truthful "we could not check" arm already exists; a timeout that falls through
+  to it is a behaviour change, not a wording one, so it does not belong in this
+  patch. No issue filed.
 - **Domain normalisation is not scheduled.** See the trim revert at the top of this
   section: the plan exists only in this file, with no issue.
 
@@ -730,6 +741,13 @@ release does not have to find them again.
   drift back unnoticed.
 - **A room with neither `role` nor `scope` renders an empty parenthetical** —
   `- "last-quarter" () [archived] — …`. Cosmetic; asserts nothing false.
+
+#### In this repository
+
+- **`engines` claims Node >=18; CI tests Node 20 only.** The package declares it
+  installs on Node 18, and no workflow runs the suite there — so a breakage that
+  only bites on 18 would ship green. Either the matrix grows a Node 18 leg or the
+  `engines` floor rises to match what is tested. No issue filed.
 
 ## [0.8.0] — 2026-08-06
 
