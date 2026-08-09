@@ -38,6 +38,10 @@ on:
       - "server.json"
       - ".github/workflows/verify-configs.yml"
 
+# Least privilege, as in test.yml / release-sync-check.yml: a drift check reads and compares, never writes.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
