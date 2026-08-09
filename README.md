@@ -242,10 +242,24 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 
 ## Links
 
+**Setup and reference**
+
 - [Documentation](https://mnemoverse.com/docs/api/mcp-server)
+- [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
 - [Console (get API key)](https://console.mnemoverse.com)
+
+**Background reading**
+
+- [Memory MCP servers compared](https://mnemoverse.com/docs/library/memory-mcp-servers-compared) — thirteen shipping options, with pricing and registry presence
+- [How to choose a memory MCP server](https://mnemoverse.com/docs/library/memory-mcp) — the five questions that narrow the field
+- [What AI agent memory is](https://mnemoverse.com/docs/library/ai-agent-memory) — the category explained
+- [Is this a vector database?](https://mnemoverse.com/docs/library/not-a-vector-database) — what makes a memory layer different
+- [Shared memory for multi-agent systems](https://mnemoverse.com/docs/library/shared-memory-for-multi-agent-systems) — how Rooms work and when to use them
+
+**Project**
+
 - [GitHub](https://github.com/mnemoverse/mcp-memory-server)
 - [Releases](https://github.com/mnemoverse/mcp-memory-server/releases)
 - [MCP Registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse)
@@ -273,7 +287,7 @@ One thing goes out that you did not explicitly request: since 0.8.1, when a sear
 
 | | |
 |---|---|
-| **Privacy Policy** | <https://mnemoverse.com/privacy.html> |
+| **Privacy Policy** | <https://mnemoverse.com/privacy> |
 | **Retention & deletion** | delete one memory with `memory_delete`, or an entire namespace with `memory_delete_domain` |
 | **Contact** | hello@mnemoverse.com |
 
