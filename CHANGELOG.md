@@ -35,7 +35,7 @@ This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
 git history and the GitHub releases are the record.
 
-## [0.8.1] — unreleased
+## [0.8.1] — 2026-08-09
 
 An honesty pass. Every result line looks different afterwards, and nine
 descriptions with them, but no data moves and no tool or parameter changes shape
