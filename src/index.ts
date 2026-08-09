@@ -669,15 +669,34 @@ server.registerTool(
       // kept the watermark phrasing, which pretends the read reached the
       // present when `until` stopped it years short (review, 2026-08-08).
       //
-      // Three heads, one rule: the emptiness claim ("yet") is allowed only
+      // Four heads, one rule: the emptiness claim ("yet") is allowed only
       // when NOTHING narrowed the window; the watermark phrasing only when
       // `since` was the whole narrowing; any other filter combination gets the
       // sentence memory_read's filtered branch uses — the filters are named as
       // what bounded the result, and nothing is claimed beyond them.
+      //
+      // A `cursor` outranks all three. It is not a filter over the store — it
+      // is a POSITION in a listing whose earlier pages the caller has already
+      // read, so every other head is false here: "No memories in ${where}
+      // yet." is an absence claim about a store the caller has just SEEN
+      // entries from, and the watermark phrasing pretends a continuation that
+      // stopped mid-listing was a clean catch-up. The engine hands out a
+      // cursor only when more entries existed at that moment, so an empty
+      // continued page means the listing moved under the caller — entries
+      // removed between page fetches — and the head speaks about the
+      // continuation only, never about what the store holds (follow-up to the
+      // head-selection fix, 2026-08-08). Decided by the same truthiness the
+      // request used: an empty-string cursor never reaches the wire
+      // (src/requests.ts), so it may not pick the sentence either.
       const scopeNote = readScopeNote(await probeScope(searched));
       const where = scopeLabel(searched);
-      const head =
-        since && !until && !exclude_author
+      const head = cursor
+        ? `Nothing further in ${where} past this cursor — entries may have been ` +
+          `removed since the previous page was fetched.` +
+          (since || until || exclude_author
+            ? ` The given time/author filters still bounded this page.`
+            : ``)
+        : since && !until && !exclude_author
           ? `Nothing new in ${where} since your watermark.`
           : since || until || exclude_author
             ? `Nothing in ${where} matches within the given time/author filters.`

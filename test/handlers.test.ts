@@ -398,6 +398,54 @@ describe("an empty answer describes the scope it searched", () => {
       expect(text, JSON.stringify(args)).not.toContain("since your watermark");
     }
   });
+
+  it("a cursor-carrying feed request is answered about the continuation, never with an absence claim or a greeting", async () => {
+    // Follow-up to the head-selection fix: the engine hands out a cursor only
+    // when more entries existed at that moment, so an empty continued page
+    // reaches exactly the caller who has just SEEN memories — and "No memories
+    // in X yet." told that caller the store holds none (entries deleted between
+    // page fetches). Every combination below, own domains and room-scoped,
+    // with and without filters, must speak about the continuation instead.
+    for (const args of [
+      { cursor: "cur_2" },
+      { cursor: "cur_2", since: "2020-01-01T00:00:00Z" },
+      { cursor: "cur_2", until: "2020-01-01T00:00:00Z" },
+      { cursor: "cur_2", since: "2020-01-01T00:00:00Z", until: "2021-01-01T00:00:00Z" },
+      { cursor: "cur_2", domain: "xroom:room_01ABC" },
+    ]) {
+      mcp.reset().on(RECENT, { items: [] }).on(ROOMS, [ROOM]);
+
+      const text = await mcp.callText("memory_list_recent", args);
+      const label = JSON.stringify(args);
+
+      expect(text, label).toContain("past this cursor");
+      expect(text, label).toMatch(/removed since the previous page/);
+      // The PIN: the first-contact greeting and every absence claim are
+      // unreachable from a request that carries a cursor — the one caller who
+      // cannot be a first-time user is the one paging.
+      expect(text, label).not.toContain(EMPTY_STORE_WELCOME);
+      expect(text, label).not.toContain("nothing has been saved yet");
+      expect(text, label).not.toMatch(/No memories in .* yet/);
+      // And no watermark phrasing: page 1 may have been full of new entries,
+      // so "Nothing new since your watermark" is disproven by the caller's
+      // own eyes.
+      expect(text, label).not.toContain("since your watermark");
+    }
+  });
+
+  it("an empty-string cursor is not sent, so it is not spoken about either", async () => {
+    // `cursor || undefined` never reaches the wire (src/requests.ts), and the
+    // head must be decided by the same value the request carried — ONE value
+    // for the request and for every decision about it. "" with no filters is
+    // an unfiltered first page, and the plain emptiness head is the true one.
+    mcp.on(RECENT, { items: [] }).on(ROOMS, [ROOM]);
+
+    const text = await mcp.callText("memory_list_recent", { cursor: "" });
+
+    expect(mcp.requestTo(RECENT).body).not.toHaveProperty("cursor");
+    expect(text).toContain("No memories in your own domains yet.");
+    expect(text).not.toContain("past this cursor");
+  });
 });
 
 // ---------------------------------------------------------------------------

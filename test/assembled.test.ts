@@ -202,6 +202,7 @@ const HEADS: readonly (readonly [string, RegExp])[] = [
   ["filtered read", /matches within the given time\/author filters\./],
   ["feed with a watermark", /^Nothing new in .* since your watermark\./m],
   ["feed with no watermark", /^No memories in .* yet\./m],
+  ["feed continuation past a cursor", /^Nothing further in .* past this cursor/m],
 ];
 
 /**
@@ -1115,6 +1116,69 @@ const SITUATIONS: readonly Situation[] = [
       expect(text).not.toMatch(/no memories/i);
       expect(text).not.toMatch(/nothing/i);
       expect(text).toContain("memory_read");
+    },
+  },
+  {
+    id: "x",
+    what:
+      "feed continued past a cursor, page empty, own domains — the one caller who has " +
+      "just SEEN memories with their own eyes must not be told the store holds none",
+    tool: "memory_list_recent",
+    args: { cursor: "cur_page_2" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", mustNotProbe: [STATS] },
+    meaning(text) {
+      // The engine hands out a cursor only when more entries existed at that
+      // moment, so an empty continued page means the listing moved under the
+      // caller. The head speaks about the CONTINUATION — nothing further at
+      // this position, entries may have been removed — and never about what
+      // the store holds.
+      expect(text).toContain("Nothing further in your own domains past this cursor");
+      expect(text).toMatch(/removed since the previous page/);
+      expect(text).not.toMatch(/No memories in .* yet/);
+      expect(text).not.toContain(EMPTY_STORE_WELCOME);
+      // The wire contract is untouched: the cursor goes out exactly as passed.
+      expect(mcp.requestTo(RECENT).body).toMatchObject({ cursor: "cur_page_2" });
+    },
+  },
+  {
+    id: "x2",
+    what: "feed continued past a cursor in a room the caller IS in, page empty",
+    tool: "memory_list_recent",
+    args: { domain: "xroom:room_01ABC", cursor: "cur_page_2" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", searched: "xroom:room_01ABC", mustNotProbe: [STATS] },
+    meaning(text) {
+      // The caller paged through this room one call ago. "No memories in that
+      // room yet." — the old answer — is the worst possible sentence here: an
+      // absence claim about the whole room, to its most recent reader.
+      expect(text).toBe(
+        "Nothing further in that room past this cursor — entries may have been " +
+          "removed since the previous page was fetched.",
+      );
+      // The room's own NAME stays unprinted, as everywhere on this surface.
+      expect(text).not.toContain("me-and-olya");
+    },
+  },
+  {
+    id: "x3",
+    what:
+      "feed continued past a cursor WITH an `until` bound — the continuation head " +
+      "composes with the filter naming, and no absence claim comes back",
+    tool: "memory_list_recent",
+    args: { until: "2020-01-01T00:00:00Z", cursor: "cur_page_2" },
+    routes: { [RECENT]: { items: [] }, [ROOMS]: [ROOM] },
+    bounds: { surface: "empty-read", mustNotProbe: [STATS] },
+    meaning(text) {
+      // Cursor + filters is still ONE head: the continuation is what ended,
+      // and the filters are named as what bounded the page — not as a second
+      // sentence claiming nothing in the store matches, which the caller's
+      // previous pages disprove.
+      expect(text).toContain("Nothing further in your own domains past this cursor");
+      expect(text).toContain("The given time/author filters still bounded this page.");
+      expect(text).not.toContain("matches within the given time/author filters.");
+      expect(text).not.toMatch(/No memories in .* yet/);
+      expect(text).not.toContain("since your watermark");
     },
   },
 ];
