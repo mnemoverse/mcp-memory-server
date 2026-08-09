@@ -16,8 +16,9 @@
  * 5. `@"domain"` is an EXACT literal: two stores that differ by a space, a
  *    case or an alphabet render as two tags, an unprintable name says so
  *    instead of vanishing, and every tag round-trips through JSON.parse.
- * 6. The escape legend appears at most once per page, and only when some
- *    domain on that page actually needed an escape.
+ * 6. The renderers return the page BODY with no escape legend — the caller
+ *    (src/index.ts) appends the legend AFTER capResult, so truncation cannot
+ *    eat it (truth F6; behavioural pins in test/handlers.test.ts).
  *
  * Not pinned here: `formatRecentPage`'s end-of-feed wording, beyond the two
  * happy paths below — see the known defect noted at `cursorOk` in
@@ -222,8 +223,14 @@ describe("formatDomainTag", () => {
   });
 });
 
-describe("the escape legend on a page", () => {
-  it("explains an escaped domain once for the whole feed, not per line", () => {
+describe("the escape legend and the page body", () => {
+  it("returns the body without a legend — the caller legends the CAPPED text", () => {
+    // The legend used to be appended here, BEFORE src/index.ts applied
+    // capResult — so on every page long enough to be capped, the truncation
+    // ate the legend first, leaving escaped @tags with nothing decoding them
+    // (truth F6, 2026-08-08). The renderer now returns the body only; the
+    // caller appends the legend after the cap, and the behavioural pins live
+    // in test/handlers.test.ts ("the escape legend survives the size cap").
     const page = formatRecentPage(
       [
         { content: "a", domain: "eng\u200b" },
@@ -232,11 +239,6 @@ describe("the escape legend on a page", () => {
       null,
     );
     expect(page).toContain('@"eng\\u200b"');
-    expect(page.match(/printed as JSON string literals/g)).toHaveLength(1);
-  });
-
-  it("stays silent when every domain printed as itself", () => {
-    const page = formatRecentPage([{ content: "a", domain: "eng" }], null);
-    expect(page).not.toContain("JSON string literals");
+    expect(page).not.toContain("printed as JSON string literals");
   });
 });

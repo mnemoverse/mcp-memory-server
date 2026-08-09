@@ -566,7 +566,17 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: withDomainEscapeLegend(text, searched),
+            // NO legend wrapper here, on purpose — `withDomainEscapeLegend(
+            // text, searched)` stood on this line and was dead code that
+            // looked load-bearing (tests-lens F9, 2026-08-08): every arm of
+            // buildReadEmptyResponse either names no store at all (fixed
+            // sentences), or names it inside a note that appends its own
+            // legend (the case-twin diagnosis, src/scope.ts) — and the
+            // unscoped path passes `searched === undefined`, which can never
+            // need one. So there was no input on which the wrapper fired.
+            // Pinned by "the plain-empty read is legended by its notes" in
+            // test/handlers.test.ts.
+            text,
           },
         ],
       };
@@ -593,8 +603,18 @@ server.registerTool(
           type: "text" as const,
           // Each line's `@"domain"` tag is an exact literal; the legend that
           // explains an escape belongs to the answer, not to twenty tags.
-          text: capResult(
-            withDomainEscapeLegend(text, ...items.map((it) => it?.domain)),
+          //
+          // Legend AFTER the cap, never before. capResult truncates from the
+          // END, and the legend is appended at the end — so applied first it
+          // was the first thing the cap ate, on exactly the pages long enough
+          // to need both: a hundred escaped tags left with nothing saying that
+          // \u00a0 is ONE character, not six (truth F6, 2026-08-08). Applied
+          // to the CAPPED text the legend survives; and since it fires only
+          // when an escaped literal is still on the page, a cap that removed
+          // every escaped name drops the legend with it.
+          text: withDomainEscapeLegend(
+            capResult(text),
+            ...items.map((it) => it?.domain),
           ),
         },
       ],
@@ -779,9 +799,20 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(
-            formatRecentPage(items, r?.next_cursor),
-            "Lower `limit` or add a `domain` for smaller pages.",
+          // The page body comes from src/render.ts; the escape legend is
+          // applied HERE, to the CAPPED text. formatRecentPage used to append
+          // it itself, which put it before capResult — and capResult truncates
+          // from the end, so the one sentence explaining the escapes was the
+          // first casualty on every page long enough to be capped (truth F6,
+          // 2026-08-08). Same order as memory_read's result page, same
+          // automatic drop: a cap that removed every escaped name removes the
+          // reason for the legend too.
+          text: withDomainEscapeLegend(
+            capResult(
+              formatRecentPage(items, r?.next_cursor),
+              "Lower `limit` or add a `domain` for smaller pages.",
+            ),
+            ...items.map((it) => it?.domain),
           ),
         },
       ],

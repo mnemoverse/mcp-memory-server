@@ -11,11 +11,7 @@
  * the line are simply omitted.
  */
 
-import {
-  MAX_DOMAIN_TAG_LITERAL,
-  exactLiteral,
-  withDomainEscapeLegend,
-} from "./names.js";
+import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
@@ -190,7 +186,17 @@ export function formatRecentItem(item: RecentItem, index: number): string {
   return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
 }
 
-/** Full feed page: items newest-first + how to continue / that it's over. */
+/**
+ * Full feed page: items newest-first + how to continue / that it's over.
+ *
+ * Returns the BODY only — no escape legend. The legend belongs to the final
+ * answer, and the caller (src/index.ts) appends it AFTER capResult: appended
+ * here it sat before the cap, which truncates from the end, so the one
+ * sentence explaining that an escape like \u200b is ONE character was the
+ * first thing cut from every page long enough to be capped (truth F6,
+ * 2026-08-08). Once-per-answer still holds — withDomainEscapeLegend is
+ * at-most-once by construction (src/names.ts).
+ */
 export function formatRecentPage(items: RecentItem[], nextCursor?: string | null): string {
   const lines = items.map((it, i) => formatRecentItem(it, i));
   // Defense-in-depth (CN-032 posture): the cursor is server-supplied and
@@ -210,11 +216,5 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   const tail = cursorOk
     ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`
     : `\n\n(end of feed — nothing older)`;
-  // The escape legend belongs to the PAGE, not to each tag: a feed can carry
-  // twenty lines and the explanation is only useful once. Absent entirely
-  // unless some domain on this page actually needed an escape.
-  return withDomainEscapeLegend(
-    lines.join("\n\n") + tail,
-    ...items.map((it) => it?.domain),
-  );
+  return lines.join("\n\n") + tail;
 }

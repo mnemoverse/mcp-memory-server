@@ -882,8 +882,8 @@ describe("naming a store the reader has to reproduce", () => {
   it("carries the legend on every OTHER message that can name a store", async () => {
     // Replaces a source count of `withDomainEscapeLegend(` occurrences, which
     // could not tell a wired call from a decorative one. Together with the two
-    // tests above and the results pages (src/render.ts, test/render.test.ts),
-    // this covers all six surfaces that can name a store.
+    // tests above and the results pages ("the escape legend survives the size
+    // cap" below), this covers all six surfaces that can name a store.
     mcp.on(READ, { items: [] }).on(STATS, { domains: [] });
     const filtered = await mcp.callText("memory_read", {
       query: "x",
@@ -905,6 +905,56 @@ describe("naming a store the reader has to reproduce", () => {
     });
     expect(wiped).toContain(`no memories matched domain ${ZWSP_LITERAL}`);
     expect(legends(wiped)).toBe(1);
+  });
+
+  it("a successful wipe carries the legend that decodes the store it names", async () => {
+    // The most destructive confirmation this client prints. The zero branch's
+    // legend is pinned by "carries the legend on every OTHER message" above;
+    // the SUCCESS branch's had no test at all,
+    // so deleting that one call left the whole suite green (tests-lens F4,
+    // 2026-08-08). A wipe confirmation whose store name carries an invisible
+    // character MUST explain that the printed \u200b is one character, not six.
+    mcp.on(wipe(ZWSP_NAME), { deleted: 3, domain: ZWSP_NAME });
+
+    const text = await mcp.callText("memory_delete_domain", {
+      domain: ZWSP_NAME,
+      confirm: true,
+    });
+
+    expect(text).toContain(`Deleted 3 memories from domain ${ZWSP_LITERAL}.`);
+    expect(legends(text)).toBe(1);
+  });
+
+  it("the plain-empty read is legended by its notes, not by a wrapper", async () => {
+    // The handler used to wrap this branch's whole answer in
+    // withDomainEscapeLegend(text, searched) as a safety net. That call was
+    // dead code that LOOKED load-bearing (tests-lens F9, 2026-08-08): every
+    // arm of buildReadEmptyResponse either names no store at all (fixed
+    // sentences), or names it inside a note that appends its own legend (the
+    // case-twin diagnosis, src/scope.ts). The wrapper is gone; the two halves
+    // below pin the claim behind the removal.
+
+    // The store exists and the query merely missed: nothing names the store,
+    // so there is nothing for a legend to decode — and none appears.
+    mcp.on(READ, { items: [] }).on(STATS, { domains: [ZWSP_NAME] });
+    const present = await mcp.callText("memory_read", {
+      query: "x",
+      domain: ZWSP_NAME,
+    });
+    expect(present).toContain(NO_MATCH_MESSAGE);
+    expect(present).not.toContain(ZWSP_LITERAL);
+    expect(legends(present)).toBe(0);
+
+    // The case-twin note names two escaped stores — and legends itself (the
+    // at-most-once property of that same answer is pinned by "an answer
+    // assembled from two notes" above).
+    mcp.reset().on(READ, { items: [] }).on(STATS, { domains: ["ENGINEERING\u200b"] });
+    const twin = await mcp.callText("memory_read", {
+      query: "x",
+      domain: ZWSP_NAME,
+    });
+    expect(twin).toContain(ZWSP_LITERAL);
+    expect(legends(twin)).toBe(1);
   });
 
   it("a destructive confirmation names the store it acted on, byte for byte", async () => {
@@ -947,6 +997,88 @@ describe("naming a store the reader has to reproduce", () => {
     );
     expect(legends(text)).toBe(1);
     expect(text).toContain('pass domain="xroom:room_01ABC"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The escape legend and the size cap, in the only order that keeps both
+ * (truth F6, 2026-08-08).
+ *
+ * capResult truncates from the END, and the legend is appended at the end — so
+ * `capResult(withDomainEscapeLegend(...))` ate the legend on exactly the pages
+ * long enough to need both: a hundred escaped `@"engineering\u200b"` tags with
+ * nothing left saying that \u200b is ONE character, not six. The legend is now
+ * applied to the CAPPED text, on both result surfaces; and since
+ * withDomainEscapeLegend fires only when an escaped literal is still on the
+ * page, a cap that removed every escaped name drops the legend with it.
+ */
+describe("the escape legend survives the size cap", () => {
+  /** Items long enough that a hundred of them overflow the 96K-char cap. */
+  const longItems = (domain: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: "x".repeat(1200),
+      domain,
+    }));
+
+  it("a capped read keeps the legend that decodes its escaped @domain tags", async () => {
+    mcp.on(READ, { items: longItems(ZWSP_NAME, 100), search_time_ms: 12 });
+
+    const text = await mcp.callText("memory_read", { query: "everything" });
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text).toContain(ZWSP_LITERAL); // escaped tags survived the cap…
+    expect(legends(text)).toBe(1); // …so the sentence decoding them must too
+  });
+
+  it("a capped feed keeps the legend too", async () => {
+    mcp.on(RECENT, { items: longItems(ZWSP_NAME, 100), next_cursor: null });
+
+    const text = await mcp.callText("memory_list_recent", {});
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text).toContain(ZWSP_LITERAL);
+    expect(legends(text)).toBe(1);
+  });
+
+  it("drops the legend when the cap also removed every escaped name", async () => {
+    // Only the LAST ten items carry the escaped domain; the cap keeps roughly
+    // the first eighty, so no escaped literal survives — and a legend
+    // explaining escapes in a name the reader cannot see is a caveat about
+    // nothing (src/names.ts). Falls out of legending the capped text.
+    const items = [...longItems("plain-store", 90), ...longItems(ZWSP_NAME, 10)];
+    mcp.on(READ, { items, search_time_ms: 12 });
+
+    const text = await mcp.callText("memory_read", { query: "everything" });
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text).not.toContain(ZWSP_LITERAL);
+    expect(legends(text)).toBe(0);
+  });
+
+  it("an uncapped page carries exactly one legend, on both surfaces", async () => {
+    // Guards the restructure itself: with the page body legended in one place
+    // and capped in another, neither surface may end up explaining its
+    // escaping twice — or not at all.
+    mcp.on(READ, {
+      items: [{ atom_id: "a1", content: "x", domain: ZWSP_NAME }],
+      search_time_ms: 3,
+    });
+    const read = await mcp.callText("memory_read", { query: "x" });
+    expect(read).not.toContain("[…truncated");
+    expect(read).toContain(ZWSP_LITERAL);
+    expect(legends(read)).toBe(1);
+
+    mcp.reset().on(RECENT, {
+      items: [{ atom_id: "a1", content: "x", domain: ZWSP_NAME }],
+      next_cursor: null,
+    });
+    const feed = await mcp.callText("memory_list_recent", {});
+    expect(feed).not.toContain("[…truncated");
+    expect(feed).toContain(ZWSP_LITERAL);
+    expect(legends(feed)).toBe(1);
   });
 });
 
