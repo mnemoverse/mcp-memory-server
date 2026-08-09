@@ -5,8 +5,10 @@
  * `safeInline` (src/render.ts) is a SANITISER: it maps every character outside
  * `[\w .@:+/-]` to a space, collapses runs of whitespace, trims the ends and
  * truncates. That is the right treatment for a display string chosen by a
- * DIFFERENT principal — a room name, an agent name — where the only job is to
- * make a hostile value harmless to paste into a model's context.
+ * DIFFERENT principal — an agent name — where the only job is to make a
+ * hostile value harmless to paste into a model's context and nothing about the
+ * value needs to stay recognisable. (Room names looked like that class and are
+ * not — see the threat model at the bottom.)
  *
  * It is the WRONG treatment for any value the reader is expected to compare or
  * send back, and it was being used for exactly that (reviews, 2026-08-08):
@@ -70,8 +72,18 @@
  * lives in a room bucket carries the canonical `xroom:<room_id>` as its domain,
  * and core 400s any non-canonical spelling of that while `room_id` itself is
  * charset-validated. So every value rendered here is either the caller's own
- * string or a machine-shaped address. Room NAMES are the opposite — chosen by
- * an owner, shown to a joiner — and they keep `safeInline`.
+ * string or a machine-shaped address — with one exception. Room NAMES are
+ * another principal's free text — chosen by an owner, shown to a joiner — and
+ * they are printed through this module too ({@link roomNamePhrase}, 0.8.1): the
+ * literal is already the anti-injection treatment (one line; quotes,
+ * backslashes and invisibles escaped), while the sanitiser it replaces did not
+ * make hostile names harmless so much as it made ordinary names WRONG — two
+ * live rooms named "проект" and "план" both rendered "(unnamed room)" in the
+ * note that asks the reader to pick one, and "Zoë" was quoted as "Zo". A room
+ * name is display-only (the ADDRESS beside it is what a reader re-sends), so a
+ * name that cannot be printed within the cap degrades to a phrase saying so —
+ * never to a truncated or rewritten name, and never to "(unnamed room)", which
+ * is reserved for a room that genuinely has no name.
  */
 
 /**
@@ -137,6 +149,30 @@ export function domainPhrase(
   max = MAX_DOMAIN_LITERAL,
 ): string {
   return exactLiteral(name, max)?.literal ?? fallback;
+}
+
+/**
+ * A room name as display text, with the three states kept apart because each
+ * used to collapse into the next (reviews, 2026-08-08):
+ *
+ *   - a printable name is the exact literal — "проект" is `"проект"`, not
+ *     "(unnamed room)"; "Zoë" is `"Zoë"`, not `"Zo"`;
+ *   - a name that cannot be printed within the cap is SAID to be unprintable —
+ *     claiming the room is unnamed would be false, and printing an altered
+ *     spelling would be worse;
+ *   - only a genuinely absent or empty name is "(unnamed room)".
+ *
+ * The phrases carry no quotes of their own, so they cannot be mistaken for a
+ * printed name: every real name on a page is a quoted JSON literal, and a room
+ * literally named `(unnamed room)` still renders distinguishably, in quotes.
+ *
+ * `name` is `unknown` because two of the call sites read it off the wire where
+ * the types are aspirational; a non-string is not a name, so it falls to the
+ * unnamed phrase — the same narrowing `asRoom` (src/scope.ts) applies.
+ */
+export function roomNamePhrase(name: unknown): string {
+  if (typeof name !== "string" || name === "") return "(unnamed room)";
+  return exactLiteral(name)?.literal ?? "(room name cannot be printed exactly)";
 }
 
 /**

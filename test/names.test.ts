@@ -29,6 +29,7 @@ import {
   domainPhrase,
   exactLiteral,
   formatDomainList,
+  roomNamePhrase,
   withDomainEscapeLegend,
 } from "../src/names.js";
 
@@ -167,6 +168,34 @@ describe("domainPhrase", () => {
     expect(domainPhrase(long)).toBe("the domain you passed");
     expect(domainPhrase(long)).not.toContain("x");
     expect(domainPhrase(undefined, "your own domains")).toBe("your own domains");
+  });
+});
+
+describe("roomNamePhrase — a room name as display text", () => {
+  it("prints a printable name as its exact literal", () => {
+    // The reproduced findings: "проект" rendered "(unnamed room)" and "Zoë"
+    // was quoted as "Zo" — different names presented as the name.
+    expect(roomNamePhrase("проект")).toBe('"проект"');
+    expect(roomNamePhrase("Zoë")).toBe('"Zoë"');
+    expect(roomNamePhrase("me-and-olya")).toBe('"me-and-olya"');
+  });
+
+  it("keeps three states three: unnamed, unprintable, and named are distinct", () => {
+    const long = "x".repeat(500);
+    expect(roomNamePhrase(long)).toBe("(room name cannot be printed exactly)");
+    expect(roomNamePhrase(long)).not.toContain("xx");
+    // Only a genuinely absent or empty name is "(unnamed room)"; a non-string
+    // is not a name at all (same narrowing asRoom applies in src/scope.ts).
+    for (const absent of [undefined, null, "", 5, {}]) {
+      expect(roomNamePhrase(absent)).toBe("(unnamed room)");
+    }
+  });
+
+  it("emits no quotes around the phrases, so they cannot pass for names", () => {
+    // A room literally named "(unnamed room)" still prints distinguishably —
+    // inside quotes — while the phrase for a nameless room carries none.
+    expect(roomNamePhrase("(unnamed room)")).toBe('"(unnamed room)"');
+    expect(roomNamePhrase(undefined)).toBe("(unnamed room)");
   });
 });
 

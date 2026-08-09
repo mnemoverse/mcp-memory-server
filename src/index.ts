@@ -35,6 +35,7 @@ import {
   domainPhrase,
   exactLiteral,
   formatDomainList,
+  roomNamePhrase,
   withDomainEscapeLegend,
 } from "./names.js";
 
@@ -163,18 +164,21 @@ function capResult(
  *
  * `safeInline` (src/render.ts) SANITISES an untrusted display string for inline
  * rendering in tool output that a DIFFERENT principal's LLM will read (CN-032
- * anti-injection). A room name is chosen by the room OWNER but surfaced to a
- * JOINER's assistant on join/invite; core only trims whitespace on it, so
- * quotes/colons/newlines pass. Strip to a conservative charset, collapse
- * whitespace, cap the length. Same treatment `formatAuthorTag` applies to a
- * server-stamped author. It is lossy on purpose, and everything it renders here
- * is a value the reader looks at and never has to retype.
+ * anti-injection): strip to a conservative charset, collapse whitespace, cap
+ * the length. The treatment `formatAuthorTag` applies to a server-stamped
+ * author, and the defensive second pass the machine-shaped room fields
+ * (address, room_id, role, scope — all charset-validated or enum-shaped in
+ * core) get here. It is lossy on purpose, and everything it still renders is a
+ * value the reader looks at and never has to retype or compare.
  *
- * `exactLiteral` / `domainPhrase` (src/names.ts) print a value the reader must
- * be able to REPRODUCE — a domain name, which the engine matches byte-for-byte
- * — as a JSON string literal, or refuse to print it. Using safeInline for those
- * is what this change fixes: it erased exactly the differences (a leading
- * space, a non-Latin alphabet) that make two stores two stores.
+ * `exactLiteral` / `domainPhrase` / `roomNamePhrase` (src/names.ts) print a
+ * value as a JSON string literal, or refuse to print it. Domain names because
+ * the engine matches them byte-for-byte, so the reader must be able to send
+ * the exact bytes back. Room NAMES (0.8.1) because the sanitiser did not make
+ * them harmless so much as it made them WRONG: "проект" echoed back as `""` on
+ * create, "Zoë" as "Zo" inside quotes that claim to be the name. The literal
+ * is one line with quotes, backslashes and invisibles escaped, so it is as
+ * injection-safe as the sanitised spelling was — without the renaming.
  */
 
 // --- Server setup ---
@@ -1112,24 +1116,29 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ name, description }),
     });
-    const roomName = safeInline(r?.name ?? name);
+    // The name is echoed back to the caller who CHOSE it, so it is printed
+    // exactly (src/names.ts): safeInline turned `memory_create_room({name:
+    // "проект"})` into `Created shared room ""` — an echo claiming the caller
+    // named their room the empty string.
+    const rawName = r?.name ?? name;
+    const roomName = roomNamePhrase(rawName);
     const address = safeInline(r?.address);
     const roomId = safeInline(r?.room_id);
     // If core returned no usable id (empty body / sanitized away), don't print
     // broken `domain=""` guidance — say so instead (Copilot).
     const text = address
-      ? `Created shared room "${roomName}". Address: ${address}\n` +
+      ? `Created shared room ${roomName}. Address: ${address}\n` +
         `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
         (roomId
           ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
           : "")
-      : `Room "${roomName}" was created but the server did not return a usable address — ` +
+      : `Room ${roomName} was created but the server did not return a usable address — ` +
         `retry, or check that your API key is set.`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(text),
+          text: capResult(withDomainEscapeLegend(text, rawName)),
         },
       ],
     };
@@ -1225,14 +1234,18 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ code }),
     });
-    // CN-032: the room name/scope are OWNER-chosen but rendered into the
-    // JOINER's LLM context here — sanitize before inlining (anti prompt-injection).
-    const roomName = safeInline(r?.name) || "the room";
+    // The room name is OWNER-chosen and rendered into the JOINER's LLM context
+    // (CN-032) — and it is printed EXACTLY (src/names.ts): the literal is one
+    // line with quotes and invisibles escaped, so it cannot forge an
+    // instruction block, and "Zoë" stops being quoted as "Zo" in a sentence
+    // that presents it as the name. `scope` stays sanitised: server-shaped
+    // enum, display-only.
+    const roomName = roomNamePhrase(r?.name);
     const scope = safeInline(r?.scope) || "member";
     const address = safeInline(r?.address);
     const prefix = r?.already_member
-      ? `You're already a member of "${roomName}".`
-      : `Joined "${roomName}" (${scope}).`;
+      ? `You're already a member of ${roomName}.`
+      : `Joined ${roomName} (${scope}).`;
     // Don't print broken `domain=""` guidance if no address came back (Copilot).
     const usage = address
       ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
@@ -1241,7 +1254,7 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(`${prefix}\n${usage}`),
+          text: capResult(withDomainEscapeLegend(`${prefix}\n${usage}`, r?.name)),
         },
       ],
     };
@@ -1301,27 +1314,41 @@ server.registerTool(
     // ARCHIVED ROOMS ARE LISTED HERE, unlike in the scope note — this tool's job
     // is the inventory, and the `[archived]` tag says which ones cannot be read.
     const list = rooms.rooms;
-    // Room name is OWNER-chosen and surfaced to THIS assistant — sanitize it (CN-032),
-    // like memory_join_room already does. address/role/scope are server-shaped but pass
-    // through the same guard defensively.
+    // Room name is OWNER-chosen — printed EXACTLY (src/names.ts), like every
+    // other room-name surface as of 0.8.1: the sanitiser listed "проект" and
+    // "план" as two "(unnamed room)" entries and quoted "Zoë" as "Zo".
+    // address/role/scope are server-shaped and keep the defensive sanitiser.
     const lines = list.map((r) => {
-      const name = safeInline(r?.name) || "(unnamed room)";
+      const name = roomNamePhrase(r?.name);
       const roomId = safeInline(r?.room_id);
       // Always surface the canonical address: fall back to xroom:<room_id> when the server
       // omits `address`, so the domain guidance this tool promises is never silently dropped.
       const address = safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
       const role = safeInline(r?.role);
       const scope = safeInline(r?.scope);
-      const archived = r?.archived ? " [archived]" : "";
-      const use = address ? ` — use domain="${address}"` : "";
-      return `- "${name}" (${role}${scope ? `, ${scope}` : ""})${archived}${use}`;
+      // No "use domain=..." on an archived room: core refuses EVERY read of one
+      // with a 403, for owner and member alike (see the archived-only note in
+      // src/scope.ts), so that clause was an instruction to make a call that
+      // cannot succeed. The address stays visible — it is the room's identity —
+      // but the line says what a read against it will do.
+      const tail = r?.archived
+        ? address
+          ? ` [archived] — address ${address}, but every read is refused while it is archived`
+          : ` [archived] — every read is refused while it is archived`
+        : address
+          ? ` — use domain="${address}"`
+          : "";
+      return `- ${name} (${role}${scope ? `, ${scope}` : ""})${tail}`;
     });
     const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(text, "The room list was truncated — some rooms are not shown."),
+          text: capResult(
+            withDomainEscapeLegend(text, ...list.map((r) => r?.name)),
+            "The room list was truncated — some rooms are not shown.",
+          ),
         },
       ],
     };

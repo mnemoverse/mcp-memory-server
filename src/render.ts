@@ -46,10 +46,11 @@ export type RecentItem = {
 };
 
 /**
- * Sanitize a string for inline interpolation into tool output (CN-032:
- * hostile connectors choose their own agent_name; a room name is chosen by its
- * OWNER and shown to a JOINER's model). The single implementation, imported by
- * index.ts and injected into src/scope.ts.
+ * Sanitize a string for inline interpolation into tool output (CN-032: hostile
+ * connectors choose their own agent_name). The single implementation, imported
+ * by index.ts and injected into src/scope.ts for the machine-shaped room
+ * fields (address, room_id — core charset-validates both; this is a defensive
+ * second pass).
  *
  * NOT for anything the reader must reproduce. This is lossy and non-injective
  * by design — non-ASCII becomes spaces, whitespace is collapsed and trimmed,
@@ -57,6 +58,13 @@ export type RecentItem = {
  * padded value comes out as its clean twin. For a domain name, an id, or
  * anything else that gets compared or sent back, use src/names.ts
  * (`exactLiteral`), which prints exactly or refuses to print.
+ *
+ * NOT for room NAMES either, as of 0.8.1 (`roomNamePhrase`, src/names.ts).
+ * They are display-only, but this sanitiser did not make them harmless so much
+ * as it made them wrong: "проект" rendered "(unnamed room)", and "Zoë" was
+ * quoted as "Zo" — a different name presented as the name. The exact literal
+ * is single-line with quotes and invisibles escaped, so it carries the same
+ * anti-injection property without the renaming.
  */
 export function safeInline(s: string | undefined | null, cap = 200): string {
   return (s ?? "")

@@ -438,9 +438,22 @@ Consequences worth stating plainly:
   character and the quotes are not part of the name.
 - **The non-Latin case-twin diagnosis works again.** It had been silenced for
   every name the ASCII sanitiser would rewrite; it now names both stores.
-- **Room names keep `safeInline`, deliberately.** They are a different
-  principal's string shown to this one, and reversibility is not their
-  requirement.
+- **Room names moved to the exact renderer too** — a follow-up inside this
+  release; an earlier draft of this entry kept them on `safeInline` as "a
+  different principal's string" whose reversibility was not a requirement. The
+  sanitiser did not make hostile names harmless so much as it made ordinary
+  names WRONG: two live rooms named "проект" and "план" both rendered
+  "(unnamed room)" in the note that asks the reader to pick one, "Zoë" was
+  quoted as "Zo" in sentences presenting it as the name, and
+  `memory_create_room({name: "проект"})` echoed `Created shared room ""`. The
+  exact literal is single-line with quotes, backslashes and invisibles escaped,
+  so the anti-injection property survives the change. A name too long to print
+  is DECLARED unprintable — never renamed, and never "(unnamed room)", which is
+  reserved for a genuinely absent or empty name. On the same pass, the
+  `memory_list_rooms` line for an `[archived]` room stopped saying
+  `use domain="…"` — core refuses every read of an archived room with a 403, so
+  that clause instructed a call that cannot succeed; the address stays visible,
+  with that fact beside it.
 
 ### Fixed after review — unknown is not the same as none
 
@@ -605,10 +618,10 @@ release does not have to find them again.
   from here. The boolean was renamed to `bare404` so the code stops asserting it;
   the sentence still does.
 - **Room addresses are printed through the lossy sanitiser.** `safeInline` is
-  correct for a room NAME (another principal's string, looked at and never
-  retyped), and it is what room addresses, roles, scopes, vault aliases and author
-  tags still get. An address is different in kind: the note *instructs* the reader
-  to send it back. Divergence is unreachable today — core mints `room_<ULID>` and
+  what room addresses, roles, scopes, vault aliases and author tags still get
+  (room NAMES left it in the room-name fix above: printed exactly, or declared
+  unprintable). An address is different in kind even from those: the note
+  *instructs* the reader to send it back. Divergence is unreachable today — core mints `room_<ULID>` and
   400s any non-canonical spelling, and vault aliases are charset-validated — and
   nothing in this repo pins that. The correct pattern is validate-then-print-raw,
   but the existing fallback then says "the server did not return a usable address",

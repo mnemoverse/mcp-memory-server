@@ -26,7 +26,12 @@
  * stdio transport, matching render.ts and teaching.ts.
  */
 
-import { domainPhrase, exactLiteral, withDomainEscapeLegend } from "./names.js";
+import {
+  domainPhrase,
+  exactLiteral,
+  roomNamePhrase,
+  withDomainEscapeLegend,
+} from "./names.js";
 
 /**
  * How to NAME the scope inside a sentence, so the sentence is true on its own
@@ -49,8 +54,11 @@ import { domainPhrase, exactLiteral, withDomainEscapeLegend } from "./names.js";
  * naming something else.
  *
  * A room address stays unnamed ("that room") — unchanged, and deliberately: the
- * address is already in the caller's hand, and the room's NAME belongs to
- * another principal, so it gets safeInline where it is printed at all.
+ * address is already in the caller's hand, and this sentence has no need to
+ * print another principal's display string. Where a room's NAME is printed at
+ * all ({@link liveRoomsNote} below, the room tools in index.ts) it goes through
+ * `roomNamePhrase` (src/names.ts) — exactly, or declared unprintable — never
+ * through the lossy sanitiser, which renamed "проект" to "(unnamed room)".
  *
  * Lives here rather than in index.ts so the sentence can be unit-tested: this is
  * the module about saying where we looked, and index.ts opens a stdio transport
@@ -417,28 +425,41 @@ const SCOPE_PREFIX =
  * different sentence (see below), because there silence is not an option: it
  * either dangles a colon or lets the answer claim the memory is empty.
  *
- * `sanitize` is injected (render.ts's safeInline) because a room name is chosen
- * by its OWNER and surfaced to a DIFFERENT principal's model — the same
- * anti-injection treatment every other room-name render gets. A room NAME is
- * not a value the reader retypes; the ADDRESS beside it is machine-shaped.
+ * The NAME is printed exactly (src/names.ts, `roomNamePhrase`) even though it is
+ * OWNER-chosen and display-only. This note used to render it through the
+ * injected sanitiser, which did not make hostile names harmless so much as it
+ * made ordinary names WRONG: two live rooms named "проект" and "план" both
+ * printed "(unnamed room)" in the very note that asks the reader to pick one
+ * (review, 2026-08-08). The exact literal keeps the anti-injection property —
+ * one line, quotes and backslashes and invisibles escaped — and a name that
+ * cannot be printed within the cap is declared unprintable rather than altered.
+ * The escape legend rides on the note itself, because this note only appears on
+ * UNSCOPED answers, where the assembling call sites pass no room names as
+ * legend candidates (they have `searched === undefined` in hand, not the list).
+ *
+ * `sanitize` (render.ts's safeInline) still guards the machine-shaped fields —
+ * `address` and `room_id`, which core charset-validates — as a defensive pass,
+ * unchanged.
  */
 function liveRoomsNote(
   live: readonly RoomSummary[],
   sanitize: (s: string | undefined | null) => string,
 ): string {
-  const shown = live.slice(0, MAX_LISTED).map((r) => {
-    const name = sanitize(r.name) || "(unnamed room)";
+  const listed = live.slice(0, MAX_LISTED);
+  const shown = listed.map((r) => {
+    const name = roomNamePhrase(r.name);
     const roomId = sanitize(r.room_id);
     const address = sanitize(r.address) || (roomId ? `xroom:${roomId}` : "");
-    return address ? `  - "${name}" — domain="${address}"` : `  - "${name}"`;
+    return address ? `  - ${name} — domain="${address}"` : `  - ${name}`;
   });
   const rest = live.length - shown.length;
   const more = rest > 0 ? `\n  …and ${rest} more (memory_list_rooms)` : "";
 
-  return (
+  return withDomainEscapeLegend(
     `${SCOPE_PREFIX} — ${live.length} room${live.length === 1 ? "" : "s"} ` +
-    `went unsearched:\n${shown.join("\n")}${more}\n` +
-    `Re-run with domain set to one of these to read it.`
+      `went unsearched:\n${shown.join("\n")}${more}\n` +
+      `Re-run with domain set to one of these to read it.`,
+    ...listed.map((r) => r.name),
   );
 }
 

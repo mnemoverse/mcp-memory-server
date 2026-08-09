@@ -393,21 +393,25 @@ describe("the record of what went wrong stays in the source", () => {
  * Naming a store: the sanitiser must never be the renderer.
  *
  * `safeInline` is lossy and non-injective by design — it is the anti-injection
- * treatment for a value chosen by a DIFFERENT principal (a room name, an agent
+ * treatment for a display value chosen by a DIFFERENT principal (an agent
  * name), which the reader only ever looks at. A domain name is the opposite: the
  * engine matches it byte-for-byte, so the reader has to be able to send it back.
  * Rendering one through the other merged `" engineering"` with `"engineering"`
- * and printed two Cyrillic stores as one name.
+ * and printed two Cyrillic stores as one name. (Room NAMES left the sanitiser
+ * too, in the follow-up fix: it renamed them — "проект" to "(unnamed room)" —
+ * and the exact literal is itself single-line and escape-quoted, so the
+ * anti-injection property held without it; see handlers.test.ts →
+ * "room names, printed exactly".)
  *
  * ONE ASSERTION LEFT, AND IT IS SOURCE BY NECESSITY. That every name a reader
  * must reproduce is printed exactly is now checked by calling the tools
  * (test/handlers.test.ts → "naming a store the reader has to reproduce": the
  * stats domain line, the twin diagnosis, the destructive confirmation, the
- * escape legend, and the room-name carve-out in the other direction). What no
- * call can establish is the NEGATIVE, which is the actual rule: not one of the
- * twelve handlers, on any branch, for any input, sends such a value through the
- * sanitiser. A denylist over the source is the only instrument for a "never", and
- * every entry in it is a call site that really existed.
+ * escape legend). What no call can establish is the NEGATIVE, which is the
+ * actual rule: not one of the twelve handlers, on any branch, for any input,
+ * sends such a value through the sanitiser. A denylist over the source is the
+ * only instrument for a "never", and every entry in it is a call site that
+ * really existed.
  */
 describe("naming a store", () => {
   it("never renders a domain through safeInline", () => {
