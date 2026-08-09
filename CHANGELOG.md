@@ -68,6 +68,16 @@ No tool changes shape and no request changes a byte — the wire format is
 pinned byte-for-byte by `test/requests.test.ts`, and all 338 tests pass
 unchanged against SDK 1.30.0. The published file set is untouched.
 
+### Fixed
+
+- `server.json` / `src/configs/source.json`: the `MNEMOVERSE_API_URL` env
+  description promised a self-host path ("unless you self-host the core
+  engine") that does not exist — it had shipped to the official MCP registry
+  in every version since 0.3.8, including 0.8.1, whose registry manifest
+  still carries it. The description now says what the override is for:
+  testing against a non-production environment. Registry text corrects
+  itself on the next `mcp-publisher` run — description prose only, no shape
+  change. (#72)
 ## [0.8.1] — 2026-08-09
 
 An honesty pass. Every result line looks different afterwards, and nine
