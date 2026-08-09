@@ -57,7 +57,7 @@
   },
   "homepage": "https://mnemoverse.com/docs/api/mcp-server",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
