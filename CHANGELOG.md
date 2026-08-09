@@ -88,8 +88,8 @@ padded, non-breaking, zero-width and room-address domains — a coercion cannot 
 deleted again without failing. What normalisation should look like when it comes
 back (`memory_delete_domain` included, room addresses exempt, zero-width
 characters handled — `trim()` does not strip those) is written down here and
-**nowhere else**: it is not on the 0.9 issue (#64) and has no issue of its own, so
-"returns in 0.9.0" would be a promise with nothing behind it.
+**and in #70**: it is not on the 0.9 issue (#64), but it now has an issue of its
+own, so the return has a tracker behind it rather than a promise.
 
 ### Fixed — an empty answer now describes its scope instead of asserting absence
 
@@ -625,7 +625,7 @@ that is said too.
   `src/scope.ts` (that clause only ever rendered for owners, and it promised a
   recovery that does not exist). Archiving has no inverse anywhere in the data
   plane, this client or the portal, so the sentence deliberately offers no way
-  back. No issue filed for the member-visibility asymmetry.
+  back. The member-visibility asymmetry is filed as mnemoverse-core#465.
 
 #### Surface this connector does not have yet — waiting for a MINOR (#64)
 
@@ -661,9 +661,9 @@ that is said too.
   stall an empty answer for minutes — on a probe the caller never asked for. The
   truthful "we could not check" arm already exists; a timeout that falls through
   to it is a behaviour change, not a wording one, so it does not belong in this
-  patch. No issue filed.
+  patch. Filed as #73.
 - **Domain normalisation is not scheduled.** See the trim revert at the top of this
-  section: the plan exists only in this file, with no issue.
+  section: the plan is written there and tracked in #70.
 
 #### Sentences this release did not make honest
 
@@ -747,7 +747,7 @@ release does not have to find them again.
 - **`engines` claims Node >=18; CI tests Node 20 only.** The package declares it
   installs on Node 18, and no workflow runs the suite there — so a breakage that
   only bites on 18 would ship green. Either the matrix grows a Node 18 leg or the
-  `engines` floor rises to match what is tested. No issue filed.
+  `engines` floor rises to match what is tested. Filed as #75.
 
 ## [0.8.0] — 2026-08-06
 
