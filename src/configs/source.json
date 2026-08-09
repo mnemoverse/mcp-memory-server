@@ -22,7 +22,7 @@
     "MNEMOVERSE_API_URL": {
       "value": "https://core.mnemoverse.com/api/v1",
       "placeholder": "https://core.mnemoverse.com/api/v1",
-      "description": "Mnemoverse API base URL. Leave as the default unless you self-host the core engine.",
+      "description": "Mnemoverse API base URL. Leave as the default; override only for testing against a non-production environment.",
       "required": false,
       "secret": false
     }

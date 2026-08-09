@@ -29,7 +29,7 @@
         },
         {
           "name": "MNEMOVERSE_API_URL",
-          "description": "Mnemoverse API base URL. Leave as the default unless you self-host the core engine.",
+          "description": "Mnemoverse API base URL. Leave as the default; override only for testing against a non-production environment.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
