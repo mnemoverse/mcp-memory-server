@@ -75,7 +75,7 @@ Parameters:
 Returns: The deleted count, or a note that nothing matched.
 
 ### memory_create_room
-Create a SHARED memory room — a space your and other people's assistants can both read and write. Pass the returned address as the domain on memory_write/memory_read to use it.
+Create a SHARED memory room — a space other people's assistants can read, and write too when their invite granted read_write (the default scope). Pass the returned address as the domain on memory_write/memory_read to use it.
 
 Parameters:
 - name (string, required): Room name, unique within your account.

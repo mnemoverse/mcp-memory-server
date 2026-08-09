@@ -21,7 +21,7 @@
       "environmentVariables": [
         {
           "name": "MNEMOVERSE_API_KEY",
-          "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; a key is required only to store or recall memories. Get one free in ~30s at https://console.mnemoverse.com",
+          "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
           "isRequired": false,
           "format": "string",
           "isSecret": true,

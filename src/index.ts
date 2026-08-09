@@ -1207,7 +1207,7 @@ server.registerTool(
   "memory_create_room",
   {
     description:
-      "Create a SHARED memory room — a space you and OTHER people's assistants can both read and write, across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
+      "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
     inputSchema: {
       name: z
         .string()
@@ -1261,7 +1261,11 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(withDomainEscapeLegend(text, rawName)),
+          // Legend AFTER the cap (same rule as memory_read/memory_list_recent):
+          // capResult cuts from the end, so a legend applied first would be the
+          // first casualty; applied to the capped text it also drops itself when
+          // the cap removed the only escaped name.
+          text: withDomainEscapeLegend(capResult(text), rawName),
         },
       ],
     };
@@ -1377,7 +1381,8 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(withDomainEscapeLegend(`${prefix}\n${usage}`, r?.name)),
+          // Legend after the cap — same ordering rule as everywhere else.
+          text: withDomainEscapeLegend(capResult(`${prefix}\n${usage}`), r?.name),
         },
       ],
     };
@@ -1464,9 +1469,15 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(
-            withDomainEscapeLegend(text, ...list.map((r) => r?.name)),
-            "The room list was truncated — some rooms are not shown.",
+          // Legend after the cap: this is the one room surface long enough to
+          // actually overflow, and the legend must describe the names that
+          // SURVIVED the cut, not the ones it removed.
+          text: withDomainEscapeLegend(
+            capResult(
+              text,
+              "The room list was truncated — some rooms are not shown.",
+            ),
+            ...list.map((r) => r?.name),
           ),
         },
       ],

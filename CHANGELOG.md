@@ -87,7 +87,7 @@ The revert is enforced, the return is not scheduled. What holds today is
 padded, non-breaking, zero-width and room-address domains — a coercion cannot be
 deleted again without failing. What normalisation should look like when it comes
 back (`memory_delete_domain` included, room addresses exempt, zero-width
-characters handled — `trim()` does not strip those) is written down here and
+characters handled — `trim()` does not strip those) is written down here
 **and in #70**: it is not on the 0.9 issue (#64), but it now has an issue of its
 own, so the return has a tracker behind it rather than a promise.
 
@@ -173,7 +173,7 @@ way.
 invisible under `TZ=UTC`, which is exactly what a runner defaults to, so a
 UTC-only job would have shipped that bug green.
 
-The suite grew from **31 tests at 0.8.0 to 337**, and the ones that mattered most
+The suite grew from **31 tests at 0.8.0 to 338**, and the ones that mattered most
 were replaced rather than added to. Every number in that sentence is reproducible
 — `git archive <ref> | tar -x -C tmp && (cd tmp && npx vitest run)` — and here is
 the whole curve, measured that way: `main` **31**, the commit before the gate
@@ -184,7 +184,8 @@ third review wave: **284** with the head-selection fix, **289** with the
 cursor-page head, **301** with the room-name renderer, **303** with the gloss
 corrections, **315** with the unreadable-body guards, **320** with the
 legend-after-cap fix, **323** when the fire-drill gaps closed, **337** with the
-description pins.
+description pins, **338** with the truncated-room-list legend pin from the review
+threads.
 
 Two corrections to this paragraph's own history, kept rather than swapped, because
 the release is about the habit of swapping them. It said the suite "grew from 60
@@ -226,8 +227,8 @@ the confusion this whole release is about.
 The two test files that read `src/index.ts` as text carried 41 tests between them;
 they now carry 29, and `test/tool-wiring.test.ts` no longer reads the source at
 all — its parameter list comes from `tools/list`, as a model sees it, and its
-values come out of the request the handler actually sent. 86 behavioural tests
-(77 + 9) live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
+values come out of the request the handler actually sent. 87 behavioural tests
+(78 + 9) live in `test/handlers.test.ts` and `test/startup.test.ts`. What stays a source
 assertion is labelled in place with the reason no call can establish it (chiefly
 the "never" rules: no handler sends a name the reader must reproduce through the
 lossy sanitiser, and none normalises a domain).

@@ -1231,6 +1231,29 @@ describe("room names, printed exactly", () => {
     expect(text).toContain("- (unnamed room)");
     expect(text).not.toContain('"(unnamed room)"');
   });
+
+  it("a truncated room list keeps the legend that decodes the names still shown", async () => {
+    // Legend AFTER the cap. The room list is the one room surface long enough
+    // to overflow, and with the old cap(legend(...)) ordering the legend was
+    // the first thing the cut removed while escaped names stayed on the page.
+    // The escaped-name room sits FIRST so it provably survives the cut.
+    mcp.on(ROOMS, [
+      { room_id: "room_00Z", name: ZWSP_ROOM_NAME, address: "xroom:room_00Z" },
+      ...Array.from({ length: 700 }, (_, i) => ({
+        room_id: `room_${String(i).padStart(3, "0")}`,
+        name: `room-${i}-${"n".repeat(180)}`,
+        address: `xroom:room_${String(i).padStart(3, "0")}`,
+      })),
+    ]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain("The room list was truncated");
+    // The legend survived the cut, exactly once, and it explains a name that
+    // is still on the page.
+    expect(legends(text)).toBe(1);
+    expect(text).toContain('"olya\\u200bteam"');
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -267,7 +267,7 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 
 ## Privacy
 
-This server sends to the Mnemoverse API (`core.mnemoverse.com`), authenticated with your API key, what a tool call carries — and nothing else it can see. It does **not** read your AI client's conversation history, your local files, or anything you don't pass to a `memory_*` / `vault_*` tool. Stored memories live under your account and are never sold or shared with third parties.
+This server sends to the Mnemoverse API (`core.mnemoverse.com`), authenticated with your API key, what a tool call carries — and nothing else it can see. It does **not** read your AI client's conversation history, your local files, or anything you don't pass to a `memory_*` / `vault_*` tool. Stored memories live under your account; Mnemoverse never sells them and never shares them on its own. The one sharing path is the one you create yourself: inviting someone to a shared room grants their assistant access to that room's memories, bounded by the invite's scope.
 
 What each tool sends:
 

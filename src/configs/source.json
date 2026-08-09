@@ -15,7 +15,7 @@
     "MNEMOVERSE_API_KEY": {
       "value": "mk_live_YOUR_KEY",
       "placeholder": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; a key is required only to store or recall memories. Get one free in ~30s at https://console.mnemoverse.com",
+      "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
       "required": false,
       "secret": true
     },
@@ -77,7 +77,7 @@
       "api_key": {
         "type": "string",
         "title": "Mnemoverse API Key",
-        "description": "Mnemoverse API key (starts with mk_live_). Optional — the server installs and lists its tools without it; required only to store or recall memories. Get one free at https://console.mnemoverse.com",
+        "description": "Mnemoverse API key (starts with mk_live_). Optional — the server installs and lists its tools without it; every actual tool call requires one. Get one free at https://console.mnemoverse.com",
         "sensitive": true,
         "required": false
       }
@@ -113,7 +113,7 @@
       },
       {
         "name": "memory_create_room",
-        "description": "Create a shared memory room — a space that your and other people's assistants can both read and write, across Claude/ChatGPT/editors."
+        "description": "Create a shared memory room — a space other people's assistants can read, and write too when invited with read_write scope, across Claude/ChatGPT/editors."
       },
       {
         "name": "memory_invite_to_room",
