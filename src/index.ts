@@ -12,7 +12,63 @@ import {
   type ReadItem,
   type RecentItem,
 } from "./render.js";
+// `NO_MATCH_MESSAGE` is no longer imported here: this file used to pick between
+// it and buildReadEmptyResponse by testing a note string for truthiness, which
+// is how "we could not check" came to be spelled like "the store is there".
+// Assembling the whole answer belongs in one place — src/teaching.ts.
 import { SERVER_INSTRUCTIONS, buildReadEmptyResponse } from "./teaching.js";
+import {
+  classifyRooms,
+  futureSinceNote,
+  probeReadScope,
+  readScopeNote,
+  scopeLabel,
+  type ReadScope,
+} from "./scope.js";
+import {
+  readRequestBody,
+  recentRequestBody,
+  writeRequestBody,
+  searchedScope,
+} from "./requests.js";
+import {
+  domainPhrase,
+  exactLiteral,
+  formatDomainList,
+  roomNamePhrase,
+  withDomainEscapeLegend,
+} from "./names.js";
+
+/**
+ * What we know about the scope this read actually covered — a VALUE rather
+ * than a sentence-or-empty-string. Costs one GET (rooms or stats, chosen by
+ * the scope) and runs on zero-result paths only — but it is not that path's
+ * only probe: the plain unscoped empty read also hands buildReadEmptyResponse
+ * a stats call for the first-contact greeting, so that answer makes two
+ * probes where 0.8.0 made one, and the scoped/filtered answers make one where
+ * 0.8.0 made none. Disclosed in the 0.8.1 CHANGELOG entry.
+ *
+ * This replaces `domainMissNote`, whose `catch { return ""; }` made three
+ * different states share one spelling: the store is there and the query missed,
+ * the room is there and the query missed, and the probe failed. The caller then
+ * read that string as a boolean, so "we could not check" was rendered exactly
+ * like "the store exists" — the collision this release is about, at the point
+ * where the whole scoped path converges. The states are now arms of a union
+ * (src/scope.ts) and every consumer must answer for each of them.
+ *
+ * The probe routing lives in src/scope.ts: a room address is checked against the
+ * ROOM list and a domain against `/memory/stats`, because stats never contains a
+ * room address (CodeRabbit #65). `searched` is the RAW value that went over the
+ * wire, so the diagnosis can never describe a different store than the request.
+ */
+function probeScope(searched: string | undefined): Promise<ReadScope> {
+  return probeReadScope(
+    searched,
+    () => apiFetch<unknown>("/memory/stats"),
+    () => apiFetch<unknown>("/memory/rooms"),
+    safeInline,
+  );
+}
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -94,7 +150,12 @@ async function apiFetch<T = unknown>(
  */
 function capResult(
   text: string,
-  moreHint = "Use a more specific query or smaller top_k to see all results.",
+  // The default recommends ONLY the control that works. A previous draft also
+  // said "or smaller top_k" — but top_k is not a hard cap (association
+  // expansion can return more, the relevance floor fewer; the same query at
+  // 1/5/20 returned 6/7/4 items), which this release's own top_k description
+  // already admits. One surface must not recommend the knob another refutes.
+  moreHint = "Use a more specific query to see all results.",
 ): string {
   if (text.length <= MAX_RESULT_CHARS) return text;
   let truncated = text.slice(0, MAX_RESULT_CHARS - 200);
@@ -103,20 +164,68 @@ function capResult(
     truncated = truncated.slice(0, -1);
   }
   // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
-  // guidance instead of the read-tool default (which points at query/top_k controls a
+  // guidance instead of the read-tool default (which points at a query control a
   // repeated no-arg call cannot use). Existing callers keep the default message.
   return `${truncated}\n\n[…truncated to fit the 25K token limit. ${moreHint}]`;
 }
 
 /**
- * Sanitize an untrusted string for safe inline rendering in tool output that a
- * DIFFERENT principal's LLM will read (CN-032 anti-injection). A room name is
- * chosen by the room OWNER but surfaced to a JOINER's assistant on join/invite;
- * core only trims whitespace on it, so quotes/colons/newlines pass. Strip to a
- * conservative charset and collapse whitespace, then cap length. Same treatment
- * `formatAuthorTag` already applies to a server-stamped author.
- * Implementation lives in src/render.ts (shared with the item renderers,
- * testable there); re-imported here for the 15 other call sites.
+ * A 200 whose body does not carry the array core always sends for a listing.
+ *
+ * Reading such a body as an EMPTY list is the substitution this release exists
+ * to remove: `Array.isArray(x) ? x : []` turned "this client could not read
+ * the response" into "there is nothing there" — an absence claim on zero
+ * evidence. `classifyRooms` (src/scope.ts) and the stats domains guard closed
+ * it for rooms and domains; this builder is the same answer for the remaining
+ * list surfaces (search results, the feed, the vault), phrased the way the
+ * room list already phrases it. The three parts are the subject, what the body
+ * is NOT ("a list of your rooms"), and the absence it is NOT evidence of
+ * ("you have none") — so every consumer states its own boundary while the
+ * sentence stays one sentence everywhere (truth F13, 2026-08-08).
+ */
+function unreadableListReply(subject: string, notA: string, absence: string) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        // The tail attributes the unreadable 200 to "whatever answered this
+        // call", not to "the memory service" — this client cannot establish
+        // WHO answered: a gateway, a proxy, or the endpoint a mis-set
+        // MNEMOVERSE_API_URL points at produces the same 200 with an
+        // unrecognised body (truth re-verification, 2026-08-09). Pinned in
+        // test/handlers.test.ts.
+        text:
+          `${subject} came back in a shape this client does not recognise — so this ` +
+          `is not ${notA}, and it is not evidence that ${absence}. Retry; ` +
+          `if it persists, whatever answered this call — the memory service, a ` +
+          `gateway or proxy in front of it, or the endpoint a mis-set ` +
+          `MNEMOVERSE_API_URL points at — is answering in a shape this client ` +
+          `cannot read.`,
+      },
+    ],
+  };
+}
+
+/**
+ * Two renderers, and which one a value gets is a decision, not a style choice.
+ *
+ * `safeInline` (src/render.ts) SANITISES an untrusted display string for inline
+ * rendering in tool output that a DIFFERENT principal's LLM will read (CN-032
+ * anti-injection): strip to a conservative charset, collapse whitespace, cap
+ * the length. The treatment `formatAuthorTag` applies to a server-stamped
+ * author, and the defensive second pass the machine-shaped room fields
+ * (address, room_id, role, scope — all charset-validated or enum-shaped in
+ * core) get here. It is lossy on purpose, and everything it still renders is a
+ * value the reader looks at and never has to retype or compare.
+ *
+ * `exactLiteral` / `domainPhrase` / `roomNamePhrase` (src/names.ts) print a
+ * value as a JSON string literal, or refuse to print it. Domain names because
+ * the engine matches them byte-for-byte, so the reader must be able to send
+ * the exact bytes back. Room NAMES (0.8.1) because the sanitiser did not make
+ * them harmless so much as it made them WRONG: "проект" echoed back as `""` on
+ * create, "Zoë" as "Zo" inside quotes that claim to be the name. The literal
+ * is one line with quotes, backslashes and invisibles escaped, so it is as
+ * injection-safe as the sanitised spelling was — without the renaming.
  */
 
 // --- Server setup ---
@@ -125,7 +234,12 @@ function capResult(
 // clients that surface MCP instructions — it is the single highest-leverage
 // teaching surface this server has. Kept in src/teaching.ts so tests can
 // assert its polarity/length without booting the server.
-const server = new McpServer(
+//
+// EXPORTED so a test can connect a real MCP client to this exact server over
+// the SDK's in-memory transport and invoke the tools (test/harness.ts). Nothing
+// on the published CLI path reads this binding — see the note at the bottom of
+// the file for why the export alone is not enough, and what the CLI still does.
+export const server = new McpServer(
   {
     name: "mnemoverse-memory",
     version: pkg.version,
@@ -170,6 +284,28 @@ server.registerTool(
     },
   },
   async ({ content, concepts, domain }) => {
+    // NO NORMALISATION HERE — deliberately, after a review found two ways it
+    // breaks (2026-08-08). Trimming looked like an obvious win: domain names
+    // are matched byte-for-byte in core, so " engineering" opens a permanent
+    // second store beside "engineering". But:
+    //
+    //   1. Core REJECTS a non-canonical room address on purpose — 400
+    //      "Non-canonical room address", so a write "can't be mis-routed and
+    //      tagged with a spoofed xroom domain" in its own words. Trimming
+    //      " xroom:room_01ABC" normalises past that guard, and the atom lands
+    //      in the ROOM's store, visible to every member. Content that never
+    //      left the caller in 0.8.0 would leave the account in 0.8.1. The
+    //      address in that shape is one our own output hands the model.
+    //   2. For a caller who has been padding a domain for months, trimming
+    //      silently relocates new writes and orphans the old corpus — and
+    //      memory_delete_domain does NOT trim, so the same client can no
+    //      longer even name the shard it created.
+    //
+    // Both are behaviour changes, so they do not belong in a patch whose
+    // whole claim is that it only changes wording. Normalisation returns in
+    // 0.9.0 with delete_domain included, room addresses deliberately EXEMPT,
+    // and zero-width characters handled (JS trim() does not strip them —
+    // verified, contrary to what an earlier comment here asserted).
     const r = await apiFetch<{
       stored?: boolean;
       atom_id?: string | null;
@@ -177,14 +313,27 @@ server.registerTool(
       reason?: string;
     }>("/memory/write", {
       method: "POST",
-      body: JSON.stringify({
-        content,
-        concepts: concepts || [],
-        domain: domain || "general",
-      }),
+      body: JSON.stringify(writeRequestBody({ content, concepts, domain })),
     });
 
-    const importance = (r?.importance ?? 0).toFixed(2);
+    // "unknown", not 0.00, when the server didn't send a score — the same rule
+    // memory_stats got in this release. A live surface exists that answers
+    // {"stored":false} with no reason and no score; printing "0.00" there
+    // fabricates the gate's verdict (review, 2026-08-08).
+    const importance =
+      typeof r?.importance === "number" ? r.importance.toFixed(2) : "unknown";
+
+    // `Server reason:` is a VERBATIM label, and safeInline made it a lie on
+    // every occurrence: core's only rejection reason is
+    // "Below importance threshold (0.412 < 0.500)", whose parentheses and `<`
+    // are outside the sanitiser's charset — so the relay read "Below importance
+    // threshold 0.412 0.500", with the comparison operator and both delimiters
+    // deleted and the two numbers left unlabelled and order-only. Quoted
+    // exactly instead (src/names.ts). If it will not fit, say THAT rather than
+    // drop the clause: omitting it would report a server that gave no reason.
+    const reasonQuote = r?.reason
+      ? (exactLiteral(r.reason, 400)?.literal ?? "(too long to quote exactly)")
+      : "";
 
     if (r?.stored) {
       return {
@@ -196,11 +345,62 @@ server.registerTool(
         ],
       };
     }
+    // NOT STORED. The old wording ("Filtered — …") named the mechanism but
+    // never the outcome, so a caller could read it as a soft success and move
+    // on. In dogfooding this ate a CORRECTION to a wrong fact: the stale
+    // version stayed as the only record, and looked more authoritative for
+    // having no competitor (2026-08-07).
+    //
+    // The ADVICE was wrong until 2026-08-08, and wrong in a way that made
+    // things worse. It told the caller to rewrite the content as a cleaner
+    // factual statement — but the gate scores GEOMETRIC NOVELTY against the
+    // nearest existing atom in the same domain, not phrasing or factuality.
+    // "Below importance threshold" means TOO SIMILAR TO SOMETHING ALREADY
+    // STORED. A rewrite of the same fact therefore produces a near-identical
+    // embedding, scores the same or lower, and is rejected again — and the old
+    // text ended with "write it again", so a compliant agent looped. It was
+    // anti-correlated with the mechanism in exactly the case it was written
+    // for: a correction, which is by nature similar to what it corrects.
     return {
       content: [
         {
           type: "text" as const,
-          text: `Filtered — ${r?.reason ?? "unknown reason"} (importance: ${importance})`,
+          // WHAT IS CONDITIONAL HERE, stated exactly, because a previous
+          // version of this comment claimed more than the code does.
+          //
+          // Conditional: the SERVER'S VERDICT and the SCORE. `Server reason:`
+          // is printed only when `reason` came back, and `Novelty score` only
+          // when a numeric `importance` did — a live surface answers
+          // `{"stored":false}` with neither, and quoting a verdict nobody sent
+          // would be a claim on zero evidence.
+          //
+          // Unconditional: the MECHANISM sentence below, and it is not derived
+          // from this response. It is a statement about core: `/memory/write`
+          // refuses for exactly one reason — the importance gate, scoring
+          // geometric novelty against the nearest existing atom in the same
+          // domain, with "Below importance threshold (x < y)" as its only text
+          // (two branches in memory_engine, one reason). The BATCH endpoint has
+          // other failure paths; this client does not call it. So for any
+          // rejection this client can receive, that sentence is true whether or
+          // not the server bothered to say why. The earlier comment here read
+          // "the cause is named only when the server named it", which describes
+          // a draft that did not carry this sentence at all.
+          //
+          // NOT PRESENT AT ALL: a prediction about the retry. "Rewording will
+          // score the same or lower" was asserted as fact and is probably
+          // BACKWARDS — novelty decreases with similarity to the blocking
+          // memory, so a reworded sentence is usually LESS similar and scores
+          // HIGHER. And the delete-then-write advice an earlier draft carried is
+          // impossible for a room write: the blocker is a room atom, which
+          // memory_delete cannot touch, as this file's own delete message says
+          // (reviews, 2026-08-08).
+          text:
+            `NOT STORED — nothing was saved.` +
+            (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
+            (importance === "unknown" ? `` : ` Novelty score ${importance}.`) +
+            ` Writes are gated on how much a memory adds over what is already in the` +
+            ` same domain, so a near-duplicate is refused. If the point is genuinely` +
+            ` new, write what is DIFFERENT rather than restating the whole fact.`,
         },
       ],
     };
@@ -228,12 +428,14 @@ server.registerTool(
         .min(1)
         .max(50)
         .optional()
-        .describe("Max results to return (default: 5)"),
+        .describe(
+          "Requested number of results (default: 5). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
+        ),
       domain: z
         .string()
         .optional()
         .describe(
-          "Restrict the search to one domain namespace (e.g. 'project:acme'); omit to search across all domains.",
+          "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms.",
         ),
       order_by: z
         .enum(["relevance", "recency"])
@@ -261,10 +463,13 @@ server.registerTool(
         .max(200)
         .optional()
         .describe(
-          "Drop memories written by this author PRINCIPAL (the server-side " +
-            "identity, not shown in these results). Useful when your system " +
-            "knows principals (e.g. via the REST API); a self-exclusion " +
-            "shortcut is planned server-side.",
+          "Drop memories written by this author PRINCIPAL — the server-side " +
+            "identity. ⚠️ NOT USABLE FROM HERE YET: the principal is not shown " +
+            "in these results, so there is no value you can obtain through " +
+            "this tool, and a guess like 'me' silently matches nothing and " +
+            "filters nothing. Only pass it if your system knows the exact " +
+            "principal from elsewhere (e.g. the REST API). A self-exclusion " +
+            "shortcut is planned.",
         ),
     },
     annotations: {
@@ -276,56 +481,117 @@ server.registerTool(
     },
   },
   async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
+    // ONE value, used for the request AND for every decision about it.
+    //
+    // A previous draft sent the raw string but decided the wording from a
+    // TRIMMED copy, and the two disagreed in the release's own founding case:
+    // a read on " engineering" searched the padded store (correct) while the
+    // diagnosis checked "engineering", found it, and stayed silent — so the
+    // one note that would have said "a stray space makes a different store"
+    // was suppressed exactly when a stray space had made a different store.
+    // For a whitespace-only domain it went the other way and claimed the
+    // search had covered the caller's own domains when it had covered none
+    // (reviews, 2026-08-08).
+    //
+    // `|| undefined` is what 0.8.0 sent and must stay: core filters on
+    // `domain is not None`, not on truthiness, so passing "" through would
+    // become `WHERE domain = ''` — a store that cannot exist — turning a
+    // search of every domain into a guaranteed miss. That is data movement,
+    // not wording, and it does not belong in a patch.
+    const searched = searchedScope(domain);
     const r = await apiFetch<{
       items?: ReadItem[];
       search_time_ms?: number;
     }>("/memory/read", {
       method: "POST",
-      body: JSON.stringify({
-        query,
-        top_k: top_k || 5,
-        domain: domain || undefined,
-        include_associations: true,
-        // #404 temporal dimension — omitted entirely when unused so the
-        // request body stays byte-identical for existing callers.
-        ...(order_by ? { order_by } : {}),
-        ...(since ? { since } : {}),
-        ...(until ? { until } : {}),
-        ...(exclude_author ? { exclude_author } : {}),
-      }),
+      body: JSON.stringify(
+        readRequestBody({ query, top_k, domain, order_by, since, until, exclude_author }),
+      ),
     });
 
-    const items = Array.isArray(r?.items) ? r.items : [];
+    // `items` must be a REAL array before anything below may speak. Core's
+    // read response always carries one on a 200, so a body without it is not
+    // core's answer — and the old `Array.isArray(r?.items) ? r.items : []`
+    // fed exactly that body to the entire zero-result machinery: head
+    // sentence, scope probe, diagnosis. An absence claim derived from a body
+    // this client could not read — the substitution classifyRooms removed for
+    // rooms, one level up from the probes (truth F13, 2026-08-08).
+    const items = r?.items;
+    if (!Array.isArray(items)) {
+      return unreadableListReply(
+        "The search result",
+        "a list of matches",
+        "nothing matched",
+      );
+    }
 
     if (items.length === 0 && (since || until || exclude_author)) {
       // A bounded/filtered read that finds nothing is NOT a bad query —
-      // the truthful answer is "nothing new for these filters" (mirrors
-      // memory_list_recent's empty copy; no stats probe, no broaden hint).
+      // the truthful answer is "nothing new for these filters" (the feed's
+      // filtered head uses the same sentence; no stats probe, no broaden
+      // hint). Unscoped, it also has to name the rooms it never looked in.
+      const scopeNote = readScopeNote(await probeScope(searched));
       return {
         content: [
           {
             type: "text" as const,
-            text: "Nothing matching within the given time/author filters.",
+            // The scope is IN the sentence, not appended after it. This
+            // branch was already the honest one in 0.8.0 — it names its
+            // filters — and it is the model the feed's copy now follows.
+            //
+            // The legend wraps the WHOLE message and is added at most once:
+            // `scopeNote` may itself have named a store (a case-twin), and one
+            // explanation of the escaping per answer is the point of it.
+            text: withDomainEscapeLegend(
+              `Nothing in ${scopeLabel(searched)} matches within the given time/author filters.` +
+                futureSinceNote(since, Date.now()) +
+                scopeNote,
+              searched,
+            ),
           },
         ],
       };
     }
 
     if (items.length === 0) {
-      // Zero results: ONE stats call (made only on this path) distinguishes a
-      // truly empty store (first contact — greet with how to save the first
-      // memory) from "no match for this query" (hint to broaden). Stats
-      // failure falls open to the plain no-match message. Domain-scoped reads
-      // never greet and never probe — the stats call measures the PERSONAL
-      // store, not the scoped domain. See src/teaching.ts.
+      // Zero results. The scope is probed FIRST and the whole answer is then
+      // assembled from that ONE value in src/teaching.ts — head sentence and
+      // disclosure together, per state.
+      //
+      // ORDER MATTERS and is now structural: whether the caller has rooms we
+      // could not search decides whether the first-contact greeting is even
+      // true, so the room knowledge is an INPUT to the answer rather than a flag
+      // consulted beside it. `total_atoms` counts the personal org only, so a
+      // joiner with three full rooms and no personal writes would otherwise be
+      // told "nothing has been saved yet" and contradicted by the note right
+      // underneath (review, 2026-08-08).
+      //
+      // Nothing is appended here any more. While the head came from teaching.ts
+      // and the tail was concatenated at this line, the two could disagree — a
+      // head promising "that is not the whole picture:" with an empty tail after
+      // it was a live bug for an account whose only room was archived.
+      const scope = await probeScope(searched);
       const text = await buildReadEmptyResponse(
         () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
-        // trim(): a whitespace-only domain is not a real filter — treating it
-        // as scoped would silently suppress the first-contact greeting.
-        domain != null && domain.trim() !== "",
+        scope,
       );
       return {
-        content: [{ type: "text" as const, text }],
+        content: [
+          {
+            type: "text" as const,
+            // NO legend wrapper here, on purpose — `withDomainEscapeLegend(
+            // text, searched)` stood on this line and was dead code that
+            // looked load-bearing (tests-lens F9, 2026-08-08): every arm of
+            // buildReadEmptyResponse either names no store at all (fixed
+            // sentences), or names it inside a note that appends its own
+            // legend (the case-twin diagnosis, src/scope.ts) — and the
+            // unscoped path passes `searched === undefined`, which can never
+            // need one. So there was no input on which the wrapper fired.
+            // Pinned by "the plain-empty read is legended by its notes" in
+            // test/handlers.test.ts.
+            text,
+          },
+        ],
       };
     }
 
@@ -337,6 +603,10 @@ server.registerTool(
     // read results).
     const lines = items.map((item, i) => formatReadItem(item, i));
 
+    // `?? 0` prints a FABRICATED `(0ms)` when the server sent no timing — the
+    // same class as "Associations: 0" for an unknown count, which memory_stats
+    // fixed in this release. Untouched here and recorded in CHANGELOG's "Known
+    // and NOT fixed here" with the other three.
     const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
     const text = lines.join("\n\n") + `\n\n(${searchMs}ms)`;
 
@@ -344,7 +614,21 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(text),
+          // Each line's `@"domain"` tag is an exact literal; the legend that
+          // explains an escape belongs to the answer, not to twenty tags.
+          //
+          // Legend AFTER the cap, never before. capResult truncates from the
+          // END, and the legend is appended at the end — so applied first it
+          // was the first thing the cap ate, on exactly the pages long enough
+          // to need both: a hundred escaped tags left with nothing saying that
+          // \u00a0 is ONE character, not six (truth F6, 2026-08-08). Applied
+          // to the CAPPED text the legend survives; and since it fires only
+          // when an escaped literal is still on the page, a cap that removed
+          // every escaped name drops the legend with it.
+          text: withDomainEscapeLegend(
+            capResult(text),
+            ...items.map((it) => it?.domain),
+          ),
         },
       ],
     };
@@ -357,13 +641,13 @@ server.registerTool(
   "memory_list_recent",
   {
     description:
-      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction — nothing is skipped, unlike a search that only returns semantic matches.",
+      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
     inputSchema: {
       domain: z
         .string()
         .optional()
         .describe(
-          "Restrict to one domain (e.g. a shared room address 'xroom:...'); omit for all your domains.",
+          "Restrict to one domain. REQUIRED to read a shared room — pass its address ('xroom:room_01ABC'), because rooms are separate stores that an unscoped feed does NOT cover. Omit only when you mean your own domains. Room addresses come from memory_list_rooms.",
         ),
       since: z
         .string()
@@ -382,7 +666,7 @@ server.registerTool(
         .max(200)
         .optional()
         .describe(
-          "Drop entries written by this author PRINCIPAL — the 'everyone but me' read in a shared room. Same parameter as on memory_read.",
+          "Drop entries written by this author PRINCIPAL. ⚠️ NOT USABLE FROM HERE YET — the principal is never shown in these results, so there is no value you can get through this tool; a guess like 'me' filters nothing, silently. Same caveat as on memory_read.",
         ),
       limit: z
         .number()
@@ -408,31 +692,39 @@ server.registerTool(
     },
   },
   async ({ domain, since, until, exclude_author, limit, cursor }) => {
+    // ONE value for the request and for every decision about it — see the note
+    // at the top of memory_read.
+    const searched = searchedScope(domain);
     let r: { items?: RecentItem[]; next_cursor?: string | null };
     try {
       r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
         "/memory/recent",
         {
           method: "POST",
-          body: JSON.stringify({
-            domain: domain || undefined,
-            since: since || undefined,
-            until: until || undefined,
-            exclude_author: exclude_author || undefined,
-            limit: limit || 20,
-            cursor: cursor || undefined,
-          }),
+          body: JSON.stringify(
+            recentRequestBody({ domain, since, until, exclude_author, limit, cursor }),
+          ),
         },
       );
     } catch (e) {
-      // Graceful degradation while the server side rolls out: a 404 from
-      // core means the /memory/recent endpoint is not deployed yet — say
-      // so instead of surfacing a raw HTTP error.
-      const endpointAbsent =
+      // Graceful degradation while the server side rolls out: a 404 with no
+      // error `code` in the body is what an undeployed /memory/recent looks
+      // like, so degrade to a usable alternative instead of surfacing a raw
+      // HTTP error.
+      //
+      // NAMED FOR WHAT IT TESTS. This was `endpointAbsent`, which asserted a
+      // deployment fact the check cannot establish: every engine 404 carries a
+      // `code`, so a real room-404 is excluded, but a gateway, a proxy or a
+      // wrong MNEMOVERSE_API_URL produces the same bare 404 and is
+      // indistinguishable from here. The MESSAGE below still states the
+      // deployment cause outright, which is more than this boolean knows —
+      // listed in CHANGELOG's "Known and NOT fixed here" rather than papered
+      // over with a hedge.
+      const bare404 =
         e instanceof Error &&
         e.message.startsWith("Mnemoverse API error 404:") &&
         !e.message.includes('"code"');
-      if (endpointAbsent) {
+      if (bare404) {
         return {
           content: [
             {
@@ -447,15 +739,71 @@ server.registerTool(
       throw e;
     }
 
-    const items = Array.isArray(r?.items) ? r.items : [];
+    // Same guard as memory_read: a 200 without an items array is UNREADABLE,
+    // not empty — and the feed's empty heads below are precisely the absence
+    // claims that must not be derived from it (truth F13, 2026-08-08).
+    const items = r?.items;
+    if (!Array.isArray(items)) {
+      return unreadableListReply(
+        "The recent-entries feed",
+        "an empty feed",
+        "there is nothing to list",
+      );
+    }
     if (items.length === 0) {
+      // THE SENTENCE ITSELF carries the scope — and it is selected by EVERY
+      // filter that narrowed the window, not by `since` alone.
+      //
+      // Two prior shapes of this branch were wrong the same way. In 0.8.0 it
+      // printed "Nothing new since your watermark." with no scope in it — the
+      // sentence src/scope.ts was written to eliminate. The first fix put the
+      // scope into the clause but kept choosing BETWEEN the two heads by
+      // looking at `since` only, so {until} alone and {exclude_author} alone
+      // fell to "No memories in ${where} yet." — an emptiness claim about a
+      // store holding a thousand atoms outside the window — and {since, until}
+      // kept the watermark phrasing, which pretends the read reached the
+      // present when `until` stopped it years short (review, 2026-08-08).
+      //
+      // Four heads, one rule: the emptiness claim ("yet") is allowed only
+      // when NOTHING narrowed the window; the watermark phrasing only when
+      // `since` was the whole narrowing; any other filter combination gets the
+      // sentence memory_read's filtered branch uses — the filters are named as
+      // what bounded the result, and nothing is claimed beyond them.
+      //
+      // A `cursor` outranks all three. It is not a filter over the store — it
+      // is a POSITION in a listing whose earlier pages the caller has already
+      // read, so every other head is false here: "No memories in ${where}
+      // yet." is an absence claim about a store the caller has just SEEN
+      // entries from, and the watermark phrasing pretends a continuation that
+      // stopped mid-listing was a clean catch-up. The engine hands out a
+      // cursor only when more entries existed at that moment, so an empty
+      // continued page means the listing moved under the caller — entries
+      // removed between page fetches — and the head speaks about the
+      // continuation only, never about what the store holds (follow-up to the
+      // head-selection fix, 2026-08-08). Decided by the same truthiness the
+      // request used: an empty-string cursor never reaches the wire
+      // (src/requests.ts), so it may not pick the sentence either.
+      const scopeNote = readScopeNote(await probeScope(searched));
+      const where = scopeLabel(searched);
+      const head = cursor
+        ? `Nothing further in ${where} past this cursor — entries may have been ` +
+          `removed since the previous page was fetched.` +
+          (since || until || exclude_author
+            ? ` The given time/author filters still bounded this page.`
+            : ``)
+        : since && !until && !exclude_author
+          ? `Nothing new in ${where} since your watermark.`
+          : since || until || exclude_author
+            ? `Nothing in ${where} matches within the given time/author filters.`
+            : `No memories in ${where} yet.`;
       return {
         content: [
           {
             type: "text" as const,
-            text: since
-              ? "Nothing new since your watermark."
-              : "No memories here yet.",
+            text: withDomainEscapeLegend(
+              head + futureSinceNote(since, Date.now()) + scopeNote,
+              searched,
+            ),
           },
         ],
       };
@@ -464,9 +812,20 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(
-            formatRecentPage(items, r?.next_cursor),
-            "Lower `limit` or add a `domain` for smaller pages.",
+          // The page body comes from src/render.ts; the escape legend is
+          // applied HERE, to the CAPPED text. formatRecentPage used to append
+          // it itself, which put it before capResult — and capResult truncates
+          // from the end, so the one sentence explaining the escapes was the
+          // first casualty on every page long enough to be capped (truth F6,
+          // 2026-08-08). Same order as memory_read's result page, same
+          // automatic drop: a cap that removed every escaped name removes the
+          // reason for the legend too.
+          text: withDomainEscapeLegend(
+            capResult(
+              formatRecentPage(items, r?.next_cursor),
+              "Lower `limit` or add a `domain` for smaller pages.",
+            ),
+            ...items.map((it) => it?.domain),
           ),
         },
       ],
@@ -480,7 +839,7 @@ server.registerTool(
   "memory_feedback",
   {
     description:
-      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results.",
+      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
     inputSchema: {
       atom_ids: z
         .array(z.string())
@@ -516,13 +875,65 @@ server.registerTool(
 
     const count = r?.updated_count ?? 0;
 
+    // "Feedback recorded for 0 memories." is one character away from the
+    // success line and reads like one. But the DIAGNOSIS matters as much as
+    // the fact: an earlier version of this branch blamed deletion, which is
+    // usually the wrong cause (review, 2026-08-08).
+    //
+    // Core resolves the feedback org from a `domain` argument that defaults to
+    // "general" — and THIS TOOL EXPOSES NO domain PARAMETER. So the ordinary
+    // way to get zero is to rate atoms that live somewhere else: read a room,
+    // take the ids off the `id:` lines, rate them, and every one silently
+    // misses. The atoms exist, the ids are valid, and telling the caller they
+    // were deleted sends them to look for a problem that isn't there.
+    if (count === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              // No frequency claim. "Most often that means…" was a statistic
+              // we do not have (review, 2026-08-08); the causes are listed as
+              // possibilities, with the one the caller cannot otherwise guess
+              // first because it is invisible from the tool surface.
+              "No feedback was recorded — none of those ids matched a memory in your own " +
+              "domains. Possible causes: the ids came from a shared room (this tool takes " +
+              "no domain argument and cannot reach room atoms, so rating them is a no-op); " +
+              "the memory was deleted; or the id came from somewhere other than a " +
+              "memory_read result.",
+          },
+        ],
+      };
+    }
+
+    // Echo the DIRECTION, not just the count: the same four words for +1 and
+    // -1 gave a caller no evidence the loop did anything, which is why nobody
+    // calls it twice.
+    //
+    // The effect clause is per-direction. Promising "this shifts how they
+    // rank" for outcome 0 would be a claim we cannot make — dogfooding saw a
+    // neutral rating move a score UP by about five points, so neither "no
+    // change" nor "ranks higher" is safe to assert (CodeRabbit, #65).
+    const noun = `${count} memor${count === 1 ? "y" : "ies"}`;
+    const text =
+      outcome > 0
+        ? `Recorded +${outcome} (helpful) for ${noun} — they should surface sooner next time.`
+        : outcome < 0
+          ? `Recorded ${outcome} (unhelpful) for ${noun} — they should fade.`
+          // Zero claims only what is knowable from here: the rating was
+          // recorded, and ±1 send a clear signal. Two earlier wordings each
+          // asserted engine semantics that were false: "use +1/-1 when you want
+          // the ranking to move" implied 0 leaves ranking alone (dogfooding saw
+          // a neutral rating move a score UP by about five points), and "logged
+          // as a recall that was neither useful nor wrong" described a record
+          // the engine does not keep — core files outcome 0 on the POSITIVE
+          // branch of the valence update (memory_engine.py `_feedback_inner`:
+          // sign is +1 for outcome >= 0) and stores a positive-direction
+          // valence step plus outcome_count += 1. So 0 is not a neutral log
+          // entry, and the printed line must not present it as one.
+          : `Recorded 0 for ${noun}. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
     return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Feedback recorded for ${count} memor${count === 1 ? "y" : "ies"}.`,
-        },
-      ],
+      content: [{ type: "text" as const, text }],
     };
   },
 );
@@ -554,19 +965,61 @@ server.registerTool(
       avg_importance?: number;
     }>("/memory/stats");
 
-    const domains =
-      Array.isArray(r?.domains) && r.domains.length > 0
-        ? r.domains.join(", ")
-        : "general";
+    // A field the server did not send is UNKNOWN, not zero. Rendering it as
+    // "0" is the same class of lie as an empty search claiming emptiness:
+    // "Associations: 0" reads as "this memory has learned nothing", which is
+    // a strong and possibly false statement about the product itself.
+    const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
+    const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
+
+    // THE surface two other tool descriptions send the reader to "to confirm
+    // the exact domain name before a delete" — so it has to be able to answer
+    // that, and until now it could not.
+    //
+    // Quoting was tried, then withdrawn as a fix that wasn't one: safeInline
+    // collapses and trims whitespace BEFORE the quotes go on, so " engineering"
+    // and "engineering" printed identically and the list read like a tool bug.
+    // The conclusion drawn then — "revealing whitespace needs escaping rather
+    // than quoting" — was right; this is that escaping. Each name is a JSON
+    // string literal, so a leading space, a no-break space, a newline and a
+    // zero-width character are all visible, Cyrillic stays Cyrillic, and two
+    // different names can no longer print as one. Assembly lives in
+    // src/names.ts, where it is unit-tested against those exact inputs.
+    const domains = formatDomainList(r?.domains);
 
     const text = [
-      `Memories: ${r?.total_atoms ?? 0} (${r?.episodes ?? 0} episodes, ${r?.prototypes ?? 0} prototypes)`,
-      `Associations: ${r?.hebbian_edges ?? 0} Hebbian edges`,
+      `Memories: ${num(r?.total_atoms)} (${num(r?.episodes)} episodes, ${num(r?.prototypes)} prototypes)`,
+      // The gloss names the real mechanism. Core's `hebbian_edges` counts
+      // concept-concept edges (api/schemas.py: "Number of Hebbian
+      // concept-concept edges"), and every path that learns one links two
+      // CONCEPTS: `strengthen` walks pairs within one atom's concept list at
+      // write time and again on feedback, `co_activate` links query concepts
+      // to result concepts on use. An earlier gloss said "links between
+      // memories that get used together" — wrong unit (memories, not
+      // concepts) and wrong trigger (an edge records co-occurrence, not two
+      // memories being used together).
+      `Associations: ${num(r?.hebbian_edges)} Hebbian edges — concept-to-concept links learned from concepts that occur together as memories are stored and used`,
       `Domains: ${domains}`,
-      `Avg quality: valence ${(r?.avg_valence ?? 0).toFixed(2)}, importance ${(r?.avg_importance ?? 0).toFixed(2)}`,
+      `Avg quality: valence ${dec(r?.avg_valence)} (how well recalls turned out, -1..1), importance ${dec(r?.avg_importance)} (0..1)`,
+      "",
+      "Counts cover your own domains. Shared rooms are separate stores and are not included — see memory_list_rooms.",
     ].join("\n");
 
-    return { content: [{ type: "text" as const, text }] };
+    return {
+      content: [
+        {
+          type: "text" as const,
+          // Array.isArray, not `?? []`: `domains` is typed as a string[] but
+          // arrives over the wire, and spreading a non-iterable object would
+          // throw here — turning a malformed payload into a dead tool instead
+          // of the "none reported" it degrades to two lines up.
+          text: withDomainEscapeLegend(
+            text,
+            ...(Array.isArray(r?.domains) ? r.domains : []),
+          ),
+        },
+      ],
+    };
   },
 );
 
@@ -576,7 +1029,7 @@ server.registerTool(
   "memory_delete",
   {
     description:
-      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. To clear an entire topic at once, use memory_delete_domain instead.",
+      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. Reaches your own domains only: memories in shared rooms CANNOT be deleted through this tool. To clear an entire topic at once, use memory_delete_domain instead.",
     inputSchema: {
       atom_id: z
         .string()
@@ -594,20 +1047,46 @@ server.registerTool(
     },
   },
   async ({ atom_id }) => {
-    // Core API returns { deleted: <count>, atom_id }. count == 0 means
-    // the atom didn't exist (or was already removed). count >= 1 means
-    // it was deleted.
+    // Core API returns { deleted: <count>, atom_id }, so today a falsy
+    // `deleted` means the count came back 0 — nothing in the caller's own store
+    // carried that id.
+    //
+    // The check below is `!r?.deleted`, which is falsy-not-zero: a MISSING
+    // field lands in the same branch as a real 0. `apiFetch` turns a 204 or an
+    // empty body into `{}` (see its own note that FastAPI DELETE handlers may
+    // switch to 204), so under that response a successful delete would report
+    // "nothing was deleted". Unknown rendered as zero, then zero rendered as an
+    // absence claim — the same family as `updated_count ?? 0` in
+    // memory_feedback and `deleted ?? 0` in memory_delete_domain. Left as it
+    // stands and listed in CHANGELOG's "Known and NOT fixed here"; it is a
+    // behaviour fix, not a wording one.
     const r = await apiFetch<{ deleted?: number; atom_id?: string }>(
       `/memory/atoms/${encodeURIComponent(atom_id)}`,
       { method: "DELETE" },
     );
 
     if (!r?.deleted) {
+      // NOT "no such memory". Deletion is scoped to the caller's OWN store —
+      // core has no room-scoped delete at all — so a room atom's id lands here
+      // even when the memory lives on in its room. This release made room ids
+      // MORE visible in read results, so an agent is now MORE likely to bring
+      // one here, ask to forget it, and be told it never existed while it stays
+      // (review, 2026-08-08). Every other empty branch in this file learned to
+      // state its boundary; the destructive one has to as well.
+      //
+      // The boundary claim is the ONLY claim: "this delete never reached it"
+      // is knowable from here (room stores are out of this tool's reach by
+      // construction). "it still exists" — a previous wording — is not: the
+      // room owner may have deleted it since, and this handler has no way to
+      // check (review, 2026-08-08).
       return {
         content: [
           {
             type: "text" as const,
-            text: `No memory found with id ${atom_id}.`,
+            text:
+              `Nothing was deleted: no memory with id ${atom_id} in your own domains. ` +
+              `Note that memories in shared rooms CANNOT be deleted through this tool — ` +
+              `if that id came from a room, this delete never reached it.`,
           },
         ],
       };
@@ -630,7 +1109,7 @@ server.registerTool(
   "memory_delete_domain",
   {
     description:
-      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). For a single wrong or stale memory, memory_delete is the right tool.",
+      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). Names match byte-for-byte, including case, and shared rooms cannot be wiped through this tool. For a single wrong or stale memory, memory_delete is the right tool.",
     inputSchema: {
       domain: z
         .string()
@@ -662,14 +1141,60 @@ server.registerTool(
       { method: "DELETE" },
     );
 
+    // `?? 0` again: a missing `deleted` field becomes 0 and then becomes the
+    // "NOTHING was deleted" claim below. Core sends the count, so this is not
+    // reachable through core today — recorded with the other two in CHANGELOG's
+    // "Known and NOT fixed here".
     const count = r?.deleted ?? 0;
-    const domainName = r?.domain ?? domain;
+    // The name of a store on a DESTRUCTIVE confirmation, so it is printed
+    // exactly or not at all. safeInline named a different store than the one
+    // acted on: wiping `" project x"` confirmed `"project x"`, and the very next
+    // clause tells the reader that names match byte-for-byte. When the name
+    // cannot be reproduced the sentences fall back to naming nothing, which
+    // still leaves them true.
+    //
+    // NOT called `wiped`, which is what it was: on the zero branch nothing was
+    // wiped, and the value is whatever the server echoed — core echoes the path
+    // parameter back, so it equals what we sent, but a server that echoed
+    // something else would have this handler name a store the caller never
+    // passed, one clause before telling them names match byte-for-byte. The
+    // fallback to `domain` is the value that actually went over the wire.
+    const reportedDomain = r?.domain ?? domain;
+    const reportedName = domainPhrase(reportedDomain, "the domain you passed");
+
+    // Zero is NOT a successful wipe, and this line used to read like one.
+    // Core echoes back the caller's own string, so "Deleted 0 memories from
+    // domain 'Project X'" implies a domain that existed and is now empty. The
+    // casing trap runs in this direction too: the user says "forget everything
+    // about project X", the agent passes "Project X", gets a success-shaped
+    // line, reports done — and the atoms live on under "project x" (review,
+    // 2026-08-08). This release built the diagnosis for exactly that and had
+    // applied it only to reads.
+    if (count === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: withDomainEscapeLegend(
+              `NOTHING was deleted — no memories matched domain ${reportedName} in your own ` +
+                `store. Names match byte-for-byte, so check the spelling and case against ` +
+                `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
+                `through this tool at all.`,
+              reportedDomain,
+            ),
+          },
+        ],
+      };
+    }
 
     return {
       content: [
         {
           type: "text" as const,
-          text: `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain "${domainName}".`,
+          text: withDomainEscapeLegend(
+            `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain ${reportedName}.`,
+            reportedDomain,
+          ),
         },
       ],
     };
@@ -682,7 +1207,7 @@ server.registerTool(
   "memory_create_room",
   {
     description:
-      "Create a SHARED memory room — a space you and OTHER people's assistants can both read and write, across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
+      "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
     inputSchema: {
       name: z
         .string()
@@ -714,24 +1239,33 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ name, description }),
     });
-    const roomName = safeInline(r?.name ?? name);
+    // The name is echoed back to the caller who CHOSE it, so it is printed
+    // exactly (src/names.ts): safeInline turned `memory_create_room({name:
+    // "проект"})` into `Created shared room ""` — an echo claiming the caller
+    // named their room the empty string.
+    const rawName = r?.name ?? name;
+    const roomName = roomNamePhrase(rawName);
     const address = safeInline(r?.address);
     const roomId = safeInline(r?.room_id);
     // If core returned no usable id (empty body / sanitized away), don't print
     // broken `domain=""` guidance — say so instead (Copilot).
     const text = address
-      ? `Created shared room "${roomName}". Address: ${address}\n` +
+      ? `Created shared room ${roomName}. Address: ${address}\n` +
         `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
         (roomId
           ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
           : "")
-      : `Room "${roomName}" was created but the server did not return a usable address — ` +
+      : `Room ${roomName} was created but the server did not return a usable address — ` +
         `retry, or check that your API key is set.`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(text),
+          // Legend AFTER the cap (same rule as memory_read/memory_list_recent):
+          // capResult cuts from the end, so a legend applied first would be the
+          // first casualty; applied to the capped text it also drops itself when
+          // the cap removed the only escaped name.
+          text: withDomainEscapeLegend(capResult(text), rawName),
         },
       ],
     };
@@ -827,14 +1361,18 @@ server.registerTool(
       method: "POST",
       body: JSON.stringify({ code }),
     });
-    // CN-032: the room name/scope are OWNER-chosen but rendered into the
-    // JOINER's LLM context here — sanitize before inlining (anti prompt-injection).
-    const roomName = safeInline(r?.name) || "the room";
+    // The room name is OWNER-chosen and rendered into the JOINER's LLM context
+    // (CN-032) — and it is printed EXACTLY (src/names.ts): the literal is one
+    // line with quotes and invisibles escaped, so it cannot forge an
+    // instruction block, and "Zoë" stops being quoted as "Zo" in a sentence
+    // that presents it as the name. `scope` stays sanitised: server-shaped
+    // enum, display-only.
+    const roomName = roomNamePhrase(r?.name);
     const scope = safeInline(r?.scope) || "member";
     const address = safeInline(r?.address);
     const prefix = r?.already_member
-      ? `You're already a member of "${roomName}".`
-      : `Joined "${roomName}" (${scope}).`;
+      ? `You're already a member of ${roomName}.`
+      : `Joined ${roomName} (${scope}).`;
     // Don't print broken `domain=""` guidance if no address came back (Copilot).
     const usage = address
       ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
@@ -843,7 +1381,8 @@ server.registerTool(
       content: [
         {
           type: "text" as const,
-          text: capResult(`${prefix}\n${usage}`),
+          // Legend after the cap — same ordering rule as everywhere else.
+          text: withDomainEscapeLegend(capResult(`${prefix}\n${usage}`), r?.name),
         },
       ],
     };
@@ -867,18 +1406,24 @@ server.registerTool(
     },
   },
   async () => {
-    const rooms = await apiFetch<
-      Array<{
-        room_id?: string;
-        name?: string;
-        address?: string;
-        role?: string;
-        scope?: string;
-        archived?: boolean;
-      }>
-    >("/memory/rooms");
-    const list = Array.isArray(rooms) ? rooms : [];
-    if (list.length === 0) {
+    // The same classifier the scope notes use, for the same reason: this handler
+    // did `Array.isArray(rooms) ? rooms : []` and then asserted "You have no
+    // shared rooms yet" — a claim about the account derived from a body it could
+    // not read. It is the third consumer of this payload and the third place the
+    // substitution was made; all three now go through one function that maps an
+    // unreadable body to `unknown`, never to `none`.
+    const rooms = classifyRooms(await apiFetch<unknown>("/memory/rooms"), safeInline);
+    if (rooms.state === "unknown") {
+      // Byte-identical to the inline wording this replaces — the builder is
+      // shared so the four list surfaces answer the unreadable case with one
+      // sentence, not four drifting ones.
+      return unreadableListReply(
+        "The room list",
+        "a list of your rooms",
+        "you have none",
+      );
+    }
+    if (rooms.state === "none") {
       return {
         content: [
           {
@@ -890,27 +1435,50 @@ server.registerTool(
         ],
       };
     }
-    // Room name is OWNER-chosen and surfaced to THIS assistant — sanitize it (CN-032),
-    // like memory_join_room already does. address/role/scope are server-shaped but pass
-    // through the same guard defensively.
+    // ARCHIVED ROOMS ARE LISTED HERE, unlike in the scope note — this tool's job
+    // is the inventory, and the `[archived]` tag says which ones cannot be read.
+    const list = rooms.rooms;
+    // Room name is OWNER-chosen — printed EXACTLY (src/names.ts), like every
+    // other room-name surface as of 0.8.1: the sanitiser listed "проект" and
+    // "план" as two "(unnamed room)" entries and quoted "Zoë" as "Zo".
+    // address/role/scope are server-shaped and keep the defensive sanitiser.
     const lines = list.map((r) => {
-      const name = safeInline(r?.name) || "(unnamed room)";
+      const name = roomNamePhrase(r?.name);
       const roomId = safeInline(r?.room_id);
       // Always surface the canonical address: fall back to xroom:<room_id> when the server
       // omits `address`, so the domain guidance this tool promises is never silently dropped.
       const address = safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
       const role = safeInline(r?.role);
       const scope = safeInline(r?.scope);
-      const archived = r?.archived ? " [archived]" : "";
-      const use = address ? ` — use domain="${address}"` : "";
-      return `- "${name}" (${role}${scope ? `, ${scope}` : ""})${archived}${use}`;
+      // No "use domain=..." on an archived room: core refuses EVERY read of one
+      // with a 403, for owner and member alike (see the archived-only note in
+      // src/scope.ts), so that clause was an instruction to make a call that
+      // cannot succeed. The address stays visible — it is the room's identity —
+      // but the line says what a read against it will do.
+      const tail = r?.archived
+        ? address
+          ? ` [archived] — address ${address}, but every read is refused while it is archived`
+          : ` [archived] — every read is refused while it is archived`
+        : address
+          ? ` — use domain="${address}"`
+          : "";
+      return `- ${name} (${role}${scope ? `, ${scope}` : ""})${tail}`;
     });
     const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
     return {
       content: [
         {
           type: "text" as const,
-          text: capResult(text, "The room list was truncated — some rooms are not shown."),
+          // Legend after the cap: this is the one room surface long enough to
+          // actually overflow, and the legend must describe the names that
+          // SURVIVED the cut, not the ones it removed.
+          text: withDomainEscapeLegend(
+            capResult(
+              text,
+              "The room list was truncated — some rooms are not shown.",
+            ),
+            ...list.map((r) => r?.name),
+          ),
         },
       ],
     };
@@ -942,7 +1510,19 @@ server.registerTool(
         concepts?: string[];
       }>;
     }>("/vault/secrets");
-    const list = Array.isArray(r?.secrets) ? r.secrets : [];
+    // A 200 missing the `secrets` array used to print "No secrets are stored
+    // in your Vault yet." — an absence claim about the Vault derived from a
+    // body this client could not read. The family fix (classifyRooms, the
+    // domains guard) had stopped one tool short of here (truth F13,
+    // 2026-08-08). A genuinely empty array keeps the absence claim below.
+    const list = r?.secrets;
+    if (!Array.isArray(list)) {
+      return unreadableListReply(
+        "The secret list",
+        "a list of your Vault secrets",
+        "none are stored",
+      );
+    }
     if (list.length === 0) {
       return {
         content: [
@@ -974,12 +1554,47 @@ server.registerTool(
 
 // --- Start ---
 
+/**
+ * Opening the stdio transport at import time is what made every user-visible
+ * sentence in this file untestable: a test that imports this module to reach a
+ * handler instead starts a server on the test runner's stdin/stdout. So the copy
+ * was guarded by regexes over this source text — and three review rounds each
+ * found false sentences a behavioural test would have caught immediately, twice
+ * in a guard that turned out to be theatre.
+ *
+ * The seam is one boolean, and its DEFAULT is today's behaviour.
+ *
+ * WHY AN ENV OPT-OUT AND NOT `import.meta.url === process.argv[1]`. That
+ * comparison is the usual "am I the entry point?" idiom and it is the wrong tool
+ * here, because this package ships as an npm `bin`. Under `npx` — the canonical
+ * install, pinned in src/configs/source.json and in every README snippet — the
+ * thing on argv[1] is the generated shim, not this file; on Windows it is a
+ * `.cmd`/`.ps1` wrapper, and even the POSIX shim is a symlink whose realpath
+ * resolution differs between package managers. Every one of those makes the
+ * comparison FALSE for a real user, and a false comparison there does not throw:
+ * the process would exit 0 having started no server, and the client would report
+ * a silent connection failure with nothing in the logs. That is a worse defect
+ * than the one being fixed. The env var inverts the risk — it can only misfire
+ * for something that deliberately sets it, and no released version reads it, so
+ * no existing config can carry it.
+ *
+ * The check is `=== "1"`, deliberately narrow rather than truthy: the failure
+ * mode of a wide check is a startup that silently does nothing, so an
+ * unrecognised value must fall through to starting the server.
+ *
+ * BYTE-IDENTICAL CLI BEHAVIOUR: with the variable unset (or set to anything
+ * other than "1"), `main()` is called exactly as before, with the same catch,
+ * the same message and the same exit code. The only other change to this module
+ * is the `export` on `server`, which is inert when the file is run as a program.
+ */
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((err) => {
-  console.error("MCP server error:", err);
-  process.exit(1);
-});
+if (process.env.MNEMOVERSE_MCP_NO_AUTOSTART !== "1") {
+  main().catch((err) => {
+    console.error("MCP server error:", err);
+    process.exit(1);
+  });
+}

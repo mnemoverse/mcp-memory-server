@@ -19,13 +19,13 @@ Search memories by natural language query. Returns most relevant stored memories
 
 Parameters:
 - query (string, required): Natural language query — what are you looking for? 1-5000 chars.
-- top_k (integer, optional, default 5): Max results to return. Range: 1-50.
+- top_k (integer, optional, default 5): Requested number of results, 1-50. Not a hard cap: association expansion can return more, and the relevance floor can return fewer.
 - domain (string, optional): Filter by domain namespace.
 - order_by (string, optional): "relevance" (default) or "recency" — matched set newest-first.
 - since / until (ISO-8601 strings, optional): inclusive created_at bounds; naive = UTC.
-- exclude_author (string, optional): drop memories written by this principal ("everyone but me" in shared rooms).
+- exclude_author (string, optional): drop memories written by this author principal. Results never show a principal, so only pass one known from elsewhere (e.g. the REST API); a guess like "me" silently filters nothing.
 
-Returns: List of memories with relevance scores, concepts, domain, created_at, and id (pass ids to memory_feedback / memory_delete).
+Returns: List of memories ranked best-match-first (no numeric score is shown) with content, concepts, domain, author tag, created_at, and id (pass ids to memory_feedback / memory_delete).
 
 ### memory_list_recent
 
@@ -33,7 +33,9 @@ List the newest memories first — no search query. Resuming after a break or ca
 
 Parameters:
 - domain (string, optional): e.g. a room address "xroom:...".
-- since (ISO-8601 string, optional): only entries at/after this instant — your novelty watermark.
+- since (ISO-8601 string, optional): only entries at/after this instant (inclusive) — your novelty watermark.
+- until (ISO-8601 string, optional): only entries at/before this instant (inclusive) — pair with since to read a closed window.
+- exclude_author (string, optional): drop entries written by this author principal — same caveat as on memory_read: results never show a principal, so a guess like "me" filters nothing.
 - limit (integer, optional, default 20): page size, 1-100.
 - cursor (string, optional): opaque cursor from the previous page — stable paging, no skips or duplicates.
 
@@ -49,14 +51,72 @@ Parameters:
 Returns: {updated_count: number}
 
 ### memory_stats
-Get memory statistics — count, domains, quality scores.
+Get memory statistics — total count, episodes vs prototypes, Hebbian concept-concept edges, the list of domains, and average valence/importance scores. Counts cover your own domains; shared rooms are separate stores and are not included.
 
 Parameters: none
 
 Returns: {total_atoms, episodes, prototypes, hebbian_edges, domains, avg_valence, avg_importance}
 
+### memory_delete
+Permanently delete ONE memory by its atom_id — irreversible. Reaches your own domains only: memories in shared rooms cannot be deleted through this tool.
+
+Parameters:
+- atom_id (string, required): The atom_id of the memory to delete (from memory_read results — each item has an id).
+
+Returns: Confirmation of the delete, or a note that nothing was deleted.
+
+### memory_delete_domain
+Permanently delete EVERY memory in one domain — an irreversible bulk wipe. Names match byte-for-byte, including case; shared rooms cannot be wiped through this tool.
+
+Parameters:
+- domain (string, required): The domain namespace to wipe. Must match exactly.
+- confirm (boolean, required): Must be exactly true — a deliberate safety interlock.
+
+Returns: The deleted count, or a note that nothing matched.
+
+### memory_create_room
+Create a SHARED memory room — a space other people's assistants can read, and write too when their invite granted read_write (the default scope). Pass the returned address as the domain on memory_write/memory_read to use it.
+
+Parameters:
+- name (string, required): Room name, unique within your account.
+- description (string, optional): Optional description of the room.
+
+Returns: The room's address, and its room_id for memory_invite_to_room.
+
+### memory_invite_to_room
+Mint a one-time invite for a room you own and get a ready-to-forward message for the person you want to add.
+
+Parameters:
+- room_id (string, required): The room's id (room_...), from memory_create_room.
+- scope (string, optional): "read" or "read_write" (default read_write).
+- expires_in_days (integer, optional): Days until the invite expires, 1-90 (default 7).
+
+Returns: A forwardable invite message.
+
+### memory_join_room
+Join a shared memory room with an invite code (starts with "mnvr_"); then pass the returned address as the domain on memory_write/memory_read.
+
+Parameters:
+- code (string, required): The invite code (mnvr_...).
+
+Returns: The room's name, your scope, and the address to use as domain.
+
+### memory_list_rooms
+List the shared rooms you own or have joined, each with the address to pass as domain — re-find a room in a new session.
+
+Parameters: none
+
+Returns: Room list with addresses; archived rooms are marked, and every read of an archived room is refused.
+
+### vault_list
+List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown.
+
+Parameters: none
+
+Returns: Alias and purpose per secret, never the value.
+
 ## Setup
-Environment: MNEMOVERSE_API_KEY (required), MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
+Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
 Transport: stdio
 Command: npx @mnemoverse/mcp-memory-server
 

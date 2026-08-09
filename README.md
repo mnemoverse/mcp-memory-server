@@ -200,11 +200,16 @@ If it doesn't remember: check that the client was fully restarted and the config
 |------|-------------|
 | `memory_write` | Store a memory — insight, preference, lesson learned |
 | `memory_read` | Search memories by natural language query (optional recency ordering, time bounds, author exclusion) |
-| `memory_list_recent` | List newest memories first — no query; `since` watermark + cursor paging |
+| `memory_list_recent` | List newest memories first — no query; `since`/`until` bounds (inclusive) + cursor paging |
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
 | `memory_delete` | Permanently delete a single memory by `atom_id` |
 | `memory_delete_domain` | Wipe an entire domain (requires `confirm: true` safety interlock) |
+| `memory_create_room` | Create a shared memory room; its address works as a `domain` on write/read |
+| `memory_invite_to_room` | Mint a one-time invite (code + link) for a room you own |
+| `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
+| `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
+| `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |
 
 ## Ideas: What to Remember
 
@@ -232,7 +237,7 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 
 | Env Variable | Required | Default |
 |-------------|----------|---------|
-| `MNEMOVERSE_API_KEY` | Yes | — |
+| `MNEMOVERSE_API_KEY` | For every tool call — the server starts and lists its tools without one | — |
 | `MNEMOVERSE_API_URL` | No | `https://core.mnemoverse.com/api/v1` |
 
 ## Links
@@ -262,12 +267,27 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 
 ## Privacy
 
-This server sends only what you explicitly choose to store or search to the Mnemoverse API (`core.mnemoverse.com`), authenticated with your API key. It does **not** read your AI client's conversation history, your local files, or anything you don't pass to a `memory_*` tool. Stored memories live under your account and are never sold or shared with third parties.
+This server sends to the Mnemoverse API (`core.mnemoverse.com`), authenticated with your API key, what a tool call carries — and nothing else it can see. It does **not** read your AI client's conversation history, your local files, or anything you don't pass to a `memory_*` / `vault_*` tool. Stored memories live under your account; Mnemoverse never sells them and never shares them on its own. The one sharing path is the one you create yourself: inviting someone to a shared room grants their assistant access to that room's memories, bounded by the invite's scope.
+
+What each tool sends:
+
+| Tool | Data sent |
+|---|---|
+| `memory_write` | the `content`, `concepts`, and `domain` you pass |
+| `memory_read` | the `query`, plus any filters: `domain`, `since`/`until`, `exclude_author`, `top_k`, `order_by` |
+| `memory_list_recent` | the feed filters: `domain`, `since`/`until`, `exclude_author`, `limit`, `cursor` |
+| `memory_feedback` | the `atom_ids` being rated and the `outcome` score |
+| `memory_delete` / `memory_delete_domain` | the `atom_id` / `domain` being deleted |
+| `memory_create_room` | the room `name` and `description` |
+| `memory_invite_to_room` | the `room_id`, invite `scope`, and expiry |
+| `memory_join_room` | the invite `code` |
+| `memory_stats` / `memory_list_rooms` / `vault_list` | no request body — authenticated GETs |
+
+One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).
 
 | | |
 |---|---|
 | **Privacy Policy** | <https://mnemoverse.com/privacy> |
-| **Data sent** | the `content` / `concepts` / `domain` you pass to `memory_write`; the `query` you pass to `memory_read` |
 | **Retention & deletion** | delete one memory with `memory_delete`, or an entire namespace with `memory_delete_domain` |
 | **Contact** | hello@mnemoverse.com |
 

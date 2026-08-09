@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Hosted persistent memory for AI agents that learns which facts help and lets the rest fade — one key across Claude Code, Cursor, VS Code & ChatGPT, no infra to run",
   "type": "module",
   "bin": {
@@ -15,11 +15,12 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck:test": "tsc -p tsconfig.test.json",
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",
