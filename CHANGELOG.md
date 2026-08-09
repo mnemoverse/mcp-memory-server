@@ -35,6 +35,39 @@ This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
 git history and the GitHub releases are the record.
 
+## [Unreleased]
+
+Dependency security pass: clears all 32 open Dependabot alerts (7 high, 22
+medium, 3 low) — 22 against `hono`, 5 `fast-uri`, 2 `ip-address`, and one each
+for `@hono/node-server`, `qs`, `body-parser`. Every one is a transitive
+dependency of `@modelcontextprotocol/sdk`; this package's two direct runtime
+dependencies are the SDK and zod, and neither was itself vulnerable.
+
+The one deliberate move is raising the SDK floor from `^1.12.1` to `^1.30.0`.
+1.30.0 is a minor release with no breaking changes, and it is specifically the
+release that widens the SDK's `@hono/node-server` range to admit 2.x — the
+patched line for the path-traversal alert, unreachable under 1.29.0's
+`^1.19.9` pin. Everything else floats up in the lockfile within ranges the SDK
+already declared: `hono` 4.12.12 → 4.13.1, `@hono/node-server` 1.19.13 →
+2.1.0, `fast-uri` 3.1.0 → 3.1.5, `ip-address` 10.1.0 → 10.4.0 (via
+`express-rate-limit` 8.3.2 → 8.6.2), `qs` 6.15.1 → 6.15.3, `body-parser` 2.2.2
+→ 2.3.0. No `overrides` were needed. The dev-only `nanoid` advisory
+(GHSA-2v37-7h3g-55p8, vitest → vite → postcss chain, not among the 32) floated
+to 3.3.18 in the same pass; `npm audit` now reports zero vulnerabilities.
+
+Stated honestly: most of these alerts never reached running code. This is a
+stdio server — the hono/express stack inside the SDK belongs to its HTTP
+transports and OAuth handlers, which `server/mcp.js` and `server/stdio.js`
+never import, so the vulnerable code was shipped but not loaded. The exception
+is `fast-uri`, which IS loaded at runtime through the SDK's ajv schema
+validator — though it only ever sees local stdio protocol messages, never
+network input. The bump closes all of it regardless: unreachable today is one
+transport change away from reachable.
+
+No tool changes shape and no request changes a byte — the wire format is
+pinned byte-for-byte by `test/requests.test.ts`, and all 338 tests pass
+unchanged against SDK 1.30.0. The published file set is untouched.
+
 ## [0.8.1] — 2026-08-09
 
 An honesty pass. Every result line looks different afterwards, and nine
