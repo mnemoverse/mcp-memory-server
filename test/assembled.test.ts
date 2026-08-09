@@ -930,11 +930,15 @@ const SITUATIONS: readonly Situation[] = [
     meaning(text) {
       // NOT "no such memory". Deletion is scoped to the caller's own store and
       // core has no room-scoped delete at all, so a room atom's id lands here
-      // while the memory plainly exists — and this release made room ids MORE
-      // visible in read results.
+      // while the memory may live on in its room — and this release made room
+      // ids MORE visible in read results. The line claims only the boundary:
+      // "this delete never reached it" is knowable; "it still exists" (the
+      // previous wording) was not — the room owner may have deleted it since
+      // (truth review F12).
       expect(text).toContain("atom_room_9");
       expect(text).toMatch(/CANNOT be deleted through this tool/);
-      expect(text).toMatch(/it still exists and is untouched/);
+      expect(text).toMatch(/this delete never reached it/);
+      expect(text).not.toMatch(/still exists/);
       expect(text).not.toMatch(/never existed|no such memory/i);
     },
   },

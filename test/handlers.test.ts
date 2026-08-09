@@ -708,7 +708,11 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).toContain(
       "memories in shared rooms CANNOT be deleted through this tool",
     );
-    expect(text).toContain("it still exists and is untouched");
+    // The boundary claim only — this delete never reached the room. "it still
+    // exists" was a claim this handler cannot check: the room owner may have
+    // deleted it since (truth review F12, 2026-08-08).
+    expect(text).toContain("this delete never reached it");
+    expect(text).not.toContain("still exists");
     expect(text).not.toContain("No memory found with id");
   });
 
@@ -753,10 +757,16 @@ describe("the load-bearing sentences, as returned", () => {
 
     mcp.reset().on(FEEDBACK, { updated_count: 1 });
     const neutral = await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 0 });
-    expect(neutral).toContain("Recorded 0 (neutral) for 1 memory");
-    expect(neutral).toContain("neither useful nor wrong");
-    // Dogfooding saw a neutral rating move a score UP by about five points, so
-    // neither "no change" nor "ranks higher" is safe to assert in either direction.
+    expect(neutral).toContain("Recorded 0 for 1 memory");
+    expect(neutral).toContain("Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.");
+    // The engine keeps no neutral record: outcome 0 lands on the POSITIVE
+    // branch of core's valence update and stores a positive-direction step
+    // plus outcome_count += 1 (truth review F11, 2026-08-08). So the line may
+    // not call the record "neutral" or "neither useful nor wrong" — and,
+    // since dogfooding saw a neutral rating move a score UP by about five
+    // points, it may not promise any effect either.
+    expect(neutral).not.toContain("neutral");
+    expect(neutral).not.toContain("neither useful nor wrong");
     expect(neutral).not.toContain("should surface sooner");
     expect(neutral).not.toContain("should fade");
   });
@@ -772,6 +782,45 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).not.toContain("Associations: 0");
     expect(text).toContain("Domains: none reported");
     expect(text).toContain("Shared rooms are separate stores and are not included");
+  });
+
+  it("the associations gloss names the real unit — concepts, not memories", async () => {
+    mcp.on(STATS, { total_atoms: 3, hebbian_edges: 12, domains: [] });
+
+    const text = await mcp.callText("memory_stats");
+
+    // Core counts concept-concept edges (api/schemas.py), learned by walking
+    // pairs within ONE atom's concept list at write time and on feedback, and
+    // by linking query concepts to result concepts on use. The old gloss —
+    // "links the store learned between memories that get used together" —
+    // was wrong twice: wrong unit (memories) and wrong trigger (used
+    // together). Truth review F3, 2026-08-08.
+    expect(text).toContain(
+      "Associations: 12 Hebbian edges — concept-to-concept links learned " +
+        "from concepts that occur together as memories are stored and used",
+    );
+    expect(text).not.toContain("between memories");
+    expect(text).not.toContain("get used together");
+  });
+
+  it("a truncated read recommends only the control that works — no top_k advice", async () => {
+    // Overflow the 96K-char cap so capResult appends its notice: 30 items of
+    // ~4000 chars each render well past MAX_RESULT_CHARS.
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: "x".repeat(4000),
+    }));
+    mcp.on(READ, { items, search_time_ms: 12 });
+
+    const text = await mcp.callText("memory_read", { query: "everything" });
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text).toContain("Use a more specific query to see all results.");
+    // The old hint also said "or smaller top_k" — but this same tool's top_k
+    // description says raising or lowering it does not reliably shape the
+    // result set (1/5/20 returned 6/7/4 in dogfooding). A truncation notice
+    // must not recommend the knob the schema refutes (truth review F7).
+    expect(text).not.toContain("top_k");
   });
 });
 

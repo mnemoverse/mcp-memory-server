@@ -145,7 +145,12 @@ async function apiFetch<T = unknown>(
  */
 function capResult(
   text: string,
-  moreHint = "Use a more specific query or smaller top_k to see all results.",
+  // The default recommends ONLY the control that works. A previous draft also
+  // said "or smaller top_k" — but top_k is not a hard cap (association
+  // expansion can return more, the relevance floor fewer; the same query at
+  // 1/5/20 returned 6/7/4 items), which this release's own top_k description
+  // already admits. One surface must not recommend the knob another refutes.
+  moreHint = "Use a more specific query to see all results.",
 ): string {
   if (text.length <= MAX_RESULT_CHARS) return text;
   let truncated = text.slice(0, MAX_RESULT_CHARS - 200);
@@ -154,7 +159,7 @@ function capResult(
     truncated = truncated.slice(0, -1);
   }
   // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
-  // guidance instead of the read-tool default (which points at query/top_k controls a
+  // guidance instead of the read-tool default (which points at a query control a
   // repeated no-arg call cannot use). Existing callers keep the default message.
   return `${truncated}\n\n[…truncated to fit the 25K token limit. ${moreHint}]`;
 }
@@ -818,12 +823,18 @@ server.registerTool(
         ? `Recorded +${outcome} (helpful) for ${noun} — they should surface sooner next time.`
         : outcome < 0
           ? `Recorded ${outcome} (unhelpful) for ${noun} — they should fade.`
-          // Neutral says nothing about the effect, in either direction. The
-          // previous wording ("use +1 or -1 when you want the ranking to move")
-          // implied 0 leaves ranking alone — which the comment above forbids,
-          // since dogfooding saw a neutral rating move a score UP by about five
-          // points (review, 2026-08-08).
-          : `Recorded 0 (neutral) for ${noun} — logged as a recall that was neither useful nor wrong. Use +1 or -1 to express a direction.`;
+          // Zero claims only what is knowable from here: the rating was
+          // recorded, and ±1 send a clear signal. Two earlier wordings each
+          // asserted engine semantics that were false: "use +1/-1 when you want
+          // the ranking to move" implied 0 leaves ranking alone (dogfooding saw
+          // a neutral rating move a score UP by about five points), and "logged
+          // as a recall that was neither useful nor wrong" described a record
+          // the engine does not keep — core files outcome 0 on the POSITIVE
+          // branch of the valence update (memory_engine.py `_feedback_inner`:
+          // sign is +1 for outcome >= 0) and stores a positive-direction
+          // valence step plus outcome_count += 1. So 0 is not a neutral log
+          // entry, and the printed line must not present it as one.
+          : `Recorded 0 for ${noun}. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
     return {
       content: [{ type: "text" as const, text }],
     };
@@ -881,7 +892,16 @@ server.registerTool(
 
     const text = [
       `Memories: ${num(r?.total_atoms)} (${num(r?.episodes)} episodes, ${num(r?.prototypes)} prototypes)`,
-      `Associations: ${num(r?.hebbian_edges)} Hebbian edges — links the store learned between memories that get used together`,
+      // The gloss names the real mechanism. Core's `hebbian_edges` counts
+      // concept-concept edges (api/schemas.py: "Number of Hebbian
+      // concept-concept edges"), and every path that learns one links two
+      // CONCEPTS: `strengthen` walks pairs within one atom's concept list at
+      // write time and again on feedback, `co_activate` links query concepts
+      // to result concepts on use. An earlier gloss said "links between
+      // memories that get used together" — wrong unit (memories, not
+      // concepts) and wrong trigger (an edge records co-occurrence, not two
+      // memories being used together).
+      `Associations: ${num(r?.hebbian_edges)} Hebbian edges — concept-to-concept links learned from concepts that occur together as memories are stored and used`,
       `Domains: ${domains}`,
       `Avg quality: valence ${dec(r?.avg_valence)} (how well recalls turned out, -1..1), importance ${dec(r?.avg_importance)} (0..1)`,
       "",
@@ -951,11 +971,17 @@ server.registerTool(
     if (!r?.deleted) {
       // NOT "no such memory". Deletion is scoped to the caller's OWN store —
       // core has no room-scoped delete at all — so a room atom's id lands here
-      // even though the memory plainly exists. This release made room ids MORE
-      // visible in read results, so an agent is now MORE likely to bring one
-      // here, ask to forget it, and be told it never existed while it stays
+      // even when the memory lives on in its room. This release made room ids
+      // MORE visible in read results, so an agent is now MORE likely to bring
+      // one here, ask to forget it, and be told it never existed while it stays
       // (review, 2026-08-08). Every other empty branch in this file learned to
       // state its boundary; the destructive one has to as well.
+      //
+      // The boundary claim is the ONLY claim: "this delete never reached it"
+      // is knowable from here (room stores are out of this tool's reach by
+      // construction). "it still exists" — a previous wording — is not: the
+      // room owner may have deleted it since, and this handler has no way to
+      // check (review, 2026-08-08).
       return {
         content: [
           {
@@ -963,7 +989,7 @@ server.registerTool(
             text:
               `Nothing was deleted: no memory with id ${atom_id} in your own domains. ` +
               `Note that memories in shared rooms CANNOT be deleted through this tool — ` +
-              `if that id came from a room, it still exists and is untouched.`,
+              `if that id came from a room, this delete never reached it.`,
           },
         ],
       };
