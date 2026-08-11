@@ -51,6 +51,7 @@
   ],
   "author": "Mnemoverse <hello@mnemoverse.com>",
   "license": "MIT",
+  "funding": "https://github.com/sponsors/izgorodin",
   "repository": {
     "type": "git",
     "url": "https://github.com/mnemoverse/mcp-memory-server"
