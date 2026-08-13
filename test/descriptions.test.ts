@@ -144,6 +144,10 @@ describe("the advertised descriptions carry this release's truth claims", () => 
   it("vault_list promises aliases only — the value is never returned", () => {
     const d = description("vault_list");
     expect(d).toContain("the secret VALUE is never returned");
+    // The stronger half of the promise, added when the phantom-consumer
+    // sentence was withdrawn. Pinned separately because the clause above
+    // survives in any rewrite, so on its own it asserts nothing about this one.
+    expect(d).toContain("no tool on this server returns it");
   });
 });
 
@@ -181,6 +185,12 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     // 'Pass "me" for the everyone-but-me read' — the author principal is not
     // visible from this tool, so 'me' matches nothing and filters nothing.
     [/everyone-but-me/i, "the exclude_author 'me' pitch"],
+    // "before a tool that consumes it" — vault_list is the only vault tool on
+    // this server; the other eleven are memory tools, and none of them takes a
+    // secret. The sentence sent a reviewer looking for a consumer that does not
+    // exist, which is the kind of mismatch Anthropic's directory policy fails
+    // a submission for.
+    [/a tool that consumes it/i, "the phantom secret-consumer claim"],
   ];
 
   it("no tool or parameter description carries one", () => {
