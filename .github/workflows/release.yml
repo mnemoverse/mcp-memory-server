@@ -64,19 +64,39 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Verify tag matches package.json#version
+      # The version lives in THREE places, so the guard checks all three.
+      # It used to check package.json alone, and 0.8.2 shipped its PR with the
+      # lockfile still reading 0.8.1 — caught in review, not by this step
+      # (mcp-memory-server#81). `npm ci` does not compare the lockfile's own
+      # `version` field, so a stale one sails through the build and lands in
+      # the published tree as a quiet contradiction. server.json is generated
+      # from package.json, but it is committed, so a missed
+      # `npm run generate:configs` desyncs the registry manifest the same way.
+      - name: Verify tag matches package.json, package-lock.json and server.json
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           TAG_VERSION="${TAG#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          echo "tag:         $TAG"
-          echo "tag version: $TAG_VERSION"
-          echo "pkg version: $PKG_VERSION"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag $TAG (version $TAG_VERSION) does not match package.json version $PKG_VERSION"
-            exit 1
-          fi
+          LOCK_VERSION="$(node -p "require('./package-lock.json').version")"
+          LOCK_ROOT_VERSION="$(node -p "require('./package-lock.json').packages[''].version")"
+          SERVER_VERSION="$(node -p "require('./server.json').version")"
+          echo "tag:             $TAG"
+          echo "tag version:     $TAG_VERSION"
+          echo "package.json:    $PKG_VERSION"
+          echo "lock .version:   $LOCK_VERSION"
+          echo "lock packages[]: $LOCK_ROOT_VERSION"
+          echo "server.json:     $SERVER_VERSION"
+          FAIL=0
+          for pair in "package.json:$PKG_VERSION" "package-lock.json:$LOCK_VERSION" \
+                      "package-lock.json packages[\"\"]:$LOCK_ROOT_VERSION" "server.json:$SERVER_VERSION"; do
+            WHERE="${pair%:*}"; GOT="${pair##*:}"
+            if [ "$TAG_VERSION" != "$GOT" ]; then
+              echo "::error::$WHERE reads $GOT, tag $TAG expects $TAG_VERSION"
+              FAIL=1
+            fi
+          done
+          [ "$FAIL" -eq 0 ] || exit 1
 
       - name: Install dependencies
         run: npm ci
