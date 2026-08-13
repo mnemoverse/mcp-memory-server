@@ -73,9 +73,14 @@ jobs:
       # from package.json, but it is committed, so a missed
       # `npm run generate:configs` desyncs the registry manifest the same way.
       - name: Verify tag matches package.json, package-lock.json and server.json
+        # TAG arrives through env, never through `${{ }}` inside `run:`.
+        # `workflow_dispatch.inputs.tag` is human-supplied, so interpolating it
+        # into shell SOURCE lets a dispatcher inject commands; via env it is
+        # only ever data. (CodeRabbit, #81.)
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           TAG_VERSION="${TAG#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
           LOCK_VERSION="$(node -p "require('./package-lock.json').version")"
@@ -127,9 +132,10 @@ jobs:
         run: ./mcp-publisher publish
 
       - name: Verify the registry entry shows the new version
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           echo "Waiting a few seconds for the registry to propagate..."
           sleep 3
