@@ -37,6 +37,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-08-13
+
 Dependency security pass: clears all 32 open Dependabot alerts (7 high, 22
 medium, 3 low) — 22 against `hono`, 5 `fast-uri`, 2 `ip-address`, and one each
 for `@hono/node-server`, `qs`, `body-parser`. Every one is a transitive
