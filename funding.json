@@ -1,0 +1,60 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Eduard Izgorodin",
+    "email": "hello@mnemoverse.com",
+    "description": "Independent researcher and engineer working on open memory infrastructure for AI agents, and on honest evaluation of it. Author of the peer-reviewed SLoD paper (GRAAI workshop, IEEE WCCI 2026).",
+    "webpageUrl": {
+      "url": "https://mnemoverse.com"
+    }
+  },
+  "projects": [
+    {
+      "guid": "mcp-memory-server",
+      "name": "@mnemoverse/mcp-memory-server",
+      "description": "Persistent memory for AI agents over the Model Context Protocol. One key gives Claude Code, Cursor, VS Code and ChatGPT memory that survives across sessions and across tools. MIT licensed and listed in the official MCP Registry.",
+      "webpageUrl": {
+        "url": "https://mnemoverse.com/docs/api/mcp-server"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/mnemoverse/mcp-memory-server"
+      },
+      "licenses": ["spdx:MIT"],
+      "tags": ["ai", "agents", "memory", "mcp", "developer-tools"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "other",
+        "address": "https://github.com/sponsors/izgorodin",
+        "description": "GitHub Sponsors, the maintainer's settlement account."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "maintenance",
+        "status": "active",
+        "name": "Maintenance and security review",
+        "description": "Funds ongoing maintenance of the server: dependency and security review on an execution boundary that turns agent tool calls into authenticated API calls, release engineering across npm and the MCP Registry, and test coverage over the tool schemas.",
+        "amount": 10000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": ["github-sponsors"]
+      },
+      {
+        "guid": "support",
+        "status": "active",
+        "name": "Any amount",
+        "description": "Support the project at whatever level makes sense for you.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["github-sponsors"]
+      }
+    ]
+  }
+}

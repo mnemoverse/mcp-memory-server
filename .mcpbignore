@@ -18,4 +18,15 @@ server.json
 llms.txt
 CONTRIBUTING.md
 dist-mcpb/
+# Repository-governance and packaging files: meaningful on GitHub, noise inside
+# a user's extension bundle. funding.json in particular would ship a
+# fundraising manifest with the maintainer's email to every installed copy,
+# which is not what a directory reviewer expects to find in the artefact.
+CODE_OF_CONDUCT.md
+funding.json
+CHANGELOG.md
+Dockerfile
+.dockerignore
+glama.json
+tsconfig.test.json
 *.mcpb
