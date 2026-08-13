@@ -129,7 +129,7 @@
       },
       {
         "name": "vault_list",
-        "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown."
+        "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the value is never returned, by this tool or any other on this server."
       }
     ]
   }

@@ -1491,7 +1491,7 @@ server.registerTool(
   "vault_list",
   {
     description:
-      "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you. Use this to DISCOVER which secret to use (e.g. the user says 'use my GitHub token' — find its alias here) before a tool that consumes it. Only YOUR account's secrets are listed.",
+      "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you, and no tool on this server returns it. Use this to check WHICH secrets the user has stored and under what alias (e.g. the user says 'do I have a GitHub token saved?'). Only YOUR account's secrets are listed.",
     inputSchema: {},
     annotations: {
       title: "List vault secrets",
