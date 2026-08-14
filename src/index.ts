@@ -623,7 +623,17 @@ server.registerTool(
       // it was a live bug for an account whose only room was archived.
       const scope = await probeScope(searched);
       const text = await buildReadEmptyResponse(
-        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+        // THE THIRD PROBE, and the one the first pass at #73 missed. An
+        // UNSCOPED empty read takes this path: probeScope only fetches the
+        // room list (scope.ts: `if (!searched) return { kind: "own-domains" }`),
+        // and the stats call for the first-contact greeting is issued here.
+        // Deadlining only the two inside probeScope left the commonest empty
+        // read of all still able to hang for undici's ~300s default — the exact
+        // symptom #73 names.
+        () =>
+          apiFetch<{ total_atoms?: number }>("/memory/stats", {
+            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+          }),
         scope,
       );
       return {
@@ -982,18 +992,21 @@ server.registerTool(
         ? `Rating sent: +${outcome} (helpful). The service reports ${noun} updated — they should surface sooner next time.`
         : outcome < 0
           ? `Rating sent: ${outcome} (unhelpful). The service reports ${noun} updated — they should fade.`
-          // Zero claims only what is knowable from here: the rating was
-          // recorded, and ±1 send a clear signal. Two earlier wordings each
-          // asserted engine semantics that were false: "use +1/-1 when you want
-          // the ranking to move" implied 0 leaves ranking alone (dogfooding saw
-          // a neutral rating move a score UP by about five points), and "logged
-          // as a recall that was neither useful nor wrong" described a record
-          // the engine does not keep — core files outcome 0 on the POSITIVE
-          // branch of the valence update (memory_engine.py `_feedback_inner`:
-          // sign is +1 for outcome >= 0) and stores a positive-direction
-          // valence step plus outcome_count += 1. So 0 is not a neutral log
-          // entry, and the printed line must not present it as one.
-          : `Recorded 0 for ${noun}. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
+          // Zero claims only what is knowable from here: the rating was sent,
+          // the service reported a count, and ±1 send a clear signal.
+          //
+          // WHAT 0 ACTUALLY DOES, restated against core#493 (merged
+          // 2026-08-13). The valence step used to be
+          // `sign(outcome) * |prediction error|`, so outcome 0 took the
+          // POSITIVE branch and pushed valence UP — which is what dogfooding
+          // saw, and what the previous version of this comment recorded. That
+          // is no longer true: core now uses the SIGNED error,
+          // `pe = outcome - valence` (memory_engine.py:4986-4988), so a 0
+          // against a positive valence moves it DOWN, toward neutral. Either
+          // way 0 is not a no-op and the line must not imply one — but the old
+          // explanation is now backwards, and it ships verbatim inside
+          // dist/index.js, so it cannot be left to rot in a comment.
+          : `Rating sent: 0. The service reports ${noun} updated. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
     return {
       content: [{ type: "text" as const, text }],
     };

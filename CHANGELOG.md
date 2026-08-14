@@ -37,7 +37,7 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
-## [0.8.3] — 2026-08-13
+## [0.8.3] — 2026-08-14
 
 Three claims about ourselves that were not true, all found by review rather
 than by us, and all shipped as text — no tool changes shape, no parameter
@@ -77,16 +77,34 @@ moves.
 
 ### Fixed — behaviour
 
+- **The valence explanation in `memory_feedback` was inverted by a core change
+  the day before (core#493).** Until 2026-08-13 the engine applied
+  `sign(outcome) × |prediction error|`, so a 0 rating took the positive branch
+  and pushed valence UP — which dogfooding observed and which this file's
+  comment recorded. Core now uses the SIGNED error, `pe = outcome - valence`
+  (`memory_engine.py:4986-4988`), so a 0 against a positive valence moves it
+  DOWN, toward neutral. Comments are not stripped from `dist/`, so the stale
+  explanation would have shipped inside the tarball, contradicting the README
+  line this same release adds. Rewritten against the current engine.
+
+- **The outcome-0 branch of `memory_feedback` still asserted its count.** The
+  ±1 branches were corrected for #68 and the zero branch was left behind — and
+  a test added in this release pinned the wrong wording. Both fixed: it now
+  reads "Rating sent: 0. The service reports N memories updated."
+
 - **Honesty probes have a deadline (#73).** The zero-result paths of
   `memory_read` and `memory_list_recent` consult `/memory/stats` and
   `/memory/rooms` so an empty answer can say what it did not cover. Those two
   GETs went through bare `fetch()` with no `AbortSignal`, inheriting undici's
   ~300s default: one hung engine endpoint turned an empty read — instant in
-  0.8.0, which probed nothing — into a multi-minute stall. Both now carry a 4s
-  timeout, chosen against measured production latency (`/memory/read` averaged
-  1,330 ms, max 10.2 s). A timed-out probe degrades into the existing "unknown"
-  fallback, which already says so; no request changes shape and no tool changes
-  its schema.
+  0.8.0, which probed nothing — into a multi-minute stall. **All three** now
+  carry a 4s deadline, chosen against measured production latency
+  (`/memory/read` averaged 1,330 ms, max 10.2 s). Three, not two: the first
+  pass deadlined only the pair inside `probeScope` and left the stats call on
+  the UNSCOPED empty read — the commonest one there is — still able to hang,
+  which review caught before the tag. A timed-out probe degrades into the
+  existing "unknown" fallback, which already says so; no request changes shape
+  and no tool changes its schema.
 
 ### Changed — CI
 
@@ -101,6 +119,15 @@ moves.
   patch may not change shape.
 
 ### Fixed
+
+> **What this release physically delivers, stated because the last one did
+> not.** The tag publishes exactly two things: the npm tarball (`dist/`,
+> `README.md`, `LICENSE`, `package.json`) and `server.json` to the official MCP
+> registry. `manifest.json` is the MCPB extension artefact, and **no workflow
+> packs or uploads it** — v0.8.2 shipped zero release assets. So the manifest
+> fix below is correct and on main, and it reaches users only when someone
+> builds and submits the bundle by hand. Automating that is tracked separately;
+> it is NOT delivered by tagging 0.8.3.
 
 - **The privacy policy URL in the extension manifest was a redirect.**
   `privacy_policies` pointed at `mnemoverse.com/privacy.html`, which answers

@@ -52,7 +52,6 @@ jobs:
         # future-watermark diagnosis would go unguarded on exactly the side
         # where a genuinely future watermark parses into the past.
         tz: ["UTC", "Asia/Tokyo", "America/New_York"]
-        node: ["20"]
     env:
       TZ: ${{ matrix.tz }}
     steps:
@@ -65,7 +64,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "20"
           cache: npm
 
       - run: npm ci
@@ -78,7 +77,7 @@ jobs:
       - name: Typecheck tests
         run: npm run typecheck:test
 
-      - name: Test (Node ${{ matrix.node }}, TZ=${{ matrix.tz }})
+      - name: Test (TZ=${{ matrix.tz }})
         run: npm test
 
   # `engines` promises Node >=18 and nothing ever executed that promise (#75).

@@ -882,7 +882,10 @@ describe("the load-bearing sentences, as returned", () => {
 
     mcp.reset().on(FEEDBACK, { updated_count: 1 });
     const neutral = await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 0 });
-    expect(neutral).toContain("Recorded 0 for 1 memory");
+    // 0.8.3 (#68): the count is attributed, not asserted — the zero branch
+    // had been left behind when the ±1 branches were corrected, and this pin
+    // was freezing the defect.
+    expect(neutral).toContain("Rating sent: 0. The service reports 1 memory updated");
     expect(neutral).toContain("Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.");
     // The engine keeps no neutral record: outcome 0 lands on the POSITIVE
     // branch of core's valence update and stores a positive-direction step
