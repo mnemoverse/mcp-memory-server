@@ -61,11 +61,28 @@ import {
  * room address (CodeRabbit #65). `searched` is the RAW value that went over the
  * wire, so the diagnosis can never describe a different store than the request.
  */
+/**
+ * How long a HONESTY PROBE may take before the answer goes out without it (#73).
+ *
+ * The probes are a courtesy: they let a zero-result answer say what it did NOT
+ * cover. They are not the answer. Without a deadline they inherit undici's
+ * default (~300s), so one slow engine endpoint turns an empty read — which
+ * 0.8.0 answered instantly, having probed nothing — into a multi-minute stall.
+ * `probeReadScope` already treats a failed probe as "unknown" and says so, so
+ * an abort degrades into the honest fallback rather than an error.
+ *
+ * 4s is chosen against measured production latency: `/memory/read` averaged
+ * 1,330 ms with a 10.2 s maximum (core observability, 2026-08), and these two
+ * are cheaper GETs. Long enough not to fire on a normal slow day, short enough
+ * that a hung endpoint costs seconds instead of minutes.
+ */
+const PROBE_TIMEOUT_MS = 4000;
+
 function probeScope(searched: string | undefined): Promise<ReadScope> {
   return probeReadScope(
     searched,
-    () => apiFetch<unknown>("/memory/stats"),
-    () => apiFetch<unknown>("/memory/rooms"),
+    () => apiFetch<unknown>("/memory/stats", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }),
+    () => apiFetch<unknown>("/memory/rooms", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }),
     safeInline,
   );
 }
@@ -247,6 +264,22 @@ export const server = new McpServer(
   { instructions: SERVER_INSTRUCTIONS },
 );
 
+/**
+ * True for a shared-room address (`xroom:<room_id>`).
+ *
+ * Mirrors core's own predicate (`memory_engine._is_room_domain`), which is a
+ * plain prefix test — deliberately, so a padded or otherwise non-canonical
+ * address does NOT normalise into a room. Byte-for-byte, no trimming: this
+ * file's write handler documents at length why trimming a domain here once
+ * nearly wrote into a room visible to other accounts.
+ *
+ * Used only to choose which TRUE sentence to print about a refusal. It never
+ * changes what is sent, so a wrong answer here misinforms and cannot misroute.
+ */
+function isRoomDomain(domain: string | undefined): boolean {
+  return typeof domain === "string" && domain.startsWith("xroom:");
+}
+
 // --- Tool: memory_write ---
 
 server.registerTool(
@@ -397,10 +430,28 @@ server.registerTool(
           text:
             `NOT STORED — nothing was saved.` +
             (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
-            (importance === "unknown" ? `` : ` Novelty score ${importance}.`) +
-            ` Writes are gated on how much a memory adds over what is already in the` +
-            ` same domain, so a near-duplicate is refused. If the point is genuinely` +
-            ` new, write what is DIFFERENT rather than restating the whole fact.`,
+            (importance === "unknown"
+              ? ``
+              : ` Novelty score ${importance}. That score is a first-generation` +
+                ` metric under active development and known to be unreliable —` +
+                ` identical content has measured ~0.08 in Russian against ~0.55 in` +
+                ` English — so read it as a rough hint about similarity, not as a` +
+                ` judgement of whether this memory was worth keeping.`) +
+            (isRoomDomain(domain)
+              ? // ROOM RULE (core#482, 2026-08-13). A room is a message bus:
+                // the second agent's job is to receive a restatement of what
+                // the first was told, so a briefing or a status summary STORES
+                // here. Only a write the embedder cannot distinguish from one
+                // already present is refused. Telling a caller to "write the
+                // delta" in a room would be advice against the room's purpose.
+                ` Restatements are allowed in rooms — this one was refused only` +
+                ` because it is indistinguishable by embedding from a message` +
+                ` already there. Similarity is judged on roughly the first 500` +
+                ` tokens, so a long message that OPENS like an earlier one can` +
+                ` land here even when its body differs: lead with what is new.`
+              : ` Writes are gated on how much a memory adds over what is already in the` +
+                ` same domain, so a near-duplicate is refused. If the point is genuinely` +
+                ` new, write what is DIFFERENT rather than restating the whole fact.`),
         },
       ],
     };
@@ -572,7 +623,17 @@ server.registerTool(
       // it was a live bug for an account whose only room was archived.
       const scope = await probeScope(searched);
       const text = await buildReadEmptyResponse(
-        () => apiFetch<{ total_atoms?: number }>("/memory/stats"),
+        // THE THIRD PROBE, and the one the first pass at #73 missed. An
+        // UNSCOPED empty read takes this path: probeScope only fetches the
+        // room list (scope.ts: `if (!searched) return { kind: "own-domains" }`),
+        // and the stats call for the first-contact greeting is issued here.
+        // Deadlining only the two inside probeScope left the commonest empty
+        // read of all still able to hang for undici's ~300s default — the exact
+        // symptom #73 names.
+        () =>
+          apiFetch<{ total_atoms?: number }>("/memory/stats", {
+            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+          }),
         scope,
       );
       return {
@@ -914,24 +975,38 @@ server.registerTool(
     // rank" for outcome 0 would be a claim we cannot make — dogfooding saw a
     // neutral rating move a score UP by about five points, so neither "no
     // change" nor "ranks higher" is safe to assert (CodeRabbit, #65).
+    // WHOSE NUMBER THIS IS (#68). `updated_count` is the count of memories the
+    // service says it touched — and that is true only while core runs
+    // `feedback_async = False`. Under async it returns the number of ids
+    // SUBMITTED, not applied (core schemas.py:689-695, memory_engine.py:4490),
+    // and nothing in the response says which mode ran. A server-side config
+    // flip would therefore turn a confident sentence here false on every
+    // installed client, silently. So the number is reported as the SERVICE'S
+    // report rather than asserted as an outcome this client verified. The
+    // hosted connector took the same correction on 2026-08-13
+    // (mnemoverse-mcp-remote#38); one number, one degree of confidence,
+    // whichever surface a model reaches it through.
     const noun = `${count} memor${count === 1 ? "y" : "ies"}`;
     const text =
       outcome > 0
-        ? `Recorded +${outcome} (helpful) for ${noun} — they should surface sooner next time.`
+        ? `Rating sent: +${outcome} (helpful). The service reports ${noun} updated — they should surface sooner next time.`
         : outcome < 0
-          ? `Recorded ${outcome} (unhelpful) for ${noun} — they should fade.`
-          // Zero claims only what is knowable from here: the rating was
-          // recorded, and ±1 send a clear signal. Two earlier wordings each
-          // asserted engine semantics that were false: "use +1/-1 when you want
-          // the ranking to move" implied 0 leaves ranking alone (dogfooding saw
-          // a neutral rating move a score UP by about five points), and "logged
-          // as a recall that was neither useful nor wrong" described a record
-          // the engine does not keep — core files outcome 0 on the POSITIVE
-          // branch of the valence update (memory_engine.py `_feedback_inner`:
-          // sign is +1 for outcome >= 0) and stores a positive-direction
-          // valence step plus outcome_count += 1. So 0 is not a neutral log
-          // entry, and the printed line must not present it as one.
-          : `Recorded 0 for ${noun}. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
+          ? `Rating sent: ${outcome} (unhelpful). The service reports ${noun} updated — they should fade.`
+          // Zero claims only what is knowable from here: the rating was sent,
+          // the service reported a count, and ±1 send a clear signal.
+          //
+          // WHAT 0 ACTUALLY DOES, restated against core#493 (merged
+          // 2026-08-13). The valence step used to be
+          // `sign(outcome) * |prediction error|`, so outcome 0 took the
+          // POSITIVE branch and pushed valence UP — which is what dogfooding
+          // saw, and what the previous version of this comment recorded. That
+          // is no longer true: core now uses the SIGNED error,
+          // `pe = outcome - valence` (memory_engine.py:4986-4988), so a 0
+          // against a positive valence moves it DOWN, toward neutral. Either
+          // way 0 is not a no-op and the line must not imply one — but the old
+          // explanation is now backwards, and it ships verbatim inside
+          // dist/index.js, so it cannot be left to rot in a comment.
+          : `Rating sent: 0. The service reports ${noun} updated. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
     return {
       content: [{ type: "text" as const, text }],
     };

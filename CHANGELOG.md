@@ -37,6 +37,154 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-08-14
+
+Three claims about ourselves that were not true, all found by review rather
+than by us, and all shipped as text — no tool changes shape, no parameter
+moves.
+
+
+### Fixed — claims that stopped being true
+
+- **A refused ROOM write no longer states the personal-domain rule.** The line
+  said "so a near-duplicate is refused". As of core#482 (2026-08-13) that is
+  false in a shared room: a restatement — a briefing, a status, a decision
+  summary — STORES there, because a room is a message bus and the second agent's
+  job is to receive what the first was told. Only a write the embedder cannot
+  distinguish from one already present is refused. The client now prints the
+  rule that applies to the domain it wrote to, names the ~500-token similarity
+  window, and drops the "write the delta" advice in rooms, where a restatement
+  is the point rather than the mistake. The personal-domain wording is
+  unchanged and now pinned by its own test.
+
+- **The novelty score carries the health warning the hosted connector already
+  carries.** The number is a first-generation metric, measurably unreliable:
+  identical content scored ~0.08 in Russian against ~0.55 in English against the
+  same 0.1 threshold — refused in one language, stored in the other. This server
+  printed the bare figure while `mnemoverse-mcp-remote` (#36) explained it, so
+  the same number reached a model with two different degrees of honesty
+  depending on the surface. One surface, one truth (decision 2026-08-12).
+
+- **`memory_feedback` attributes the count instead of asserting it (#68).**
+  "Recorded +1 for 3 memories" is true only while core runs
+  `feedback_async = False`. Under async, `updated_count` is the number of ids
+  SUBMITTED, not applied (core `schemas.py:689-695`), and nothing in the
+  response says which mode ran — so a server-side config flip would silently
+  turn this sentence false on every installed client. It now reads "The service
+  reports N memories updated". The direction echo, which exists so a caller has
+  evidence the loop did anything, is unchanged. Twin of the fix the hosted
+  connector took the same week.
+
+### Fixed — behaviour
+
+- **The valence explanation in `memory_feedback` was inverted by a core change
+  the day before (core#493).** Until 2026-08-13 the engine applied
+  `sign(outcome) × |prediction error|`, so a 0 rating took the positive branch
+  and pushed valence UP — which dogfooding observed and which this file's
+  comment recorded. Core now uses the SIGNED error, `pe = outcome - valence`
+  (`memory_engine.py:4986-4988`), so a 0 against a positive valence moves it
+  DOWN, toward neutral. Comments are not stripped from `dist/`, so the stale
+  explanation would have shipped inside the tarball, contradicting the README
+  line this same release adds. Rewritten against the current engine.
+
+- **The outcome-0 branch of `memory_feedback` still asserted its count.** The
+  ±1 branches were corrected for #68 and the zero branch was left behind — and
+  a test added in this release pinned the wrong wording. Both fixed: it now
+  reads "Rating sent: 0. The service reports N memories updated."
+
+- **Honesty probes have a deadline (#73).** The zero-result paths of
+  `memory_read` and `memory_list_recent` consult `/memory/stats` and
+  `/memory/rooms` so an empty answer can say what it did not cover. Those two
+  GETs went through bare `fetch()` with no `AbortSignal`, inheriting undici's
+  ~300s default: one hung engine endpoint turned an empty read — instant in
+  0.8.0, which probed nothing — into a multi-minute stall. **All three** now
+  carry a 4s deadline, chosen against measured production latency
+  (`/memory/read` averaged 1,330 ms, max 10.2 s). Three, not two: the first
+  pass deadlined only the pair inside `probeScope` and left the stats call on
+  the UNSCOPED empty read — the commonest one there is — still able to hang,
+  which review caught before the tag. A timed-out probe degrades into the
+  existing "unknown" fallback, which already says so; no request changes shape
+  and no tool changes its schema.
+
+### Changed — CI
+
+- **`engines: >=18` is now tested rather than asserted (#75).** CI ran Node 20
+  only, so a published compatibility promise had never been executed once. The
+  full suite cannot answer it — vitest 4 itself requires Node `^20 || ^22 ||
+  >=24` and dies on 18 inside `node:util`, which is a fact about our test
+  runner and not about the shipped package. So the new `smoke-node18` job tests
+  what the promise is actually about: it builds and drives a real MCP
+  `initialize` handshake through `dist/index.js` on Node 18. If that goes red
+  the claim is false and moves to `>=20` in 0.9 — `engines` is shape, and a
+  patch may not change shape.
+
+### Fixed
+
+> **What this release physically delivers, stated because the last one did
+> not.** The tag publishes exactly two things: the npm tarball (`dist/`,
+> `README.md`, `LICENSE`, `package.json`) and `server.json` to the official MCP
+> registry. `manifest.json` is the MCPB extension artefact, and **no workflow
+> packs or uploads it** — v0.8.2 shipped zero release assets. So the manifest
+> fix below is correct and on main, and it reaches users only when someone
+> builds and submits the bundle by hand. Automating that is tracked separately;
+> it is NOT delivered by tagging 0.8.3.
+
+- **The privacy policy URL in the extension manifest was a redirect.**
+  `privacy_policies` pointed at `mnemoverse.com/privacy.html`, which answers
+  307. Anthropic's directory review requires HTTPS privacy URLs and rejects on
+  broken ones, so feeding their fetcher a redirect was a needless gamble right
+  before a submission. Fixed in `src/configs/source.json` — the SSOT — as well
+  as the generated `manifest.json`, because patching only the artefact would
+  have been reverted by the next `generate-configs` run. (#78)
+
+- **`vault_list` promised a tool that does not exist.** Its description told
+  the agent to find an alias "before a tool that consumes it". There is no
+  such tool here: `vault_list` is the only vault tool, the other eleven are
+  memory tools. A reviewer following that sentence looks for the consumer,
+  fails to find it, and reasonably asks what else is inaccurate. The new
+  wording states that no tool on this server returns a secret value — a
+  stronger privacy claim than the old one, with the advantage of being true.
+  Also added to the `WITHDRAWN` list in `test/descriptions.test.ts`, which
+  bans a retracted false claim corpus-wide; the guard was verified by
+  restoring the banned phrase and watching the suite go red. (#82)
+
+- **The README's privacy section heading** is now `## Privacy Policy`
+  verbatim, which is what the directory review looks for. (#78)
+
+### Added
+
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, byte-identical to the
+  canonical text. An earlier draft was silently abridged: it had lost the
+  clauses about avoiding contact through external channels and about the
+  interaction ban during a temporary suspension. Programmes that diff this
+  file against the canon would have seen a weakened enforcement ladder.
+- `funding.json` — fundingjson.org v1.0.0 manifest, validated against the real
+  schema. Required artefact for the FLOSS fund application.
+- `funding` field in `package.json`, so `npm fund` resolves.
+
+### Changed
+
+- **`.mcpbignore` no longer ships repository governance inside the bundle.**
+  `funding.json` and `CODE_OF_CONDUCT.md` were riding inside the `.mcpb` — a
+  fundraising manifest carrying the maintainer's email is not what a directory
+  reviewer expects to find in the artefact. Excluded along with `CHANGELOG.md`,
+  `Dockerfile`, `.dockerignore`, `glama.json` and `tsconfig.test.json`, which
+  were in there for no reason either. The bundle root is now exactly `LICENSE`,
+  `README.md`, `icon.png`, `manifest.json`, `package.json`.
+
+### Not in this release, tracked
+
+- `.github/FUNDING.yml` is deliberately held back. It lights up the Sponsor
+  button on a public repository the moment it merges, and the Sponsors tiers
+  are not configured — the button would point at an unfinished page.
+- `funding.json` still lacks the `wellKnown` provenance the spec wants when
+  the manifest host and the URL host differ. It cannot honestly be added yet:
+  `mnemoverse.com/.well-known/funding-manifest-urls` returns 404. Publishing
+  that file comes first; it gates the FLOSS fund submission, not this release.
+- The live server card at `mcp.mnemoverse.com` is served by a different
+  repository, so the `vault_list` wording there is fixed separately
+  (`mnemoverse-mcp-remote` #41) and needs a deploy, not this publish.
+
 ## [0.8.2] — 2026-08-13
 
 Dependency security pass: clears all 32 open Dependabot alerts (7 high, 22

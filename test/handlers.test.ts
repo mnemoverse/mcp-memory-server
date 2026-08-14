@@ -706,6 +706,96 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).not.toContain("Filtered");
   });
 
+  it("a refused ROOM write does not repeat the personal-domain rule", async () => {
+    // core#482 (merged 2026-08-13) changed the gate for `xroom:` domains: a
+    // restatement — a briefing, a status, a decision summary — now STORES,
+    // because a room is a message bus and the second agent's job is to receive
+    // what the first was told. Only an indistinguishable write is refused
+    // there. The sentence this client printed said the opposite ("so a
+    // near-duplicate is refused") and became false the day that shipped, in
+    // exactly the case the change was made for.
+    mcp.on(WRITE, {
+      stored: false,
+      importance: 0,
+      reason:
+        "Refused as a duplicate: by embedding, this message is indistinguishable from one already in this room (novelty 0.000).",
+    });
+
+    const text = await mcp.callText("memory_write", {
+      content: "a restatement",
+      domain: "xroom:room_01ABC",
+    });
+
+    expect(text.startsWith("NOT STORED — nothing was saved.")).toBe(true);
+    // The room rule, not the personal-domain one.
+    expect(text).toContain("indistinguishable");
+    expect(text).not.toContain("a near-duplicate is refused");
+    // And the advice must not be "write the delta": in a room a restatement is
+    // legitimate, so the actionable fact is that this one read as identical.
+    expect(text).toContain("Restatements are allowed in rooms");
+  });
+
+  it("a refused PERSONAL-domain write keeps the near-duplicate rule", async () => {
+    // The personal-domain rule is unchanged and must stay stated: outside a
+    // room the gate does refuse near-duplicates.
+    mcp.on(WRITE, {
+      stored: false,
+      importance: 0.047,
+      reason: "Below importance threshold (0.047 < 0.1)",
+    });
+
+    const text = await mcp.callText("memory_write", {
+      content: "a near-duplicate",
+      domain: "engineering",
+    });
+
+    expect(text).toContain("a near-duplicate is refused");
+    expect(text).toContain("write what is DIFFERENT");
+    expect(text).not.toContain("Restatements are allowed in rooms");
+  });
+
+  it("the novelty score is labelled as the immature metric it is", async () => {
+    // The hosted connector says this (mnemoverse-mcp-remote#36, 2026-08-13);
+    // this server said nothing, so the same number carried two different
+    // degrees of honesty depending on which surface a model reached it
+    // through. Decision 2026-08-12 (Eduard): one surface, one truth.
+    mcp.on(WRITE, {
+      stored: false,
+      importance: 0.047,
+      reason: "Below importance threshold (0.047 < 0.1)",
+    });
+
+    const text = await mcp.callText("memory_write", { content: "x" });
+
+    expect(text).toContain("Novelty score 0.05");
+    expect(text).toMatch(/first-generation|under active development/);
+    expect(text).toContain("unreliable");
+    // The measurement that earns the warning, not an adjective on its own.
+    expect(text).toMatch(/0\.08.*Russian|Russian.*0\.08/);
+  });
+
+  it("attributes the rated count to the service instead of asserting it (#68)", async () => {
+    // `Recorded +1 for 3 memories` is true only while core runs
+    // feedback_async = False. Under async, core returns updated_count = the
+    // number of ids SUBMITTED, not applied (schemas.py:689-695) — a server-side
+    // config flip would silently turn this sentence false on every installed
+    // client, and nothing here can detect which mode ran. The same defect was
+    // fixed on the hosted connector on 2026-08-13
+    // (mnemoverse-mcp-remote#38); this is its twin.
+    mcp.on(FEEDBACK, { updated_count: 3 });
+
+    const text = await mcp.callText("memory_feedback", {
+      atom_ids: ["a", "b", "c"],
+      outcome: 1,
+    });
+
+    // The number is still reported — it is the only figure there is.
+    expect(text).toContain("3 memor");
+    // But as the service's report, not as a fact this client verified.
+    expect(text).toMatch(/reports|according to the service|service reports/i);
+    expect(text).not.toMatch(/^Recorded \+1 \(helpful\) for 3 memories —/);
+  });
+
   it("a filtered write with no reason and no score asserts neither", async () => {
     // A live surface answers {"stored":false} with no reason and no score.
     // Printing "0.00" there fabricates the gate's verdict.
@@ -781,13 +871,21 @@ describe("the load-bearing sentences, as returned", () => {
 
   it("recorded feedback echoes the DIRECTION, and claims no effect for neutral", async () => {
     mcp.on(FEEDBACK, { updated_count: 2 });
+    // Wording updated in 0.8.3 (#68): the count is now attributed to the
+    // service rather than asserted, because under core's async feedback path
+    // `updated_count` is the number of ids SUBMITTED and this client cannot
+    // tell which mode ran. Direction is still echoed, which is what this test
+    // is here to protect.
     expect(await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 1 })).toBe(
-      "Recorded +1 (helpful) for 2 memories — they should surface sooner next time.",
+      "Rating sent: +1 (helpful). The service reports 2 memories updated — they should surface sooner next time.",
     );
 
     mcp.reset().on(FEEDBACK, { updated_count: 1 });
     const neutral = await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 0 });
-    expect(neutral).toContain("Recorded 0 for 1 memory");
+    // 0.8.3 (#68): the count is attributed, not asserted — the zero branch
+    // had been left behind when the ±1 branches were corrected, and this pin
+    // was freezing the defect.
+    expect(neutral).toContain("Rating sent: 0. The service reports 1 memory updated");
     expect(neutral).toContain("Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.");
     // The engine keeps no neutral record: outcome 0 lands on the POSITIVE
     // branch of core's valence update and stores a positive-direction step

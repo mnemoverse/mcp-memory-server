@@ -79,3 +79,42 @@ jobs:
 
       - name: Test (TZ=${{ matrix.tz }})
         run: npm test
+
+  # `engines` promises Node >=18 and nothing ever executed that promise (#75).
+  # The full suite CANNOT answer it: vitest 4 itself requires Node ^20 || ^22 ||
+  # >=24 and dies on 18 with `node:util does not provide an export named
+  # styleText` — a fact about our TEST RUNNER, not about the published package.
+  # So test what the promise is actually about: does the shipped artifact start
+  # and speak MCP on Node 18. A real stdio `initialize` handshake, no API key
+  # needed (the key is validated lazily, inside apiFetch).
+  #
+  # If this goes red, `engines: ">=18"` is false and moves to ">=20" in 0.9 —
+  # engines is shape, and a patch may not change shape.
+  smoke-node18:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: The published entrypoint must start and speak MCP on Node 18
+        run: |
+          set -euo pipefail
+          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+          OUT="$(echo "$REQ" | timeout 30 node dist/index.js 2>/dev/null | head -c 400 || true)"
+          echo "$OUT"
+          case "$OUT" in
+            *'"serverInfo"'*'"name":"mnemoverse-memory"'*) echo "Node 18: handshake ok" ;;
+            *) echo "::error::the entrypoint did not complete an MCP initialize on Node 18 — engines '>=18' is not true"; exit 1 ;;
+          esac
