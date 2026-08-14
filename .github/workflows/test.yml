@@ -52,6 +52,15 @@ jobs:
         # future-watermark diagnosis would go unguarded on exactly the side
         # where a genuinely future watermark parses into the past.
         tz: ["UTC", "Asia/Tokyo", "America/New_York"]
+        node: ["20"]
+        # `engines` in package.json promises Node >=18, and until now nothing
+        # ever ran the suite on 18 — an untested published claim (#75). One
+        # extra leg tests the promise instead of restating it. Only on UTC:
+        # the timezone matrix answers a different question, and crossing them
+        # would triple the cost to re-answer it.
+        include:
+          - tz: "UTC"
+            node: "18"
     env:
       TZ: ${{ matrix.tz }}
     steps:
@@ -64,7 +73,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
@@ -77,5 +86,5 @@ jobs:
       - name: Typecheck tests
         run: npm run typecheck:test
 
-      - name: Test (TZ=${{ matrix.tz }})
+      - name: Test (Node ${{ matrix.node }}, TZ=${{ matrix.tz }})
         run: npm test

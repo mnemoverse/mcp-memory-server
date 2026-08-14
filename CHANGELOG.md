@@ -43,6 +43,58 @@ Three claims about ourselves that were not true, all found by review rather
 than by us, and all shipped as text — no tool changes shape, no parameter
 moves.
 
+
+### Fixed — claims that stopped being true
+
+- **A refused ROOM write no longer states the personal-domain rule.** The line
+  said "so a near-duplicate is refused". As of core#482 (2026-08-13) that is
+  false in a shared room: a restatement — a briefing, a status, a decision
+  summary — STORES there, because a room is a message bus and the second agent's
+  job is to receive what the first was told. Only a write the embedder cannot
+  distinguish from one already present is refused. The client now prints the
+  rule that applies to the domain it wrote to, names the ~500-token similarity
+  window, and drops the "write the delta" advice in rooms, where a restatement
+  is the point rather than the mistake. The personal-domain wording is
+  unchanged and now pinned by its own test.
+
+- **The novelty score carries the health warning the hosted connector already
+  carries.** The number is a first-generation metric, measurably unreliable:
+  identical content scored ~0.08 in Russian against ~0.55 in English against the
+  same 0.1 threshold — refused in one language, stored in the other. This server
+  printed the bare figure while `mnemoverse-mcp-remote` (#36) explained it, so
+  the same number reached a model with two different degrees of honesty
+  depending on the surface. One surface, one truth (decision 2026-08-12).
+
+- **`memory_feedback` attributes the count instead of asserting it (#68).**
+  "Recorded +1 for 3 memories" is true only while core runs
+  `feedback_async = False`. Under async, `updated_count` is the number of ids
+  SUBMITTED, not applied (core `schemas.py:689-695`), and nothing in the
+  response says which mode ran — so a server-side config flip would silently
+  turn this sentence false on every installed client. It now reads "The service
+  reports N memories updated". The direction echo, which exists so a caller has
+  evidence the loop did anything, is unchanged. Twin of the fix the hosted
+  connector took the same week.
+
+### Fixed — behaviour
+
+- **Honesty probes have a deadline (#73).** The zero-result paths of
+  `memory_read` and `memory_list_recent` consult `/memory/stats` and
+  `/memory/rooms` so an empty answer can say what it did not cover. Those two
+  GETs went through bare `fetch()` with no `AbortSignal`, inheriting undici's
+  ~300s default: one hung engine endpoint turned an empty read — instant in
+  0.8.0, which probed nothing — into a multi-minute stall. Both now carry a 4s
+  timeout, chosen against measured production latency (`/memory/read` averaged
+  1,330 ms, max 10.2 s). A timed-out probe degrades into the existing "unknown"
+  fallback, which already says so; no request changes shape and no tool changes
+  its schema.
+
+### Changed — CI
+
+- **`engines: >=18` is now tested rather than asserted (#75).** CI ran Node 20
+  only, so a published compatibility promise had never been executed. A Node 18
+  leg joins the matrix on UTC. If it fails, the claim is false and moves to
+  `>=20` in 0.9 — `engines` is shape, so a patch cannot change it here.
+
 ### Fixed
 
 - **The privacy policy URL in the extension manifest was a redirect.**
