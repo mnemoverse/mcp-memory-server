@@ -91,9 +91,14 @@ moves.
 ### Changed — CI
 
 - **`engines: >=18` is now tested rather than asserted (#75).** CI ran Node 20
-  only, so a published compatibility promise had never been executed. A Node 18
-  leg joins the matrix on UTC. If it fails, the claim is false and moves to
-  `>=20` in 0.9 — `engines` is shape, so a patch cannot change it here.
+  only, so a published compatibility promise had never been executed once. The
+  full suite cannot answer it — vitest 4 itself requires Node `^20 || ^22 ||
+  >=24` and dies on 18 inside `node:util`, which is a fact about our test
+  runner and not about the shipped package. So the new `smoke-node18` job tests
+  what the promise is actually about: it builds and drives a real MCP
+  `initialize` handshake through `dist/index.js` on Node 18. If that goes red
+  the claim is false and moves to `>=20` in 0.9 — `engines` is shape, and a
+  patch may not change shape.
 
 ### Fixed
 
