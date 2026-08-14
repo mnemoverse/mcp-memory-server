@@ -37,6 +37,70 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-08-13
+
+Three claims about ourselves that were not true, all found by review rather
+than by us, and all shipped as text — no tool changes shape, no parameter
+moves.
+
+### Fixed
+
+- **The privacy policy URL in the extension manifest was a redirect.**
+  `privacy_policies` pointed at `mnemoverse.com/privacy.html`, which answers
+  307. Anthropic's directory review requires HTTPS privacy URLs and rejects on
+  broken ones, so feeding their fetcher a redirect was a needless gamble right
+  before a submission. Fixed in `src/configs/source.json` — the SSOT — as well
+  as the generated `manifest.json`, because patching only the artefact would
+  have been reverted by the next `generate-configs` run. (#78)
+
+- **`vault_list` promised a tool that does not exist.** Its description told
+  the agent to find an alias "before a tool that consumes it". There is no
+  such tool here: `vault_list` is the only vault tool, the other eleven are
+  memory tools. A reviewer following that sentence looks for the consumer,
+  fails to find it, and reasonably asks what else is inaccurate. The new
+  wording states that no tool on this server returns a secret value — a
+  stronger privacy claim than the old one, with the advantage of being true.
+  Also added to the `WITHDRAWN` list in `test/descriptions.test.ts`, which
+  bans a retracted false claim corpus-wide; the guard was verified by
+  restoring the banned phrase and watching the suite go red. (#82)
+
+- **The README's privacy section heading** is now `## Privacy Policy`
+  verbatim, which is what the directory review looks for. (#78)
+
+### Added
+
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, byte-identical to the
+  canonical text. An earlier draft was silently abridged: it had lost the
+  clauses about avoiding contact through external channels and about the
+  interaction ban during a temporary suspension. Programmes that diff this
+  file against the canon would have seen a weakened enforcement ladder.
+- `funding.json` — fundingjson.org v1.0.0 manifest, validated against the real
+  schema. Required artefact for the FLOSS fund application.
+- `funding` field in `package.json`, so `npm fund` resolves.
+
+### Changed
+
+- **`.mcpbignore` no longer ships repository governance inside the bundle.**
+  `funding.json` and `CODE_OF_CONDUCT.md` were riding inside the `.mcpb` — a
+  fundraising manifest carrying the maintainer's email is not what a directory
+  reviewer expects to find in the artefact. Excluded along with `CHANGELOG.md`,
+  `Dockerfile`, `.dockerignore`, `glama.json` and `tsconfig.test.json`, which
+  were in there for no reason either. The bundle root is now exactly `LICENSE`,
+  `README.md`, `icon.png`, `manifest.json`, `package.json`.
+
+### Not in this release, tracked
+
+- `.github/FUNDING.yml` is deliberately held back. It lights up the Sponsor
+  button on a public repository the moment it merges, and the Sponsors tiers
+  are not configured — the button would point at an unfinished page.
+- `funding.json` still lacks the `wellKnown` provenance the spec wants when
+  the manifest host and the URL host differ. It cannot honestly be added yet:
+  `mnemoverse.com/.well-known/funding-manifest-urls` returns 404. Publishing
+  that file comes first; it gates the FLOSS fund submission, not this release.
+- The live server card at `mcp.mnemoverse.com` is served by a different
+  repository, so the `vault_list` wording there is fixed separately
+  (`mnemoverse-mcp-remote` #41) and needs a deploy, not this publish.
+
 ## [0.8.2] — 2026-08-13
 
 Dependency security pass: clears all 32 open Dependabot alerts (7 high, 22
