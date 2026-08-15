@@ -17,7 +17,7 @@ Memory that persists across sessions, projects, and tools — and improves with 
 
 ### 1. Get a free API key
 
-Sign up at [console.mnemoverse.com](https://console.mnemoverse.com) — takes 30 seconds, no credit card.
+Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
 ### 2. Connect to your AI tool
 
@@ -248,7 +248,7 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 - [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
-- [Console (get API key)](https://console.mnemoverse.com)
+- [Console (get API key)](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server)
 
 **Background reading**
 
