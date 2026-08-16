@@ -7,7 +7,7 @@
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 [![Glama quality](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server/badges/score.svg)](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server)
 
-Hosted memory for AI agents that learns and forgets. Feedback reranks the facts that help — a Rescorla-Wagner update on the prediction error, not a similarity score — and consolidation (HDBSCAN clustering, with Von Restorff protection so distinctive memories survive compression) keeps recall dense instead of unbounded. Recall fades by recency. One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
+Hosted memory for AI agents that learns which facts matter. Feedback reranks recall — a Rescorla-Wagner update on the prediction error, not a similarity score — so what helped rises and what misled sinks, and recall favors recent memories (an exponential recency boost with a ~30-day half-life). The engine also ships consolidation (HDBSCAN clustering, with Von Restorff protection so distinctive memories survive compression). One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
 
 Memory that persists across sessions, projects, and tools — and improves with use. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
 
@@ -26,7 +26,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=np
 **Claude Code** — add via CLI:
 
 ```bash
-claude mcp add mnemoverse \
+claude mcp add mnemoverse -s user \
   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY \
   -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 \
   -- npx -y @mnemoverse/mcp-memory-server@latest

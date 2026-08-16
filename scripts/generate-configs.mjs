@@ -178,13 +178,19 @@ function genVscodeDeepLink() {
 /**
  * Claude Code CLI command.
  *
- * Format: claude mcp add NAME -e KEY=VAL ... -- command args...
+ * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args...
+ *
+ * `-s user` is LOAD-BEARING: the CLI's default scope is `local`, which
+ * registers the server for the current project directory only — memory
+ * installed in one repo is silently absent in the next, the opposite of
+ * cross-tool memory. The user scope registers it once for every project.
+ * (History of how this shipped without the flag: git log on this function.)
  */
 function genClaudeCodeCli() {
   const envFlags = Object.entries(ENV_VALUES)
     .map(([k, v]) => `  -e ${k}=${v}`)
     .join(" \\\n");
-  return `claude mcp add ${source.name} \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
+  return `claude mcp add ${source.name} -s user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
 // NOTE: genSmitheryYaml() was removed on 2026-04-12 after an empirical
