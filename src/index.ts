@@ -1662,9 +1662,64 @@ server.registerTool(
  * the same message and the same exit code. The only other change to this module
  * is the `export` on `server`, which is inert when the file is run as a program.
  */
+/**
+ * Startup key probe — the fix for the invisible failure mode.
+ *
+ * Verified live on 0.8.3: with a GARBAGE key the server completes initialize,
+ * lists all twelve tools, and writes nothing to stderr — the 401 only appears
+ * mid-conversation, on the first real tool call. A user who mistyped the key
+ * sees a green connection and later reads the silent failure as "the product
+ * does not work" (Olya's assistant, 2026-08-16).
+ *
+ * So: if a key IS configured, verify it once at startup with the cheapest
+ * authenticated call and put the verdict on stderr, which MCP clients surface
+ * in their connection logs — the place a user actually looks. Three rules:
+ *
+ *  - NEVER exits and NEVER blocks connect(): keyless startup is documented
+ *    behaviour (registries boot the server to enumerate tools), and a network
+ *    blip must not take the server down. The probe runs after connect, in the
+ *    background.
+ *  - 401 gets a human sentence naming the env var. Other failures (network,
+ *    5xx) get a soft note — they say nothing about the key.
+ *  - stderr only. stdout belongs to the MCP protocol.
+ */
+function probeApiKeyInBackground(): void {
+  if (!API_KEY) return;
+  void (async () => {
+    try {
+      const res = await fetch(`${API_URL}/memory/stats`, {
+        headers: { "X-Api-Key": API_KEY },
+        signal: AbortSignal.timeout(10_000),
+      });
+      // Drain the body so the connection returns to the pool immediately —
+      // an unread body can hold the socket and makes the probe less "cheap"
+      // than advertised (Copilot, PR #91).
+      void res.body?.cancel();
+      if (res.status === 401 || res.status === 403) {
+        console.error(
+          `Mnemoverse: API key rejected (${res.status}). ` +
+            "Check MNEMOVERSE_API_KEY in your MCP client config — " +
+            "tool calls will fail until it is fixed. " +
+            "Keys start with mk_live_ and come from https://console.mnemoverse.com",
+        );
+      } else if (!res.ok) {
+        console.error(
+          `Mnemoverse: startup key check got HTTP ${res.status} — ` +
+            "this says nothing about your key; tool calls may still work.",
+        );
+      }
+      // 2xx: stay silent. A quiet startup is the healthy one.
+    } catch {
+      // Network error at startup proves nothing about the key. Say nothing:
+      // a scary stderr line on a flaky hotel wifi would be a false alarm.
+    }
+  })();
+}
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  probeApiKeyInBackground();
 }
 
 if (process.env.MNEMOVERSE_MCP_NO_AUTOSTART !== "1") {
