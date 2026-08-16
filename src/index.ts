@@ -1691,6 +1691,10 @@ function probeApiKeyInBackground(): void {
         headers: { "X-Api-Key": API_KEY },
         signal: AbortSignal.timeout(10_000),
       });
+      // Drain the body so the connection returns to the pool immediately —
+      // an unread body can hold the socket and makes the probe less "cheap"
+      // than advertised (Copilot, PR #91).
+      void res.body?.cancel();
       if (res.status === 401 || res.status === 403) {
         console.error(
           `Mnemoverse: API key rejected (${res.status}). ` +
