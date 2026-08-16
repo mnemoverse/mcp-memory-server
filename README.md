@@ -26,7 +26,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=np
 **Claude Code** — add via CLI:
 
 ```bash
-claude mcp add mnemoverse \
+claude mcp add mnemoverse -s user \
   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY \
   -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 \
   -- npx -y @mnemoverse/mcp-memory-server@latest

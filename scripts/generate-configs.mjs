@@ -178,13 +178,23 @@ function genVscodeDeepLink() {
 /**
  * Claude Code CLI command.
  *
- * Format: claude mcp add NAME -e KEY=VAL ... -- command args...
+ * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args...
+ *
+ * `-s user` is LOAD-BEARING, not styling. Claude Code's default scope is
+ * `local` — the server is registered for the current project directory only.
+ * Under that default a user installs memory in one repo, opens another, and
+ * the memory is silently gone: no error, the tools just are not there. That
+ * is the exact opposite of the one thing this product sells (one memory
+ * across everything), and it shipped in every install snippet until
+ * 2026-08-16, when Olya's assistant caught it while filming the setup for
+ * the tutorial video. The user scope registers the server once for every
+ * project.
  */
 function genClaudeCodeCli() {
   const envFlags = Object.entries(ENV_VALUES)
     .map(([k, v]) => `  -e ${k}=${v}`)
     .join(" \\\n");
-  return `claude mcp add ${source.name} \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
+  return `claude mcp add ${source.name} -s user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
 // NOTE: genSmitheryYaml() was removed on 2026-04-12 after an empirical
