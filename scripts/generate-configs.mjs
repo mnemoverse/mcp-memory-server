@@ -180,15 +180,11 @@ function genVscodeDeepLink() {
  *
  * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args...
  *
- * `-s user` is LOAD-BEARING, not styling. Claude Code's default scope is
- * `local` — the server is registered for the current project directory only.
- * Under that default a user installs memory in one repo, opens another, and
- * the memory is silently gone: no error, the tools just are not there. That
- * is the exact opposite of the one thing this product sells (one memory
- * across everything), and it shipped in every install snippet until
- * 2026-08-16, when Olya's assistant caught it while filming the setup for
- * the tutorial video. The user scope registers the server once for every
- * project.
+ * `-s user` is LOAD-BEARING: the CLI's default scope is `local`, which
+ * registers the server for the current project directory only — memory
+ * installed in one repo is silently absent in the next, the opposite of
+ * cross-tool memory. The user scope registers it once for every project.
+ * (History of how this shipped without the flag: git log on this function.)
  */
 function genClaudeCodeCli() {
   const envFlags = Object.entries(ENV_VALUES)
