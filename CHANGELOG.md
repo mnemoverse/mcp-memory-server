@@ -37,6 +37,44 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-08-16
+
+A patch under this file's own rules: one read-only probe (declared below, as
+the rules require), and text — the README the npm page renders.
+
+### Fixed
+
+- **A wrong API key now says so at startup, where the user looks.** Verified
+  live on 0.8.3: with a garbage key the server completed `initialize`, listed
+  all twelve tools, and wrote nothing to stderr — the 401 only surfaced
+  mid-conversation, on the first real tool call. A green connection followed
+  by silent failure reads as "the product does not work". Now, if a key is
+  configured, one read-only `GET /memory/stats` runs in the background AFTER
+  connect: 401/403 puts one human sentence on stderr naming
+  `MNEMOVERSE_API_KEY`; other HTTP failures get a soft note that says nothing
+  about the key; network errors stay silent (flaky wifi must not cry wolf);
+  a valid key keeps startup quiet. The probe never blocks and never exits —
+  keyless startup remains exactly as documented for registries. All three
+  paths verified by running the built server.
+- **README no longer claims a decay the ranking does not have.** "Recall
+  fades by recency" was first deleted as false, then restored in precise
+  form after an adversarial check proved the engine ships an always-on
+  exponential recency boost (weight 0.15, ~30-day half-life): "recall favors
+  recent memories". Consolidation is now described as shipping in the engine
+  rather than as what keeps hosted recall dense — on the hosted service it
+  is switched off.
+- **`claude mcp add` snippets now carry `-s user`.** The CLI's default scope
+  registers the server for the current project directory only, so memory
+  installed in one repo was silently absent in the next — the opposite of
+  cross-tool memory, in every install snippet we published. Fixed in the
+  generator, so README and all channel snippets changed together.
+
+### Changed
+
+- The two console links in the README carry UTM tags
+  (`utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server`) — npm
+  strips referrers, so these links are the only attribution that channel has.
+
 ## [0.8.3] — 2026-08-14
 
 Three claims about ourselves that were not true, all found by review rather
