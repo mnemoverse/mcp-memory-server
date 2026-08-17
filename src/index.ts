@@ -38,6 +38,10 @@ import {
   roomNamePhrase,
   withDomainEscapeLegend,
 } from "./names.js";
+// Every non-2xx becomes an instruction to the calling model instead of a raw
+// wire echo — see the header of src/errors.ts for why, and for what each status
+// actually means in this engine.
+import { ApiError, NetworkError } from "./errors.js";
 
 /**
  * What we know about the scope this read actually covered — a VALUE rather
@@ -121,30 +125,59 @@ const MAX_RESULT_CHARS = 24_000 * 4;
  * handlers may switch to 204 in the future even though today they return
  * a JSON body.
  *
- * @throws Error with message `Mnemoverse API error {status}: {body}` on non-2xx.
+ * @throws {@link ApiError} on non-2xx — whose message is the agent-facing
+ * explanation from src/errors.ts, with the raw body kept after it. The MCP SDK
+ * turns a thrown Error into `{isError: true, content: [{type: "text", text:
+ * error.message}]}`, so this message IS what the calling model reads; that is
+ * why it is written as instructions rather than as a wire dump.
  */
 async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
   if (!API_KEY) {
+    // The one failure that needs no request to diagnose — and the only one
+    // where the fix is "set the variable" rather than "replace its value".
+    // Kept distinct from the 401 sentence for exactly that reason.
     throw new Error(
-      "MNEMOVERSE_API_KEY is required for this operation. Get a free key at " +
-        "https://console.mnemoverse.com and set it in your MCP client config.",
+      "Mnemoverse: no API key is configured, so this tool cannot run. Tell the " +
+        "user to set MNEMOVERSE_API_KEY in their MCP client config — a free key " +
+        "takes about 30 seconds at https://console.mnemoverse.com/dashboard/keys " +
+        "and starts with mk_live_. Do not retry until it is set; every memory " +
+        "tool will fail the same way until then.",
     );
   }
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": API_KEY,
-      ...((options.headers as Record<string, string>) || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": API_KEY,
+        ...((options.headers as Record<string, string>) || {}),
+      },
+    });
+  } catch (cause) {
+    // `TypeError: fetch failed` is what a model used to read here, which is as
+    // uninstructive as the raw 401 body this change is about. Every existing
+    // caller that swallows a failure (the scope probes, the empty-read stats
+    // call) catches without inspecting the type, so wrapping changes nothing
+    // for them — it only changes what surfaces when nobody catches.
+    throw new NetworkError(method, path, cause);
+  }
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Mnemoverse API error ${res.status}: ${text}`);
+    throw new ApiError({
+      status: res.status,
+      body: text,
+      method,
+      path,
+      // Only the rate-limit middleware sets it, and only on the 429 that
+      // waiting actually clears — so its PRESENCE is evidence, not decoration.
+      retryAfter: res.headers.get("retry-after"),
+    });
   }
 
   // 204 No Content or empty body — return an empty object cast as T so
@@ -781,10 +814,16 @@ server.registerTool(
       // deployment cause outright, which is more than this boolean knows —
       // listed in CHANGELOG's "Known and NOT fixed here" rather than papered
       // over with a hedge.
-      const bare404 =
-        e instanceof Error &&
-        e.message.startsWith("Mnemoverse API error 404:") &&
-        !e.message.includes('"code"');
+      //
+      // NOW READ FROM STRUCTURED FIELDS. It used to be
+      // `e.message.startsWith("Mnemoverse API error 404:")` plus a substring
+      // hunt for `"code"` in the same string — a behavioural branch keyed to the
+      // exact prefix of a user-facing sentence. Rewording that sentence, which
+      // is precisely what src/errors.ts does, would have flipped this branch
+      // silently: every per-request 404 would have degraded into "the service
+      // does not support the feed yet". `ApiError.isBare404` asks the parsed
+      // envelope instead, so the prose and the branch can no longer collide.
+      const bare404 = e instanceof ApiError && e.isBare404;
       if (bare404) {
         return {
           content: [
