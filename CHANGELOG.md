@@ -37,6 +37,128 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+Text under this file's own rules: what a tool returns when it fails. No tool,
+parameter, annotation or route changes; no new request is made — the one new
+thing read off the wire is the `Retry-After` header of a response that had
+already arrived.
+
+### Fixed
+
+- **A failed tool call now tells the agent what to do, instead of echoing the
+  API's wire body.** Reported by Olya's assistant and confirmed with a real
+  `tools/call` against production: `memory_write` with a bad key returned
+  `Mnemoverse API error 401: {"code":"UNAUTHORIZED","message":"Invalid or
+  revoked API key.",…}` with `isError` set. The flag and the status were right
+  and the text was useless — the reader of a tool result is a MODEL, and that
+  string gives it nothing to act on, so the best case was relaying "error 401"
+  to the user and the common case was blaming the network. The same call now
+  answers:
+
+  > Mnemoverse: your API key was rejected (401). Tell the user their
+  > `MNEMOVERSE_API_KEY` is not valid — if it still reads `"mk_live_YOUR_KEY"`
+  > it is the placeholder from the docs and must be replaced with a real key
+  > from https://console.mnemoverse.com/dashboard/keys. Do not retry until they
+  > replace it.
+
+  Every class of failure gets the same three-part shape — what happened, whose
+  problem it is, whether to retry — and the raw body is kept underneath, still
+  carrying the literal `Mnemoverse API error <status>` that existing greps and
+  runbooks look for. Nothing about debugging gets worse.
+
+- **The status codes are told apart the way the ENGINE actually uses them, not
+  the way HTTP folklore does.** Read out of `mnemoverse-core/src/mnemo/api/`
+  rather than assumed, because two of the distinctions invert the advice:
+
+  - **403 is not a bad key.** Core returns it for `Room is archived`, `Not an
+    active member of this room`, `Read-only membership cannot write to this
+    room`, `Invalid room address` and `You do not own this room` — every one of
+    them with a perfectly valid key. So the 403 message names the permission,
+    points at `memory_list_rooms`, and states outright that the key is not the
+    problem. Lumping 403 in with 401 would have shipped a *more confident* lie
+    than the raw echo: a user sent to replace a key that had just identified
+    them correctly.
+  - **429 has three sources with opposite advice.** The per-minute limiter
+    sends `retryable: true` with `Retry-After` (waiting works); the daily quota
+    and the subscription guard send `retryable: false` (waiting does not — the
+    account needs a new day or an upgrade). The message reads that field: one
+    branch gives the real wait in seconds and caps the retry at one, the other
+    says waiting will not help and points at the usage page. A blanket "wait
+    and retry" would have been wrong for two of the three, and an agent looping
+    on the first is how a one-minute limit becomes a sustained one.
+  - **404 is a room or an endpoint, never a domain.** A domain holding nothing
+    reads as empty and never 404s, so "your domain is missing" is the wrong
+    guess an agent would otherwise make — the message rules it out by name.
+    Only a 404 whose body says *nothing at all* is diagnosed as
+    `MNEMOVERSE_API_URL` aimed at something that is not this API.
+  - **The engine has two error styles, and only one of them has a `code`.** Its
+    middleware writes the full `{code, message, retryable}` envelope, but every
+    route raising a FastAPI `HTTPException` — the whole of `rooms_routes.py`,
+    with no custom handler to normalise them — serialises to a bare
+    `{"detail": "Room not found."}`. The obvious "is there a `code`?" test would
+    therefore have told a user with a perfectly good config to go check
+    `MNEMOVERSE_API_URL` whenever a room lookup 404'd. The predicate asks
+    whether the body carried *either* field instead. (The pre-existing
+    `bare404` check had the same flaw — it hunted for the substring `"code"` —
+    but its only consumer, `/memory/recent`, is a middleware-envelope route, so
+    it never fired there. It does now, on a surface where it would have.)
+  - **5xx says it is ours.** Named as a Mnemoverse-side failure, with the
+    user's key, config and network explicitly cleared, one retry allowed, and
+    the instruction to carry on without memory rather than loop.
+  - 400/422 blames the arguments and forbids resending the same body; 409
+    explains a spent invite code; any other status admits it has no specific
+    guidance instead of inventing one.
+
+- **The two failures that never reached HTTP at all.** A missing
+  `MNEMOVERSE_API_KEY` now names the variable, the 30-second fix and the fact
+  that every tool will fail identically until it is set — kept deliberately
+  distinct from the 401 sentence, because "set a variable you never set" and
+  "replace a value you believe in" are different user actions. And a request
+  that got no response used to surface as `TypeError: fetch failed`; it now
+  says the service could not be reached, clears the key and the quota (no reply
+  arrived to implicate either), and separates a timeout from an unreachable
+  host by the one word where the advice differs.
+
+- **A behavioural branch is no longer keyed to a user-facing sentence.** The
+  recent-feed's "this endpoint is not deployed" degrade decided itself with
+  `e.message.startsWith("Mnemoverse API error 404:")`. Rewording that sentence
+  — which is this entire change — would have flipped the branch in silence, and
+  every per-request 404 would have degraded into a deployment claim about an
+  engine that had answered. Non-2xx responses are now an `ApiError` carrying
+  `status`, `body` and the parsed envelope, and the branch asks those fields.
+
+### Consistency with the 0.8.4 startup probe
+
+`probeApiKeyInBackground` treats 401 and 403 alike, and stays that way: it calls
+`GET /memory/stats`, which addresses no room, so a 403 there can only come from
+the auth layer. On a tool call the same status usually comes from a room the
+caller named. The two surfaces diverge on 403 for a reason, and agree where it
+matters — same `Mnemoverse:` opener, same variable name, same console origin.
+
+### Known and NOT fixed here
+
+- The five specific 403 clauses are selected by matching core's English error
+  messages. If core rewords one, that clause degrades to the generic 403
+  sentence — which is still true and still refuses to blame the key, but is
+  less useful. A machine-readable sub-code on the engine's 403s would remove
+  the coupling; there isn't one today.
+- `Retry-After` is parsed only in its integer-seconds form. The HTTP-date form
+  is legal and is deliberately left unparsed, degrading to "wait about a
+  minute" rather than risking a confidently wrong number of seconds.
+- Error bodies are truncated at 800 characters, announced in the text. A
+  gateway's HTML error page is not worth a model's context window.
+
+### Tests
+
+62 new cases in `test/errors.test.ts` and `test/errors-keyless.test.ts`, pinning
+the wording literally, because here the wording *is* the feature — a test that
+merely checked "the message mentions 401" would have passed for the raw echo
+that started this. Each class also asserts the wrong cause it must NOT suggest.
+Fire-tested: with the change reverted to the old raw echo, 41 tests go red,
+including the pre-existing recent-feed 404 test. `httpError()` in the harness
+grew an optional headers argument so the two 429 branches can both be reached.
+Verified end-to-end by running the built server over real stdio against
+production with a placeholder key, with no key, and with an unreachable host.
+
 ## [0.8.4] — 2026-08-16
 
 A patch under this file's own rules: one read-only probe (declared below, as
