@@ -37,6 +37,48 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-20
+
+A MINOR bump under this file's own rule: SHAPE changes — two tools removed —
+so this cannot be a patch, and the project is pre-1.0 so a MINOR bump is
+where a breaking change belongs.
+
+### Removed
+
+- **`memory_delete` and `memory_delete_domain`** — both tools removed
+  entirely: registration, handlers, input schemas, descriptions, and their
+  entries in `src/configs/source.json` (and the manifest.json/llms.txt/README
+  surfaces generated or written from it). Deletion is withdrawn from this
+  agent-facing surface to an administrative, REST-only operation.
+  Why: a core delete path destroyed learned Hebbian associations
+  tenant-wide (56,683 edges across 14 tenants in the logged incident
+  window); the remote MCP connector already excludes delete by design
+  (ADR-012); this npm package was the last agent-facing surface still
+  exposing it. Founder decision, 2026-08-20.
+
+### Changed
+
+- **Every remaining surface that referenced deletion now points at a
+  corrective write instead.** `memory_read`'s description no longer sends
+  callers to `memory_delete`; `memory_stats`'s description no longer says
+  "before a delete" (now "before writing to it"); the server instructions
+  (`SERVER_INSTRUCTIONS`) no longer mention either removed tool and instead
+  say: to correct a wrong or stale memory, write a fresh one — deletion is
+  an administrative operation, not a tool here.
+
+### Migration
+
+- The REST API's `DELETE /memory/atoms/{id}` and `DELETE /memory/domain/{domain}`
+  are unaffected and remain the way to delete, for administrative use.
+- To correct a wrong or stale memory from an MCP client, write a fresh one
+  with `memory_write` rather than deleting the old one. A non-destructive
+  write primitive that marks a memory as superseding an older one is
+  planned to replace the delete-for-update lifecycle; no date is promised
+  here, and no such tool exists yet.
+- If your integration calls `memory_delete` or `memory_delete_domain`
+  directly, those calls will fail against 0.9.0 — there is no compatibility
+  shim.
+
 ## [0.8.4] — 2026-08-16
 
 A patch under this file's own rules: one read-only probe (declared below, as
