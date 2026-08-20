@@ -63,14 +63,6 @@
       "description": "Show how many memories are stored, which domains exist, and the average valence and importance scores."
     },
     {
-      "name": "memory_delete",
-      "description": "Permanently delete a single memory by its atom_id."
-    },
-    {
-      "name": "memory_delete_domain",
-      "description": "Permanently delete every memory in a domain (requires an explicit confirm)."
-    },
-    {
       "name": "memory_create_room",
       "description": "Create a shared memory room — a space other people's assistants can read, and write too when invited with read_write scope, across Claude/ChatGPT/editors."
     },

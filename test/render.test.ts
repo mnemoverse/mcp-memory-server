@@ -3,10 +3,10 @@
  * 0.8.1 added to or removed from a result line.
  *
  * What this file guarantees, in the order the cases appear:
- * 1. Every item with an atom_id renders the FULL id — memory_feedback and
- *    memory_delete are uncallable without exact ids, and the tool
- *    description has promised them all along (the pre-#404 render never
- *    delivered any: the standing dead-id bug).
+ * 1. Every item with an atom_id renders the FULL id — memory_feedback is
+ *    uncallable without exact ids, and the tool description has promised
+ *    them all along (the pre-#404 render never delivered any: the standing
+ *    dead-id bug).
  * 2. created_at renders as a compact UTC date tag — a reader cannot
  *    reason about recency it cannot see.
  * 3. NO relevance score reaches a reader, on either surface, at any value
@@ -54,7 +54,7 @@ describe("formatReadItem", () => {
     expect(line).toContain("1. Retry with backoff fixed it (retry, backoff)");
     expect(line).toContain("[by codex · external]");
     expect(line).toContain("· 2026-08-01 21:04Z");
-    expect(line).toContain(`id: ${ID}`); // full, untruncated — feedback/delete need it
+    expect(line).toContain(`id: ${ID}`); // full, untruncated — feedback needs it
     // NO score, as of 0.8.1. There IS a relevance floor — core's
     // `min_relevance` defaults to 0.3 — and this comment used to say there was
     // none, which is the claim src/render.ts and the CHANGELOG both withdrew

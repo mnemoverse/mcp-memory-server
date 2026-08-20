@@ -330,15 +330,18 @@ server.registerTool(
     //      left the caller in 0.8.0 would leave the account in 0.8.1. The
     //      address in that shape is one our own output hands the model.
     //   2. For a caller who has been padding a domain for months, trimming
-    //      silently relocates new writes and orphans the old corpus — and
-    //      memory_delete_domain does NOT trim, so the same client can no
-    //      longer even name the shard it created.
+    //      silently relocates new writes and orphans the old corpus, and (at
+    //      the time this was written) memory_delete_domain did NOT trim, so
+    //      the same client could no longer even name the shard it created —
+    //      that tool was withdrawn to an administrative REST-only operation
+    //      on 2026-08-20, so this specific consequence no longer applies, but
+    //      the orphaned-corpus risk from silently relocating writes does.
     //
     // Both are behaviour changes, so they do not belong in a patch whose
-    // whole claim is that it only changes wording. Normalisation returns in
-    // 0.9.0 with delete_domain included, room addresses deliberately EXEMPT,
-    // and zero-width characters handled (JS trim() does not strip them —
-    // verified, contrary to what an earlier comment here asserted).
+    // whole claim is that it only changes wording. Normalisation, if it ever
+    // returns, needs room addresses deliberately EXEMPT and zero-width
+    // characters handled (JS trim() does not strip them — verified, contrary
+    // to what an earlier comment here asserted).
     const r = await apiFetch<{
       stored?: boolean;
       atom_id?: string | null;
@@ -423,10 +426,11 @@ server.registerTool(
           // score the same or lower" was asserted as fact and is probably
           // BACKWARDS — novelty decreases with similarity to the blocking
           // memory, so a reworded sentence is usually LESS similar and scores
-          // HIGHER. And the delete-then-write advice an earlier draft carried is
-          // impossible for a room write: the blocker is a room atom, which
-          // memory_delete cannot touch, as this file's own delete message says
-          // (reviews, 2026-08-08).
+          // HIGHER. And delete-then-write advice an earlier draft carried was
+          // impossible for a room write even when memory_delete still existed:
+          // the blocker is a room atom, which that tool could not touch either
+          // (reviews, 2026-08-08). Deletion is administrative-only now
+          // (2026-08-20), so this message never suggests it at all.
           text:
             `NOT STORED — nothing was saved.` +
             (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
@@ -464,7 +468,7 @@ server.registerTool(
   "memory_read",
   {
     description:
-      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback or memory_delete.",
+      "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
     inputSchema: {
       query: z
         .string()
@@ -1019,7 +1023,7 @@ server.registerTool(
   "memory_stats",
   {
     description:
-      "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before a delete, or when the user asks what you remember. Read-only — changes nothing.",
+      "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before writing to it, or when the user asks what you remember. Read-only — changes nothing.",
     inputSchema: {},
     annotations: {
       title: "Memory Statistics",
@@ -1047,9 +1051,11 @@ server.registerTool(
     const num = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");
     const dec = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : "unknown");
 
-    // THE surface two other tool descriptions send the reader to "to confirm
-    // the exact domain name before a delete" — so it has to be able to answer
-    // that, and until now it could not.
+    // THE surface this tool's own description sends the reader to, to
+    // confirm the exact domain name before writing to it — so it has to be
+    // able to answer that. (Until 2026-08-20 memory_delete_domain also sent
+    // readers here for the same reason, before deletion was withdrawn to an
+    // administrative REST-only operation; see CHANGELOG.)
     //
     // Quoting was tried, then withdrawn as a fix that wasn't one: safeInline
     // collapses and trims whitespace BEFORE the quotes go on, so " engineering"
@@ -1091,184 +1097,6 @@ server.registerTool(
           text: withDomainEscapeLegend(
             text,
             ...(Array.isArray(r?.domains) ? r.domains : []),
-          ),
-        },
-      ],
-    };
-  },
-);
-
-// --- Tool: memory_delete ---
-
-server.registerTool(
-  "memory_delete",
-  {
-    description:
-      "Permanently delete ONE memory by its atom_id — irreversible, the memory is gone for good. Use it to keep the memory trustworthy: prune a memory that is obsolete, superseded by a newer decision, or that you stored wrongly — and whenever the user asks to forget something. Get the atom_id from a memory_read result. Reaches your own domains only: memories in shared rooms CANNOT be deleted through this tool. To clear an entire topic at once, use memory_delete_domain instead.",
-    inputSchema: {
-      atom_id: z
-        .string()
-        .min(1)
-        .describe(
-          "The atom_id of the memory to delete (from memory_read results — each item has an id)",
-        ),
-    },
-    annotations: {
-      title: "Delete a Memory",
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-      openWorldHint: true,
-    },
-  },
-  async ({ atom_id }) => {
-    // Core API returns { deleted: <count>, atom_id }, so today a falsy
-    // `deleted` means the count came back 0 — nothing in the caller's own store
-    // carried that id.
-    //
-    // The check below is `!r?.deleted`, which is falsy-not-zero: a MISSING
-    // field lands in the same branch as a real 0. `apiFetch` turns a 204 or an
-    // empty body into `{}` (see its own note that FastAPI DELETE handlers may
-    // switch to 204), so under that response a successful delete would report
-    // "nothing was deleted". Unknown rendered as zero, then zero rendered as an
-    // absence claim — the same family as `updated_count ?? 0` in
-    // memory_feedback and `deleted ?? 0` in memory_delete_domain. Left as it
-    // stands and listed in CHANGELOG's "Known and NOT fixed here"; it is a
-    // behaviour fix, not a wording one.
-    const r = await apiFetch<{ deleted?: number; atom_id?: string }>(
-      `/memory/atoms/${encodeURIComponent(atom_id)}`,
-      { method: "DELETE" },
-    );
-
-    if (!r?.deleted) {
-      // NOT "no such memory". Deletion is scoped to the caller's OWN store —
-      // core has no room-scoped delete at all — so a room atom's id lands here
-      // even when the memory lives on in its room. This release made room ids
-      // MORE visible in read results, so an agent is now MORE likely to bring
-      // one here, ask to forget it, and be told it never existed while it stays
-      // (review, 2026-08-08). Every other empty branch in this file learned to
-      // state its boundary; the destructive one has to as well.
-      //
-      // The boundary claim is the ONLY claim: "this delete never reached it"
-      // is knowable from here (room stores are out of this tool's reach by
-      // construction). "it still exists" — a previous wording — is not: the
-      // room owner may have deleted it since, and this handler has no way to
-      // check (review, 2026-08-08).
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text:
-              `Nothing was deleted: no memory with id ${atom_id} in your own domains. ` +
-              `Note that memories in shared rooms CANNOT be deleted through this tool — ` +
-              `if that id came from a room, this delete never reached it.`,
-          },
-        ],
-      };
-    }
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Deleted memory ${atom_id}.`,
-        },
-      ],
-    };
-  },
-);
-
-// --- Tool: memory_delete_domain ---
-
-server.registerTool(
-  "memory_delete_domain",
-  {
-    description:
-      "Permanently delete EVERY memory in one domain — irreversible, and far more sweeping than memory_delete. This is a bulk wipe: run it only when the user asks for it (e.g. 'forget everything about project X') or has explicitly confirmed a wipe you proposed — never on your own judgment alone. First run memory_stats to confirm the exact domain name, then pass it together with confirm=true (a deliberate safety interlock). Names match byte-for-byte, including case, and shared rooms cannot be wiped through this tool. For a single wrong or stale memory, memory_delete is the right tool.",
-    inputSchema: {
-      domain: z
-        .string()
-        .min(1)
-        .max(200)
-        .describe(
-          "The domain namespace to wipe (e.g., 'project:old', 'experiments-2025'). Must match exactly.",
-        ),
-      confirm: z
-        .literal(true)
-        .describe(
-          "Must be exactly true to proceed. Acts as a safety interlock against accidental invocation.",
-        ),
-    },
-    annotations: {
-      title: "Delete an Entire Memory Domain",
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-      openWorldHint: true,
-    },
-  },
-  // The `confirm: z.literal(true)` in the input schema is the safety
-  // interlock — Zod rejects any call without confirm === true before it
-  // reaches this handler, so no runtime re-check is needed here.
-  async ({ domain }) => {
-    const r = await apiFetch<{ deleted?: number; domain?: string }>(
-      `/memory/domain/${encodeURIComponent(domain)}`,
-      { method: "DELETE" },
-    );
-
-    // `?? 0` again: a missing `deleted` field becomes 0 and then becomes the
-    // "NOTHING was deleted" claim below. Core sends the count, so this is not
-    // reachable through core today — recorded with the other two in CHANGELOG's
-    // "Known and NOT fixed here".
-    const count = r?.deleted ?? 0;
-    // The name of a store on a DESTRUCTIVE confirmation, so it is printed
-    // exactly or not at all. safeInline named a different store than the one
-    // acted on: wiping `" project x"` confirmed `"project x"`, and the very next
-    // clause tells the reader that names match byte-for-byte. When the name
-    // cannot be reproduced the sentences fall back to naming nothing, which
-    // still leaves them true.
-    //
-    // NOT called `wiped`, which is what it was: on the zero branch nothing was
-    // wiped, and the value is whatever the server echoed — core echoes the path
-    // parameter back, so it equals what we sent, but a server that echoed
-    // something else would have this handler name a store the caller never
-    // passed, one clause before telling them names match byte-for-byte. The
-    // fallback to `domain` is the value that actually went over the wire.
-    const reportedDomain = r?.domain ?? domain;
-    const reportedName = domainPhrase(reportedDomain, "the domain you passed");
-
-    // Zero is NOT a successful wipe, and this line used to read like one.
-    // Core echoes back the caller's own string, so "Deleted 0 memories from
-    // domain 'Project X'" implies a domain that existed and is now empty. The
-    // casing trap runs in this direction too: the user says "forget everything
-    // about project X", the agent passes "Project X", gets a success-shaped
-    // line, reports done — and the atoms live on under "project x" (review,
-    // 2026-08-08). This release built the diagnosis for exactly that and had
-    // applied it only to reads.
-    if (count === 0) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: withDomainEscapeLegend(
-              `NOTHING was deleted — no memories matched domain ${reportedName} in your own ` +
-                `store. Names match byte-for-byte, so check the spelling and case against ` +
-                `memory_stats before reporting this as done. Shared rooms cannot be wiped ` +
-                `through this tool at all.`,
-              reportedDomain,
-            ),
-          },
-        ],
-      };
-    }
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: withDomainEscapeLegend(
-            `Deleted ${count} ${count === 1 ? "memory" : "memories"} from domain ${reportedName}.`,
-            reportedDomain,
           ),
         },
       ],
