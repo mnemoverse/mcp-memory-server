@@ -24,9 +24,11 @@
  *
  * Deliberately NOT normalising: core matches domains byte-for-byte and rejects
  * non-canonical room addresses on purpose. Cleaning input here silently moves
- * data and defeats a security guard. Normalisation belongs in 0.9.0, together
- * with memory_delete_domain, with room addresses exempt, and with zero-width
- * characters handled — `trim()` does not strip those.
+ * data and defeats a security guard. Normalisation belongs in a future
+ * release, with room addresses exempt, and with zero-width characters
+ * handled — `trim()` does not strip those. (memory_delete_domain, once named
+ * here as a second surface needing the same treatment, was withdrawn
+ * 2026-08-20 — deletion is administrative-only now.)
  */
 
 export interface ReadArgs {

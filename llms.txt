@@ -25,7 +25,7 @@ Parameters:
 - since / until (ISO-8601 strings, optional): inclusive created_at bounds; naive = UTC.
 - exclude_author (string, optional): drop memories written by this author principal. Results never show a principal, so only pass one known from elsewhere (e.g. the REST API); a guess like "me" silently filters nothing.
 
-Returns: List of memories ranked best-match-first (no numeric score is shown) with content, concepts, domain, author tag, created_at, and id (pass ids to memory_feedback / memory_delete).
+Returns: List of memories ranked best-match-first (no numeric score is shown) with content, concepts, domain, author tag, created_at, and id (pass ids to memory_feedback). To correct a wrong or stale memory, write a fresh one with memory_write — deletion is an administrative operation, not available through this server.
 
 ### memory_list_recent
 
@@ -56,23 +56,6 @@ Get memory statistics — total count, episodes vs prototypes, Hebbian concept-c
 Parameters: none
 
 Returns: {total_atoms, episodes, prototypes, hebbian_edges, domains, avg_valence, avg_importance}
-
-### memory_delete
-Permanently delete ONE memory by its atom_id — irreversible. Reaches your own domains only: memories in shared rooms cannot be deleted through this tool.
-
-Parameters:
-- atom_id (string, required): The atom_id of the memory to delete (from memory_read results — each item has an id).
-
-Returns: Confirmation of the delete, or a note that nothing was deleted.
-
-### memory_delete_domain
-Permanently delete EVERY memory in one domain — an irreversible bulk wipe. Names match byte-for-byte, including case; shared rooms cannot be wiped through this tool.
-
-Parameters:
-- domain (string, required): The domain namespace to wipe. Must match exactly.
-- confirm (boolean, required): Must be exactly true — a deliberate safety interlock.
-
-Returns: The deleted count, or a note that nothing matched.
 
 ### memory_create_room
 Create a SHARED memory room — a space other people's assistants can read, and write too when their invite granted read_write (the default scope). Pass the returned address as the domain on memory_write/memory_read to use it.
