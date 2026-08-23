@@ -40,7 +40,15 @@ git history and the GitHub releases are the record.
 Text under this file's own rules: what a tool returns when it fails. No tool,
 parameter, annotation or route changes; no new request is made — the one new
 thing read off the wire is the `Retry-After` header of a response that had
-already arrived.
+already arrived. ONE disclosed behaviour correction rides along, because
+hiding it under "text" would abuse this file's own definition: the feed's
+endpoint-absent classifier now keys on the engine's error CODE being absent
+(and recognises the framework router's literal defaults), where it previously
+keyed on total silence — so against a deployment that does not serve
+`/memory/recent`, whose real answer is `{"detail":"Not Found"}`, the feed
+degrades gracefully again instead of surfacing room guidance. Same decision
+the branch always intended, now made against the body production actually
+sends.
 
 ### Fixed
 
