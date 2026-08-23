@@ -60,6 +60,14 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Trust boundary (adversarial review F1): every gate below lives in THIS
+    # file, and GitHub runs the file at the pushed tag's commit — so the gates
+    # stop mistakes, not a write-access actor who tags a branch carrying a
+    # gutted copy. The half that closes that hole lives in repo SETTINGS, not
+    # here: protect this `release` environment (required reviewers and/or
+    # deployment tag rules) and keep NPM_TOKEN as an environment secret; add a
+    # ruleset restricting who may create v* tags.
+    environment: release
     permissions:
       # contents:write — needed to create the GitHub release.
       # id-token:write — required by `mcp-publisher login github-oidc`.
@@ -155,6 +163,12 @@ jobs:
             found && /^## \[/   { exit }
             found               { print }
           ' CHANGELOG.md > "$NOTES"
+          # A flipped header with no body (or a header-like string in prose)
+          # would produce an empty section and defeat the gate vacuously.
+          if ! grep -q '[^[:space:]]' "$NOTES"; then
+            echo "::error::the CHANGELOG section for $VERSION is empty — write the entry before tagging"
+            exit 1
+          fi
           {
             echo ""
             echo "- npm: https://www.npmjs.com/package/@mnemoverse/mcp-memory-server"
@@ -210,10 +224,13 @@ jobs:
             *'"serverInfo"'*'"name":"mnemoverse-memory"'*) echo "packed bin: handshake ok" ;;
             *) echo "::error::the packed tarball's bin entry did not complete an MCP initialize"; exit 1 ;;
           esac
-          rm -f "$TARBALL"
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
 
+      # Publishing the TARBALL (not the directory) ships byte-for-byte what the
+      # smoke just verified; a directory publish would re-pack and re-run
+      # lifecycle scripts, reopening a gap between tested and shipped.
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish "$TARBALL" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -231,23 +248,34 @@ jobs:
       - name: Publish to Official MCP Registry
         run: ./mcp-publisher publish
 
+      # Post-publish OBSERVATION, not a gate: `mcp-publisher publish` above has
+      # already failed hard if the upload failed. This step only confirms
+      # propagation — and it must not strand the release: it used to sit as a
+      # hard failure between npm publish and the GitHub release, so one slow
+      # propagation left no release page and no .mcpb asset, and a re-run died
+      # at npm publish (version exists, 403). Poll, then degrade to a warning.
       - name: Verify the registry entry shows the new version
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           VERSION="${TAG#v}"
-          echo "Waiting a few seconds for the registry to propagate..."
-          sleep 3
-          RESULT="$(curl -sS "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mnemoverse%2Fmcp-memory-server/versions/$VERSION")"
-          echo "$RESULT" | python3 -m json.tool
-          echo "$RESULT" | python3 -c "
+          URL="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mnemoverse%2Fmcp-memory-server/versions/$VERSION"
+          for i in $(seq 1 10); do
+            RESULT="$(curl -sS "$URL" || true)"
+            if echo "$RESULT" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           srv = d['server']
-          assert srv['version'] == '$VERSION', f\"registry version {srv['version']} != $VERSION\"
+          assert srv['version'] == '$VERSION'
           print(f'✓ Registry shows {srv[\"name\"]}@{srv[\"version\"]}')
-          "
+          " 2>/dev/null; then
+              exit 0
+            fi
+            echo "attempt $i/10: not visible yet, waiting 6s..."
+            sleep 6
+          done
+          echo "::warning::registry entry for $VERSION not visible after 60s — check https://registry.modelcontextprotocol.io manually; NOT failing the release"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -273,5 +301,8 @@ jobs:
             echo "::warning::DOCS_DISPATCH_TOKEN not set — the docs site will catch up via its daily cron"
             exit 0
           fi
-          gh api repos/mnemoverse/mnemoverse-docs/dispatches -f event_type=mcp-release
-          echo "✓ dispatched mcp-release to mnemoverse-docs"
+          if gh api repos/mnemoverse/mnemoverse-docs/dispatches -f event_type=mcp-release; then
+            echo "✓ dispatched mcp-release to mnemoverse-docs"
+          else
+            echo "::warning::dispatch failed (expired/revoked DOCS_DISPATCH_TOKEN?) — the docs cron will catch up within a day"
+          fi
