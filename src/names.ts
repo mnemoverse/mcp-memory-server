@@ -176,9 +176,12 @@ export function roomNamePhrase(name: unknown): string {
 }
 
 /**
- * The `Domains:` line of memory_stats — the surface two tool descriptions send
- * the reader to "to confirm the exact domain name before a delete", which it
- * could not do while the names went through `safeInline`.
+ * The `Domains:` line of memory_stats — the surface this tool's own
+ * description sends the reader to "to confirm the exact domain name before
+ * writing to it", which it could not do while the names went through
+ * `safeInline`. (Until 2026-08-20, `memory_delete_domain`'s description sent
+ * readers here for the same reason, before deletion was withdrawn to an
+ * administrative REST-only operation.)
  *
  * A name that cannot be printed exactly is COUNTED, never silently dropped:
  * dropping it would make this list assert that a store does not exist, on the

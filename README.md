@@ -203,8 +203,6 @@ If it doesn't remember: check that the client was fully restarted and the config
 | `memory_list_recent` | List newest memories first — no query; `since`/`until` bounds (inclusive) + cursor paging |
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
-| `memory_delete` | Permanently delete a single memory by `atom_id` |
-| `memory_delete_domain` | Wipe an entire domain (requires `confirm: true` safety interlock) |
 | `memory_create_room` | Create a shared memory room; its address works as a `domain` on write/read |
 | `memory_invite_to_room` | Mint a one-time invite (code + link) for a room you own |
 | `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
@@ -277,7 +275,6 @@ What each tool sends:
 | `memory_read` | the `query`, plus any filters: `domain`, `since`/`until`, `exclude_author`, `top_k`, `order_by` |
 | `memory_list_recent` | the feed filters: `domain`, `since`/`until`, `exclude_author`, `limit`, `cursor` |
 | `memory_feedback` | the `atom_ids` being rated and the `outcome` score |
-| `memory_delete` / `memory_delete_domain` | the `atom_id` / `domain` being deleted |
 | `memory_create_room` | the room `name` and `description` |
 | `memory_invite_to_room` | the `room_id`, invite `scope`, and expiry |
 | `memory_join_room` | the invite `code` |
@@ -288,7 +285,7 @@ One thing goes out that you did not explicitly request: since 0.8.1, when a sear
 | | |
 |---|---|
 | **Privacy Policy** | <https://mnemoverse.com/privacy> |
-| **Retention & deletion** | delete one memory with `memory_delete`, or an entire namespace with `memory_delete_domain` |
+| **Retention & deletion** | correct a wrong or stale memory by writing a fresh one; deletion is an administrative operation on the REST API, not exposed through this MCP server |
 | **Contact** | hello@mnemoverse.com |
 
 ## License

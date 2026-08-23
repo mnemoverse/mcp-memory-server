@@ -6,8 +6,10 @@
  * connected model's system prompt, so every sentence in them is shipped
  * behaviour — and nine of this release's own fixes ARE description sentences:
  * the top_k not-a-hard-cap warning, the exclude_author not-usable-yet warning,
- * the room boundaries on feedback/delete/delete_domain, the importance-gate
- * sentence on memory_write, the unscoped-reads-never-cover-rooms rule. Until
+ * the room boundary on feedback, the importance-gate sentence on memory_write,
+ * the unscoped-reads-never-cover-rooms rule. (The room boundaries this file
+ * once also pinned on memory_delete/memory_delete_domain went with those
+ * tools on 2026-08-20 — deletion is administrative-only now.) Until
  * this file, none of that was asserted anywhere: a fire-drill made 11
  * description sabotages — inversions, deletions, restorations of withdrawn
  * claims — and the suite stayed green through all of them (tests-lens F1,
@@ -125,20 +127,6 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain(
       "rating a memory that lives in a shared room silently does nothing",
     );
-  });
-
-  it("memory_delete names its boundary: room memories cannot be deleted here", () => {
-    const d = description("memory_delete");
-    expect(d).toContain("Reaches your own domains only");
-    expect(d).toContain(
-      "memories in shared rooms CANNOT be deleted through this tool",
-    );
-  });
-
-  it("memory_delete_domain names byte-for-byte matching and the room boundary", () => {
-    const d = description("memory_delete_domain");
-    expect(d).toContain("Names match byte-for-byte, including case");
-    expect(d).toContain("shared rooms cannot be wiped through this tool");
   });
 
   it("vault_list promises aliases only — the value is never returned", () => {

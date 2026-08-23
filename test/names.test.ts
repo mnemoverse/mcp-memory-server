@@ -205,7 +205,7 @@ describe("formatDomainList — the memory_stats line", () => {
     expect(line).toBe('" engineering", "engineering"');
   });
 
-  it("supports the byte-exact check memory_delete_domain sends the reader here for", () => {
+  it("supports the byte-exact check memory_stats' own description sends the reader here for", () => {
     for (const name of [" project x", "Проект", "eng\u200b"]) {
       // A single-name list IS the literal, so the check that description
       // promises can be run mechanically: decode what was printed, then compare
