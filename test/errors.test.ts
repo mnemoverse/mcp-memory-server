@@ -165,13 +165,34 @@ describe("a 403 names the permission, and clears the API key by name", () => {
     },
   );
 
-  it("an unrecognised 403 still refuses to blame the key, and says so plainly", async () => {
-    // A body this client cannot parse — a proxy's HTML, say. The specific
-    // clause is unavailable; the honest half is not.
+  it("an unrecognised 403 names no culprit at all — not the key, not permissions", async () => {
+    // A body this client cannot parse — a proxy's HTML, say. The engine may
+    // never have seen this request, so the one thing this branch must NOT do
+    // is assert that the key "identified the account fine": that is a
+    // confident cause for a refusal whose author is unknown, the exact
+    // failure mode this module exists to avoid (CodeRabbit caught the first
+    // version of this branch doing it).
     mcp.on(READ, httpError(403, "<html>Forbidden</html>"));
 
     const res = await mcp.call("memory_read", { query: "x" });
 
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("did not speak this API's error language");
+    expect(res.text).toContain("cannot tell WHO refused it");
+    expect(res.text).not.toContain("The API key is NOT the problem");
+    expect(res.text).not.toContain("permission decision");
+    expect(res.text).not.toContain("your API key was rejected");
+  });
+
+  it("an engine 403 whose message matches no clause keeps the confident half", async () => {
+    // The engine DID speak (envelope present) — the key really did identify
+    // the account, so the confident sentence stays even when no specific
+    // room clause matches.
+    mcp.on(READ, httpError(403, envelope("FORBIDDEN", "Operation not allowed for this plan", false)));
+
+    const res = await mcp.call("memory_read", { query: "x" });
+
+    expect(res.isError).toBe(true);
     expect(res.text).toContain("The API key is NOT the problem");
     expect(res.text).toContain("tell the user exactly what was refused");
     expect(res.text).toContain("Do not retry the same call");

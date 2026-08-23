@@ -155,9 +155,24 @@ function has(message: string | undefined, needle: string): boolean {
   return (message ?? "").toLowerCase().includes(needle);
 }
 
-/** 403: the key was accepted and then the request was refused. Name WHICH
- *  refusal, from the engine's own message, and never blame the key. */
+/** 403: when the ENGINE refused, the key was accepted and then the request
+ *  was refused — name WHICH refusal, from the engine's own message, and never
+ *  blame the key. But that first clause is only known when the engine actually
+ *  spoke: a proxy, a WAF or a tunnel also answers 403, in HTML, and asserting
+ *  "the key identified the account fine" about a response the engine may never
+ *  have seen is exactly the confident wrong cause this module exists to avoid. */
 function explain403(env: ErrorEnvelope): string {
+  if (saidNothing(env)) {
+    return (
+      "Mnemoverse: this request was refused (403) by something that did not " +
+      "speak this API's error language — the body carries neither of the two " +
+      "shapes the engine produces. That points at a proxy, a gateway, or a " +
+      "MNEMOVERSE_API_URL aimed somewhere unexpected, and the engine may never " +
+      "have seen the request — so do not blame the key and do not blame room " +
+      "permissions: this client cannot tell WHO refused it. Quote the detail " +
+      "below to the user, and do not retry until the path to the API is explained."
+    );
+  }
   const m = env.message;
   const cause = has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +
