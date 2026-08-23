@@ -167,6 +167,24 @@ test. `httpError()` in the harness
 grew an optional headers argument so the two 429 branches can both be reached.
 Verified end-to-end by running the built server over real stdio against
 production with a placeholder key, with no key, and with an unreachable host.
+### Changed
+
+- **The description claims are strong again, because they are true again (#95).**
+  This PR started life on 2026-08-19 as a removal: the read path applied its
+  feedback and recency adjustments after ordering and after truncation, so the
+  advertised re-ranking never changed what came back, and the honest move was
+  to stop saying it. The fork in that PR's own body — "or fix the code, and the
+  wording comes back stronger" — is what actually happened: the engine now
+  applies those adjustments before the cut (live in production 2026-08-23,
+  verified against production with no regression). So the README says "feedback
+  re-ranks recall" again, now as a statement of fact. Two claims did NOT come
+  back, because they were false for a different reason: "lets the rest fade" /
+  "learns and forgets" implied a time-decay or deletion that does not exist —
+  unhelpful memories are out-ranked, not erased, and deletion is
+  administrative-only since 0.9.0. The recency half-life magnitude also stays
+  out: it is a current tuning value, not a contract, and public copy carries no
+  magnitudes. Text-only — a PATCH by this file's own rule, riding the next
+  release.
 
 ## [0.9.0] — 2026-08-20
 
