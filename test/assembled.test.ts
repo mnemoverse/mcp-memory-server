@@ -80,8 +80,6 @@ const WRITE = "POST /memory/write";
 const STATS = "GET /memory/stats";
 const ROOMS = "GET /memory/rooms";
 const FEEDBACK = "POST /memory/feedback";
-const del = (id: string) => `DELETE /memory/atoms/${encodeURIComponent(id)}`;
-const wipe = (d: string) => `DELETE /memory/domain/${encodeURIComponent(d)}`;
 
 /** One live room, in the shape core returns. */
 const ROOM = {
@@ -918,64 +916,6 @@ const SITUATIONS: readonly Situation[] = [
       // Causes are offered as possibilities. "Most often that means…" was a
       // statistic nobody has.
       expect(text).toMatch(/Possible causes/);
-    },
-  },
-  {
-    id: "n",
-    what: "memory_delete on an id that is not in the caller's store",
-    tool: "memory_delete",
-    args: { atom_id: "atom_room_9" },
-    routes: { [del("atom_room_9")]: { deleted: 0 } },
-    bounds: { surface: "other", boundedBy: /in your own domains/ },
-    meaning(text) {
-      // NOT "no such memory". Deletion is scoped to the caller's own store and
-      // core has no room-scoped delete at all, so a room atom's id lands here
-      // while the memory may live on in its room — and this release made room
-      // ids MORE visible in read results. The line claims only the boundary:
-      // "this delete never reached it" is knowable; "it still exists" (the
-      // previous wording) was not — the room owner may have deleted it since
-      // (truth review F12).
-      expect(text).toContain("atom_room_9");
-      expect(text).toMatch(/CANNOT be deleted through this tool/);
-      expect(text).toMatch(/this delete never reached it/);
-      expect(text).not.toMatch(/still exists/);
-      expect(text).not.toMatch(/never existed|no such memory/i);
-    },
-  },
-  {
-    id: "o",
-    what: "memory_delete_domain matching zero rows",
-    tool: "memory_delete_domain",
-    args: { domain: "Project X", confirm: true },
-    routes: { [wipe("Project X")]: { deleted: 0, domain: "Project X" } },
-    bounds: { surface: "other", searched: "Project X", boundedBy: /in your own store/ },
-    meaning(text) {
-      // Zero is not a successful wipe. "Deleted 0 memories from domain 'Project
-      // X'" implied a domain that existed and is now empty — so the user says
-      // "forget everything about project X", the agent passes "Project X", reads
-      // a success-shaped line, reports done, and the atoms live on under
-      // "project x".
-      expect(text.startsWith("NOTHING was deleted")).toBe(true);
-      expect(text).not.toMatch(/^Deleted 0/);
-      expect(text).toContain('domain "Project X"');
-      expect(text).toMatch(/before reporting this as done/);
-    },
-  },
-  {
-    id: "o2",
-    what:
-      "memory_delete_domain matching zero rows for a name whose last character is " +
-      "invisible — a destructive confirmation is where an unreproducible name is worst",
-    tool: "memory_delete_domain",
-    args: { domain: ZWSP_NAME, confirm: true },
-    routes: { [wipe(ZWSP_NAME)]: { deleted: 0, domain: ZWSP_NAME } },
-    bounds: { surface: "other", searched: ZWSP_NAME, boundedBy: /in your own store/ },
-    meaning(text) {
-      expect(text).toContain(`no memories matched domain ${ZWSP_LITERAL}`);
-      // The name carries an escape, so the answer must explain the escape —
-      // once. Asserted universally above; named here because this is the surface
-      // where a misread name deletes the wrong store.
-      expect(count(text, LEGEND)).toBe(1);
     },
   },
   {

@@ -20,10 +20,13 @@ import type { ReadScope, RoomScope } from "./scope.js";
  * - 500–800 chars; some clients (ChatGPT) weight the FIRST ~512 chars, so the
  *   core habit (read before answering, write on learning) is front-loaded.
  * - Active polarity: no "only when the user explicitly asks" gating.
- * - Mentions every tool family: read/write/stats/feedback, delete, rooms, vault.
+ * - Mentions every tool family: read/write/stats/feedback, rooms, vault.
+ * - No delete tool on this surface (2026-08-20): deletion was withdrawn to an
+ *   administrative REST-only operation, so the instructions point a model at
+ *   writing a corrected memory instead of asking to delete one.
  */
 export const SERVER_INSTRUCTIONS =
-  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain (memory_list_rooms); unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first; memory_delete prunes; memory_delete_domain wipes a domain, only with user go-ahead. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
+  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain (memory_list_rooms); unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first. To correct a wrong memory, write a fresh one — deletion is administrative, not a tool. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";

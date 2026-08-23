@@ -4,9 +4,9 @@
  * Kept out of index.ts (same move as teaching.ts) so tests can pin the
  * rendered contract: since the #404 temporal work, every item line
  * carries its id and created_at date WHENEVER the server provides them
- * (memory_feedback / memory_delete are uncallable without ids — the tool
- * description always promised them, the old render never delivered any;
- * a reader cannot reason about recency it cannot see). Legacy response
+ * (memory_feedback is uncallable without ids — the tool description always
+ * promised them, the old render never delivered any; a reader cannot reason
+ * about recency it cannot see). Legacy response
  * shapes without atom_id/created_at degrade gracefully: those parts of
  * the line are simply omitted.
  */
@@ -131,9 +131,9 @@ export function formatDateTag(createdAt?: string): string {
  * One memory_read result line:
  * `N. content (concepts) @"domain" [by X] · 2026-08-01 21:04Z\n   id: <uuid>`
  *
- * The id sits on its own indented line: full-width (feedback/delete need
- * the EXACT id, truncation would break them) without crowding the content
- * line a model actually reads.
+ * The id sits on its own indented line: full-width (feedback needs the
+ * EXACT id, truncation would break it) without crowding the content line a
+ * model actually reads.
  *
  * NO SCORE, as of 0.8.1 (Eduard's call). The line used to lead with the
  * server's `relevance` rendered as a percentage, and that was wrong twice

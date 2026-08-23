@@ -71,8 +71,6 @@ const FEEDBACK = "POST /memory/feedback";
 const JOIN = "POST /memory/rooms/join";
 const VAULT = "GET /vault/secrets";
 const CREATE_ROOM = "POST /memory/rooms";
-const del = (id: string) => `DELETE /memory/atoms/${encodeURIComponent(id)}`;
-const wipe = (d: string) => `DELETE /memory/domain/${encodeURIComponent(d)}`;
 const invites = (id: string) => `POST /memory/rooms/${encodeURIComponent(id)}/invites`;
 
 /** Which endpoints the handler consulted — the evidence behind its claim. */
@@ -104,12 +102,13 @@ describe("what a connecting client is actually told", () => {
     expect(mcp.client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
   });
 
-  it("advertises twelve tools by their public names", async () => {
+  it("advertises ten tools by their public names — no delete tool on this surface", async () => {
+    // memory_delete / memory_delete_domain removed 2026-08-20: deletion was
+    // withdrawn from the agent-facing surface to an administrative REST-only
+    // operation (see CHANGELOG). This surface never exposes a delete tool.
     const { tools } = await mcp.client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "memory_create_room",
-      "memory_delete",
-      "memory_delete_domain",
       "memory_feedback",
       "memory_invite_to_room",
       "memory_join_room",
@@ -817,44 +816,6 @@ describe("the load-bearing sentences, as returned", () => {
     );
   });
 
-  it("a delete that hit nothing does not claim the memory never existed", async () => {
-    mcp.on(del("atom_room_9"), { deleted: 0 });
-
-    const text = await mcp.callText("memory_delete", { atom_id: "atom_room_9" });
-
-    expect(text).toContain(
-      "Nothing was deleted: no memory with id atom_room_9 in your own domains.",
-    );
-    expect(text).toContain(
-      "memories in shared rooms CANNOT be deleted through this tool",
-    );
-    // The boundary claim only — this delete never reached the room. "it still
-    // exists" was a claim this handler cannot check: the room owner may have
-    // deleted it since (truth review F12, 2026-08-08).
-    expect(text).toContain("this delete never reached it");
-    expect(text).not.toContain("still exists");
-    expect(text).not.toContain("No memory found with id");
-  });
-
-  it("a zero-row domain wipe does not read like a successful wipe", async () => {
-    mcp.on(wipe("Project X"), { deleted: 0, domain: "Project X" });
-
-    const text = await mcp.callText("memory_delete_domain", {
-      domain: "Project X",
-      confirm: true,
-    });
-
-    expect(text.startsWith("NOTHING was deleted")).toBe(true);
-    // The casing trap runs in this direction too: the user says "forget
-    // everything about project X", the agent passes "Project X", and a
-    // success-shaped line lets it report done while the atoms live on under
-    // "project x". So the zero branch names the store it did NOT wipe.
-    expect(text).toContain('no memories matched domain "Project X" in your own store');
-    expect(text).toContain("Names match byte-for-byte");
-    expect(text).toContain("before reporting this as done");
-    expect(text).not.toMatch(/^Deleted 0/);
-  });
-
   it("zero feedback names the invisible cause first, and does not blame deletion", async () => {
     mcp.on(FEEDBACK, { updated_count: 0 });
 
@@ -968,8 +929,8 @@ describe("the load-bearing sentences, as returned", () => {
 describe("naming a store the reader has to reproduce", () => {
   it("memory_stats prints two names that differ only by a space as two names", async () => {
     // safeInline trimmed and collapsed before the quotes went on, so these
-    // printed identically and the list read like a tool bug — on the surface two
-    // other tool descriptions send the reader to for a byte-exact check.
+    // printed identically and the list read like a tool bug — on the surface
+    // this tool's own description sends the reader to for a byte-exact check.
     mcp.on(STATS, {
       total_atoms: 9,
       domains: [" engineering", "engineering", "проект:acme", "план:acme"],
@@ -1008,7 +969,9 @@ describe("naming a store the reader has to reproduce", () => {
     // Replaces a source count of `withDomainEscapeLegend(` occurrences, which
     // could not tell a wired call from a decorative one. Together with the two
     // tests above and the results pages ("the escape legend survives the size
-    // cap" below), this covers all six surfaces that can name a store.
+    // cap" below), this covers the surfaces that can name a store. (Until
+    // 2026-08-20 memory_delete_domain's wipe confirmation was a third anchor
+    // here; that surface is gone now that deletion is administrative-only.)
     mcp.on(READ, { items: [] }).on(STATS, { domains: [] });
     const filtered = await mcp.callText("memory_read", {
       query: "x",
@@ -1022,32 +985,6 @@ describe("naming a store the reader has to reproduce", () => {
     const feed = await mcp.callText("memory_list_recent", { domain: ZWSP_NAME });
     expect(feed).toContain(`No memories in ${ZWSP_LITERAL} yet.`);
     expect(legends(feed)).toBe(1);
-
-    mcp.reset().on(wipe(ZWSP_NAME), { deleted: 0, domain: ZWSP_NAME });
-    const wiped = await mcp.callText("memory_delete_domain", {
-      domain: ZWSP_NAME,
-      confirm: true,
-    });
-    expect(wiped).toContain(`no memories matched domain ${ZWSP_LITERAL}`);
-    expect(legends(wiped)).toBe(1);
-  });
-
-  it("a successful wipe carries the legend that decodes the store it names", async () => {
-    // The most destructive confirmation this client prints. The zero branch's
-    // legend is pinned by "carries the legend on every OTHER message" above;
-    // the SUCCESS branch's had no test at all,
-    // so deleting that one call left the whole suite green (tests-lens F4,
-    // 2026-08-08). A wipe confirmation whose store name carries an invisible
-    // character MUST explain that the printed \u200b is one character, not six.
-    mcp.on(wipe(ZWSP_NAME), { deleted: 3, domain: ZWSP_NAME });
-
-    const text = await mcp.callText("memory_delete_domain", {
-      domain: ZWSP_NAME,
-      confirm: true,
-    });
-
-    expect(text).toContain(`Deleted 3 memories from domain ${ZWSP_LITERAL}.`);
-    expect(legends(text)).toBe(1);
   });
 
   it("the plain-empty read is legended by its notes, not by a wrapper", async () => {
@@ -1080,21 +1017,6 @@ describe("naming a store the reader has to reproduce", () => {
     });
     expect(twin).toContain(ZWSP_LITERAL);
     expect(legends(twin)).toBe(1);
-  });
-
-  it("a destructive confirmation names the store it acted on, byte for byte", async () => {
-    // safeInline named a DIFFERENT store here: wiping `" project x"` confirmed
-    // `"project x"`, one clause before telling the reader names match
-    // byte-for-byte.
-    mcp.on(wipe(" project x"), { deleted: 3, domain: " project x" });
-
-    const text = await mcp.callText("memory_delete_domain", {
-      domain: " project x",
-      confirm: true,
-    });
-
-    expect(text).toBe('Deleted 3 memories from domain " project x".');
-    expect(text).not.toContain('domain "project x"');
   });
 
   it("prints an owner-chosen room name to a joiner exactly, and still injection-safe", async () => {

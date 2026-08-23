@@ -74,18 +74,26 @@ describe("server instructions", () => {
     }
   });
 
-  it("mention every tool family: read/write/stats/feedback + delete + rooms + vault", () => {
+  it("mention every tool family: read/write/stats/feedback + rooms + vault", () => {
     for (const tool of [
       "memory_read",
       "memory_write",
       "memory_stats",
       "memory_feedback",
-      "memory_delete",
       "room",
       "vault",
     ]) {
       expect(SERVER_INSTRUCTIONS.toLowerCase()).toContain(tool);
     }
+  });
+
+  it("has no delete tool on this surface, and points a correction at a fresh write instead", () => {
+    // memory_delete / memory_delete_domain removed 2026-08-20: deletion was
+    // withdrawn from the agent-facing surface to an administrative REST-only
+    // operation. The instructions must not name either retired tool, and must
+    // not carry the old delete-to-correct advice.
+    expect(SERVER_INSTRUCTIONS.toLowerCase()).not.toContain("memory_delete");
+    expect(SERVER_INSTRUCTIONS).toMatch(/write a fresh one/i);
   });
 
   it("front-load the core habit in the first 512 chars (ChatGPT weighting) and stay 500-800 chars", () => {
