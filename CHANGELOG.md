@@ -149,12 +149,13 @@ matters — same `Mnemoverse:` opener, same variable name, same console origin.
 
 ### Tests
 
-62 new cases in `test/errors.test.ts` and `test/errors-keyless.test.ts`, pinning
+New cases in `test/errors.test.ts` and `test/errors-keyless.test.ts`, pinning
 the wording literally, because here the wording *is* the feature — a test that
 merely checked "the message mentions 401" would have passed for the raw echo
 that started this. Each class also asserts the wrong cause it must NOT suggest.
-Fire-tested: with the change reverted to the old raw echo, 41 tests go red,
-including the pre-existing recent-feed 404 test. `httpError()` in the harness
+Fire-tested: with the change reverted to the old raw echo, the error-class
+tests go red across the board, including the pre-existing recent-feed 404
+test. `httpError()` in the harness
 grew an optional headers argument so the two 429 branches can both be reached.
 Verified end-to-end by running the built server over real stdio against
 production with a placeholder key, with no key, and with an unreachable host.

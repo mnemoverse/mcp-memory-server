@@ -23,8 +23,9 @@ on:
   # such a PR is blocked forever, with a green checks list and no way to fix it
   # from the PR itself. That is exactly what happened to #93 (src/errors.ts and
   # tests only): mergeStateStatus BLOCKED, `verify` absent from the rollup.
-  # The job is cheap (npm ci + a drift check), so it runs on every PR and the
-  # deadlock cannot recur. The push filter below stays: nothing requires it.
+  # The job is cheap — a checkout, a Node setup and one dependency-free
+  # generator run in --check mode, no npm ci — so it runs on every PR and
+  # the deadlock cannot recur. The push filter below stays: nothing requires it.
   pull_request:
   push:
     branches: [main]

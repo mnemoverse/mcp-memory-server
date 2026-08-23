@@ -168,7 +168,15 @@ async function apiFetch<T = unknown>(
   }
 
   if (!res.ok) {
-    const text = await res.text();
+    // `fetch()` resolves once HEADERS arrive; a connection reset during the
+    // body read rejects HERE, not in the catch above, and used to surface as
+    // a raw undici TypeError (Copilot, #93). Same failure, same wrapper.
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (cause) {
+      throw new NetworkError(method, path, cause);
+    }
     throw new ApiError({
       status: res.status,
       body: text,
@@ -186,7 +194,14 @@ async function apiFetch<T = unknown>(
     return {} as T;
   }
 
-  return (await res.json()) as T;
+  // Same mid-body exposure as the error path above: headers said 2xx, then
+  // the stream died or the JSON arrived truncated. Without the wrapper this
+  // surfaces as a raw SyntaxError/TypeError nobody explains.
+  try {
+    return (await res.json()) as T;
+  } catch (cause) {
+    throw new NetworkError(method, path, cause);
+  }
 }
 
 /**

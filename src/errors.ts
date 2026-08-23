@@ -147,12 +147,79 @@ export function parseErrorEnvelope(body: string): ErrorEnvelope {
  *  would print a confident and wrong number of seconds. */
 export function retryAfterSeconds(header: string | null | undefined): number | undefined {
   if (typeof header !== "string") return undefined;
-  const n = Number(header.trim());
-  return Number.isFinite(n) && n >= 0 && Number.isInteger(n) ? n : undefined;
+  // Digits only, because bare Number() answers confidently for inputs that are
+  // not delta-seconds at all: Number("") and Number("   ") are 0 ("Wait 0
+  // seconds"), Number("0x10") is 16, Number("3e1") is 30, and Number("1e21")
+  // prints as scientific notation in the wait text (Copilot + panel, #93).
+  // Six digits caps the printable wait at ~11 days; anything longer degrades
+  // to the honest vague form.
+  const s = header.trim();
+  if (!/^\d{1,6}$/.test(s)) return undefined;
+  return Number(s);
 }
 
 function has(message: string | undefined, needle: string): boolean {
   return (message ?? "").toLowerCase().includes(needle);
+}
+
+/**
+ * 401: which 401? The engine has more than one (panel, #93).
+ *
+ * The key-flavored bodies this client's data plane actually sends ("Missing
+ * API key. Send X-Api-Key header.", "Invalid or revoked API key." — both
+ * probed live against core.mnemoverse.com) get the founder-endorsed
+ * replace-the-key instruction. But core's routes.py also raises "Caller org
+ * not identified — a tenant API key is required to …" (401) when the
+ * deployment has no tenant identity for the caller — a static-auth
+ * self-host hitting a room tool is the everyday case — and there the key is
+ * VALID, so "replace it" would be a confident wrong cause. That clause runs
+ * FIRST because its sentence itself contains "API key": a naive key-mention
+ * test would misroute it. A message naming neither gets the honest generic
+ * form; silence is the same unknown-refuser case the 403 branch handles.
+ */
+function explain401(env: ErrorEnvelope): string {
+  const m = env.message;
+  if (has(m, "caller org not identified")) {
+    return (
+      "Mnemoverse: this deployment could not identify a tenant account for " +
+      "this request (401). The API key itself was not rejected — do NOT " +
+      "tell the user to replace it. Room and shared-memory operations need " +
+      "the multi-tenant backend, which a self-hosted or static-auth " +
+      "deployment does not have. Quote the detail below, and do not retry " +
+      "the same call against this deployment."
+    );
+  }
+  if (has(m, "api key") || has(m, "x-api-key")) {
+    // Wording endorsed by the founder, kept verbatim — this is the sentence
+    // the whole change was commissioned for. One widening, grounded in the
+    // docs: the setup pages ship more than one placeholder spelling
+    // (agent-setup.md uses mk_live_USER_KEY).
+    return (
+      "Mnemoverse: your API key was rejected (401). Tell the user their " +
+      "MNEMOVERSE_API_KEY is not valid — if it still reads a docs " +
+      'placeholder such as "mk_live_YOUR_KEY" or "mk_live_USER_KEY" (any ' +
+      "value they did not create at the console themselves) it must be " +
+      `replaced with a real key from ${KEYS_URL}. Do not retry until they ` +
+      "replace it."
+    );
+  }
+  if (m !== undefined || env.code !== undefined) {
+    return (
+      "Mnemoverse: the request was refused as unauthorized (401), and the " +
+      "engine's own explanation is in the detail below — quote it to the " +
+      "user rather than guessing. Do not assume the API key is wrong: the " +
+      "message did not say that. Do not retry the same call unchanged."
+    );
+  }
+  return (
+    "Mnemoverse: something answered 401 without speaking this API's error " +
+    "language — the body carries neither of the shapes the engine " +
+    "produces, so the refuser may be a proxy, a gateway, or a " +
+    "MNEMOVERSE_API_URL aimed somewhere unexpected, and the engine may never " +
+    "have seen the request. Do not tell the user their key is wrong — this " +
+    "client cannot tell WHO refused. Quote the detail below and check the " +
+    "path to the API first."
+  );
 }
 
 /** 403: when the ENGINE refused, the key was accepted and then the request
@@ -223,17 +290,58 @@ function saidNothing(env: ErrorEnvelope): boolean {
   return env.code === undefined && env.message === undefined;
 }
 
-/** 404: a room that is not there, or a path the deployment does not serve. */
+/**
+ * Did the ENGINE answer this 404 — or just the framework's router?
+ *
+ * Core registers no HTTPException handler, so an unmatched route is answered
+ * by Starlette's literal default `{"detail":"Not Found"}` (verified live
+ * against production) — a body with a message but no code, which
+ * `saidNothing` alone would mistake for an engine answer (Copilot + panel,
+ * #93). Every 404 the data plane actually sends is a MnemoError carrying a
+ * code. Match the router defaults case-sensitively so engine prose that
+ * merely contains "not found" cannot collide.
+ */
+function engineSilentOn404(env: ErrorEnvelope): boolean {
+  return (
+    saidNothing(env) ||
+    (env.code === undefined &&
+      (env.message === "Not Found" || env.message === "Method Not Allowed"))
+  );
+}
+
+/**
+ * 404: three producers with three different honest answers (panel, #93).
+ *
+ * (1) POST /memory/rooms/join — the engine's "Invite code not found." No
+ *     room address was involved and memory_list_rooms cannot help a
+ *     non-member, so the room story would be a confident wrong cause.
+ * (2) An engine 404 carrying a code — every 404 the data plane sends is a
+ *     MnemoError with one — is about something the request addressed,
+ *     usually a room.
+ * (3) No code — the router default, a foreign API, a proxy, or silence: the
+ *     ENGINE did not answer this, so point at the endpoint and the base URL,
+ *     not at rooms.
+ */
 function explain404(f: ApiFailure, env: ErrorEnvelope): string {
-  if (saidNothing(env)) {
+  if (f.path === "/memory/rooms/join") {
     return (
-      `Mnemoverse: the API answered 404 for ${f.method} ${f.path} with a body ` +
-      "that carries no error information at all — neither of the two shapes this " +
-      "API produces. That points at the ENDPOINT rather than at a missing " +
-      "memory: MNEMOVERSE_API_URL is aimed at something that is not the " +
-      "Mnemoverse API, or this server is newer than the deployment it is talking " +
-      "to. Tell the user to check MNEMOVERSE_API_URL in their MCP client config. " +
-      "Do not retry."
+      "Mnemoverse: this invite code was not recognized (404). Most often it " +
+      "was copied with a typo or was never issued — have the user re-check " +
+      'the exact code (it starts with "mnvr_"), and if it is right, ask ' +
+      "whoever sent it for a fresh one. memory_list_rooms will not help " +
+      "here: the user is not a member yet. Do not retry the same code."
+    );
+  }
+  if (env.code === undefined) {
+    return (
+      `Mnemoverse: the API answered 404 for ${f.method} ${f.path} without ` +
+      "the engine's error envelope — which is what a route the deployment " +
+      "does not serve looks like, not what a missing memory looks like. " +
+      "Either MNEMOVERSE_API_URL is aimed at something that is not the " +
+      "Mnemoverse API, or this server is newer than the deployment it is " +
+      "talking to. If the user's MCP client config sets MNEMOVERSE_API_URL, " +
+      "have them check it; if it sets none (the desktop extension exposes " +
+      "only the API key), the deployment likely needs updating. Do not retry."
     );
   }
   return (
@@ -288,13 +396,7 @@ export function explainApiFailure(f: ApiFailure): string {
   let guidance: string;
 
   if (f.status === 401) {
-    // Wording endorsed by the founder, kept verbatim — this is the sentence the
-    // whole change was commissioned for.
-    guidance =
-      "Mnemoverse: your API key was rejected (401). Tell the user their " +
-      'MNEMOVERSE_API_KEY is not valid — if it still reads "mk_live_YOUR_KEY" ' +
-      "it is the placeholder from the docs and must be replaced with a real key " +
-      `from ${KEYS_URL}. Do not retry until they replace it.`;
+    guidance = explain401(env);
   } else if (f.status === 403) {
     guidance = explain403(env);
   } else if (f.status === 404) {
@@ -308,11 +410,7 @@ export function explainApiFailure(f: ApiFailure): string {
       "not the network, and not the user's setup. Read the detail below, fix " +
       "the argument it names, and do not resend the same body.";
   } else if (f.status === 409) {
-    guidance =
-      "Mnemoverse: this request conflicts with the current state (409). On an " +
-      "invite code that means the code has already been used, has expired, or " +
-      "was revoked — ask whoever invited the user for a fresh one. Retrying the " +
-      "same request will conflict again.";
+    guidance = explain409(f);
   } else if (f.status >= 500) {
     guidance =
       `Mnemoverse: the memory service failed (${f.status}). This is OUR side, ` +
@@ -337,7 +435,14 @@ function rawDetail(f: ApiFailure): string {
     f.body.length > MAX_BODY_CHARS
       ? `${f.body.slice(0, MAX_BODY_CHARS)}… [body truncated at ${MAX_BODY_CHARS} chars]`
       : f.body;
-  return `Raw detail — Mnemoverse API error ${f.status} on ${f.method} ${f.path}: ${body}`;
+  // The body is server-controlled — or, on the misconfigured-URL and proxy
+  // paths this module itself names, controlled by whoever answered instead.
+  // Spliced raw into model-facing text, a body with newlines could open its
+  // own paragraph and speak in this module's instruction voice (panel, #93).
+  // Strip control, format/bidi and line/paragraph separators so the quoted
+  // body stays one inert line; the guidance above it is the only voice here.
+  const inert = body.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ");
+  return `Raw detail — Mnemoverse API error ${f.status} on ${f.method} ${f.path}: ${inert}`;
 }
 
 /**
@@ -376,6 +481,36 @@ export function explainNetworkFailure(
     "check their key. One retry is reasonable. If that also fails, tell the " +
     "user memory is unreachable and carry on without it rather than retrying.\n\n" +
     `Raw detail — request to ${method} ${path} failed: ${detail}`
+  );
+}
+
+/**
+ * 409: name the conflict this tool actually produced (panel, #93). The two
+ * real producers on this server are the join tool (used/expired/revoked
+ * invite) and memory_create_room (core: "A room with this name already
+ * exists.", 409). The old single sentence gave the invite advice to a
+ * duplicate-name conflict, misdirecting the agent to a nonexistent inviter.
+ */
+function explain409(f: ApiFailure): string {
+  if (f.path === "/memory/rooms/join") {
+    return (
+      "Mnemoverse: this invite code cannot be used (409) — it has already " +
+      "been used, has expired, or was revoked. Ask whoever invited the user " +
+      "for a fresh one. Retrying the same code will conflict again."
+    );
+  }
+  if (f.path === "/memory/rooms" && f.method === "POST") {
+    return (
+      "Mnemoverse: a room with this name already exists for this account " +
+      "(409). Pick a different name, or reuse the existing room — " +
+      "memory_list_rooms shows its address. Retrying the same name will " +
+      "conflict again."
+    );
+  }
+  return (
+    "Mnemoverse: this request conflicts with the current state (409). The " +
+    "engine's own explanation is in the detail below — quote it to the " +
+    "user. Retrying the same request will conflict again."
   );
 }
 
@@ -423,22 +558,23 @@ export class ApiError extends Error {
   }
 
   /**
-   * A 404 whose body says NOTHING — no code, no message — which is what a path
-   * the deployment does not serve looks like, as opposed to a room that does
-   * not exist.
+   * A 404 the ENGINE did not answer: silence, or the router's literal
+   * defaults. This is what a path the deployment does not serve looks like
+   * — the first version of this predicate tested silence alone, mistook the
+   * real framework body `{"detail":"Not Found"}` for an engine answer, and
+   * un-fired the feed's degrade branch for the exact rollout case it exists
+   * for (panel, #93).
    *
    * NAMED FOR WHAT IT TESTS, not for what it implies: a gateway, a proxy or a
-   * wrong MNEMOVERSE_API_URL produces the same silent 404 and is
-   * indistinguishable from here.
-   *
-   * Stricter than the check it replaces, on purpose. That one asked whether the
-   * substring `"code"` appeared anywhere in the message, which also called a
-   * `rooms_routes.py` 404 — `{"detail":"Room not found."}`, no code — a missing
-   * endpoint. `/memory/recent`, the only consumer, is a middleware-envelope
-   * route, so the old flaw never fired there; the same predicate now serves the
-   * user-facing 404 text, where it would have.
+   * wrong MNEMOVERSE_API_URL can produce the same shapes and is
+   * indistinguishable from here. Known, accepted edge: a foreign API whose
+   * 404 nests its error under a key this parser does not read
+   * (`{"error":{…}}`) also reads as bare, so the feed degrades to its
+   * not-supported notice instead of surfacing the foreign body — bounded
+   * harm, since against a wrong base URL the very next call fails with the
+   * instructive no-envelope wording.
    */
   get isBare404(): boolean {
-    return this.status === 404 && saidNothing(this.envelope);
+    return this.status === 404 && engineSilentOn404(this.envelope);
   }
 }
