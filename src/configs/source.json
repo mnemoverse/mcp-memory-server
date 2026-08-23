@@ -3,7 +3,7 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Hosted memory for AI agents that persists across sessions and tools — one key across Claude, Cursor & ChatGPT.",
+  "description": "Hosted memory for AI agents that learns from outcomes — one key across Claude, Cursor & ChatGPT.",
   "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",

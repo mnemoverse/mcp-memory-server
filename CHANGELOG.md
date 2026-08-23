@@ -37,6 +37,24 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Changed
+
+- **The description claims are strong again, because they are true again (#95).**
+  This PR started life on 2026-08-19 as a removal: the read path applied its
+  feedback and recency priors after the sort and after the `top_k` cut, so the
+  advertised re-ranking never changed what came back, and the honest move was
+  to stop saying it. The fork in that PR's own body — "or fix the code, and the
+  wording comes back stronger" — is what actually happened: core#507 moves both
+  priors before the cut (live in production 2026-08-23, verified by a LoCoMo
+  A/B with no regression). So the README says "feedback re-ranks recall" again,
+  now as a statement of fact. Two claims did NOT come back, because they were
+  false for a different reason: "lets the rest fade" / "learns and forgets"
+  implied a time-decay or deletion that does not exist — unhelpful memories are
+  out-ranked, not erased, and deletion is administrative-only since 0.9.0. The
+  "~30-day half-life" magnitude also stays out: it is today's tuning value
+  (core `config.py`), not a contract, and public copy carries no magnitudes.
+  Text-only — a PATCH by this file's own rule, riding the next release.
+
 ## [0.9.0] — 2026-08-20
 
 A MINOR bump under this file's own rule: SHAPE changes — two tools removed —

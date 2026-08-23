@@ -7,9 +7,9 @@
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 [![Glama quality](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server/badges/score.svg)](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server)
 
-Hosted memory for AI agents that persists across sessions, projects and tools, so you stop re-explaining context to every new chat. The engine ships consolidation (HDBSCAN clustering, with Von Restorff protection so distinctive memories survive compression). One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
+Hosted memory for AI agents that learns which facts matter. Feedback re-ranks recall — a Rescorla-Wagner update on the prediction error, not a similarity score — so what helped rises and what misled sinks, with a bounded recency tie-breaker for fresh memories. The engine also ships consolidation (HDBSCAN clustering, with Von Restorff protection so distinctive memories survive compression). One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
 
-Memory that persists across sessions, projects, and tools. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
+Memory that persists across sessions, projects, and tools — and improves with use. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
 
 > ⭐ If Mnemoverse saves you from re-explaining context to your agents, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
