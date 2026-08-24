@@ -104,6 +104,17 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 
 These are bumped manually in the first two files and propagated by the generator to the third. If they drift, the drift check on `server.json` catches it on every PR.
 
+### Changelog
+
+Every change to the **tool surface** — what a tool does, returns, or says about itself — gets an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in the same PR that makes the change. Read that file's preamble for exactly where the patch/minor line falls: even a pure text change (a tool or parameter description) is a release-worthy patch, because that text is all a model ever sees.
+
+An **internal refactor with identical observable behaviour** gets no entry. Declare it with the `no-changelog` label, or put `[skip changelog]` in the PR description.
+
+Two gates keep this honest, and they are two halves of one rule:
+
+- [`changelog-reminder.yml`](.github/workflows/changelog-reminder.yml) — **PR time.** A PR that touches `src/**/*.ts` without adding to `## [Unreleased]` (and without the override) fails with a reminder, while the fix is still a one-liner and the change is fresh in your head.
+- [`release.yml`](.github/workflows/release.yml) — **release time.** A `vX.Y.Z` tag will not publish unless CHANGELOG.md has a dated `## [X.Y.Z] — YYYY-MM-DD` section; that hand-written section becomes the release notes.
+
 ### Automated release pipeline
 
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). You bump the version on `main`, push a semver tag, and the workflow does the rest: npm publish, MCP Registry publish (via GitHub OIDC — no stored PAT), GitHub release.
@@ -120,18 +131,23 @@ $EDITOR src/index.ts
 # 3. Regenerate (this updates server.json to match)
 npm run generate:configs
 
-# 4. Build and run any local checks you want before tagging
+# 4. Flip CHANGELOG.md: rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
+#    and leave a fresh empty `## [Unreleased]` above it. release.yml REFUSES to
+#    publish without this dated section, and it becomes the release notes.
+$EDITOR CHANGELOG.md
+
+# 5. Build and run any local checks you want before tagging
 npm run build
 npm run verify:configs
 
-# 5. PR + squash-merge to main (drift CI runs on the PR)
+# 6. PR + squash-merge to main (drift CI runs on the PR)
 git checkout -b release/vX.Y.Z
 git add -A && git commit -m "release: vX.Y.Z"
 git push -u origin release/vX.Y.Z
 gh pr create --fill && gh pr merge --squash --delete-branch
 git checkout main && git pull --ff-only
 
-# 6. Tag main and push the tag
+# 7. Tag main and push the tag
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
