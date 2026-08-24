@@ -203,18 +203,27 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   // interpolated into instructional text — only echo it when it matches the
   // opaque urlsafe-base64 shape ours always has. Core mirrors the same regex on
   // its side, so a cursor that fails here is a contract violation, not a value.
+  // The regex itself is UNCHANGED (#67 fixed what gets said when it fails,
+  // not what it accepts).
   //
-  // KNOWN DEFECT, not fixed in 0.8.1 and recorded in the CHANGELOG: this one
-  // boolean decides an existence claim about a different thing. `false` means
-  // EITHER "the server said there is nothing older" OR "the server said there IS
-  // more and I refuse to print the token", and both print `(end of feed —
-  // nothing older)`. That is could-not-render spelled exactly like does-not-
-  // exist — the collision this release is about, surviving in the one place the
-  // fix did not reach. It needs a third branch and therefore a new sentence,
-  // which is a behaviour change.
-  const cursorOk = nextCursor != null && /^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor);
-  const tail = cursorOk
-    ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`
-    : `\n\n(end of feed — nothing older)`;
+  // Three outcomes, not two (#67, fixed here — was a single `cursorOk`
+  // boolean that conflated the last two): no cursor at all means the server
+  // says there is nothing older; a cursor that fails the shape check above
+  // means the server says there IS more but this client refuses to print an
+  // untrusted-shaped token; only a cursor that passes it is an actual
+  // continuation. The first two used to share one sentence —
+  // could-not-render read exactly like does-not-exist, the same collision
+  // 0.8.1 fixed everywhere else and recorded here as "Known and NOT fixed
+  // here". The middle case now says entries exist and points at since/until
+  // (already on memory_list_recent) as the way to keep going without the
+  // token.
+  let tail: string;
+  if (nextCursor == null) {
+    tail = `\n\n(end of feed — nothing older)`;
+  } else if (/^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor)) {
+    tail = `\n\nMore older entries exist — pass cursor: ${nextCursor}`;
+  } else {
+    tail = `\n\nMore entries exist but the continuation token could not be displayed — narrow the window with since/until instead`;
+  }
   return lines.join("\n\n") + tail;
 }
