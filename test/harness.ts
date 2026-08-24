@@ -73,6 +73,7 @@ interface Directive {
   status?: number;
   text?: string;
   throws?: string;
+  headers?: Record<string, string>;
 }
 
 /**
@@ -84,9 +85,22 @@ interface Directive {
 export type RouteReply = unknown;
 export type Route = RouteReply | ((req: StubbedRequest) => RouteReply | Promise<RouteReply>);
 
-/** A non-2xx response — what `apiFetch` turns into `Mnemoverse API error N: …`. */
-export function httpError(status: number, text = ""): Directive {
-  return { [DIRECTIVE]: true, status, text };
+/**
+ * A non-2xx response — what `apiFetch` turns into an {@link ApiError}, whose
+ * message is the agent-facing explanation in src/errors.ts.
+ *
+ * `headers` exists because one of those explanations reads a header rather than
+ * the body: the engine's per-minute rate limiter is the only 429 that sends
+ * `Retry-After`, and "wait 30 seconds" versus "waiting will not help" is the
+ * whole difference between the two 429 messages. A stub that could not set a
+ * header could only ever exercise the vaguer branch.
+ */
+export function httpError(
+  status: number,
+  text = "",
+  headers?: Record<string, string>,
+): Directive {
+  return { [DIRECTIVE]: true, status, text, ...(headers ? { headers } : {}) };
 }
 
 /** A transport-level failure: fetch itself rejects, as it would offline. */
@@ -194,7 +208,7 @@ async function boot(): Promise<Harness> {
       if (reply.throws !== undefined) throw new TypeError(reply.throws);
       const status = reply.status ?? 500;
       if (status === 204) return new Response(null, { status: 204 });
-      return new Response(reply.text ?? "", { status });
+      return new Response(reply.text ?? "", { status, headers: reply.headers });
     }
     return new Response(JSON.stringify(reply ?? null), {
       status: 200,

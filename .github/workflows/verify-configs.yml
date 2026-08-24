@@ -16,16 +16,17 @@ name: verify-configs
 # the actual npm package.
 
 on:
+  # NO path filter on pull_request, deliberately. `verify` is a REQUIRED status
+  # check on main (branch protection). A required check that is path-filtered
+  # never reports on a PR that touches none of those paths, and GitHub treats a
+  # missing required check as "not satisfied" rather than "not applicable" — so
+  # such a PR is blocked forever, with a green checks list and no way to fix it
+  # from the PR itself. That is exactly what happened to #93 (src/errors.ts and
+  # tests only): mergeStateStatus BLOCKED, `verify` absent from the rollup.
+  # The job is cheap — a checkout, a Node setup and one dependency-free
+  # generator run in --check mode, no npm ci — so it runs on every PR and
+  # the deadlock cannot recur. The push filter below stays: nothing requires it.
   pull_request:
-    paths:
-      - "src/configs/source.json"
-      - "scripts/generate-configs.mjs"
-      - "package.json"
-      - "README.md"
-      - "docs/configs/**"
-      - "docs/snippets/**"
-      - "server.json"
-      - ".github/workflows/verify-configs.yml"
   push:
     branches: [main]
     paths:
@@ -47,6 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job runs PR-controlled generator code; it needs no git credentials.
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
