@@ -20,6 +20,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   httpError,
   networkDown,
+  noContent,
   startMemoryServer,
   type Route,
   type Harness,
@@ -1370,6 +1371,65 @@ describe("a result body this client cannot read is never an absence claim", () =
       expect(text, label).toContain("not evidence that none are stored");
       expect(text, label).not.toContain("No secrets are stored");
     }
+  });
+
+  it("memory_write: a 2xx with no boolean `stored` is neither a save nor a refusal", async () => {
+    // The four LIST surfaces have carried this guard since 0.8.1. The write
+    // path was the one left on `if (r?.stored)`, whose else-branch prints an
+    // unconditional "NOT STORED — nothing was saved" AND a mechanism nobody
+    // sent ("a near-duplicate is refused"). A field that is absent is not a
+    // field that said false: a proxy's `{"ok":true}`, an empty `{}`, and a
+    // non-boolean all landed on the refusal sentence, so the reader was told
+    // both that the memory does not exist and WHY — on zero evidence for
+    // either. The absence claim here is the same class the F13 family removed
+    // for read, the feed, the room list and the vault.
+    for (const payload of [
+      { ok: true, message: "queued" },
+      {},
+      { stored: "yes" },
+    ] as Route[]) {
+      mcp.reset().on(WRITE, payload);
+
+      const text = await mcp.callText("memory_write", { content: "x" });
+      const label = JSON.stringify(payload);
+
+      expect(text, label).toContain(
+        "The write result came back in a shape this client does not recognise",
+      );
+      expect(text, label).toContain("not confirmation that the memory was stored");
+      expect(text, label).toContain("not evidence that it was refused");
+      // Neither verdict may be asserted, and the fabricated cause is gone.
+      expect(text, label).not.toContain("NOT STORED");
+      expect(text, label).not.toContain("nothing was saved");
+      expect(text, label).not.toContain("near-duplicate is refused");
+      expect(text, label).not.toContain("Stored (importance");
+      // Same tail as the list surfaces: this client cannot name who answered.
+      expect(text, label).toContain("whatever answered this call");
+    }
+  });
+
+  it("memory_write: 204 No Content is not a refusal either", async () => {
+    // apiFetch turns a 204 into `{}`, which `if (r?.stored)` read as "the gate
+    // refused it".
+    mcp.on(WRITE, noContent());
+
+    const text = await mcp.callText("memory_write", { content: "x" });
+
+    expect(text).toContain("shape this client does not recognise");
+    expect(text).not.toContain("NOT STORED");
+  });
+
+  it("memory_write: an explicit stored:false keeps the refusal AND its mechanism", async () => {
+    // The guard must narrow to bodies that said nothing — a body that really
+    // said `false` is core speaking, and the near-duplicate sentence is true
+    // for every rejection this client can receive.
+    mcp.on(WRITE, { stored: false });
+
+    const text = await mcp.callText("memory_write", { content: "x" });
+
+    expect(text.startsWith("NOT STORED — nothing was saved.")).toBe(true);
+    expect(text).toContain("a near-duplicate is refused");
+    expect(text).not.toContain("does not recognise");
   });
 
   it("genuinely empty arrays keep their plain answers — the guard does not overreach", async () => {

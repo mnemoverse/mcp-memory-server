@@ -49,6 +49,13 @@
  *   5xx  auth.py returns 503 `retryable: true` when its DB pool is gone. Ours,
  *        not theirs.
  *
+ * A 2xx CAN FAIL TOO, and gets the same treatment for the same reason. A reply
+ * whose body this client cannot parse is not a status at all, so none of the
+ * sentences above fit it — and it used to borrow the TRANSPORT sentence, which
+ * asserts that nothing answered. `explainUnreadableBody` at the bottom of this
+ * file owns that case now; the distinction it protects is "a reply arrived and
+ * was unreadable" versus "no reply arrived", which have opposite fixes.
+ *
  * RELATION TO THE STARTUP PROBE (src/index.ts, `probeApiKeyInBackground`, added
  * in 0.8.4). That probe treats 401 and 403 alike, and is right to: it calls
  * `GET /memory/stats`, which addresses no room, so a 403 there can only come
@@ -428,6 +435,23 @@ export function explainApiFailure(f: ApiFailure): string {
   return `${guidance}\n\n${rawDetail(f)}`;
 }
 
+/**
+ * A server-controlled string, made safe to quote inside model-facing text.
+ *
+ * The body is server-controlled — or, on the misconfigured-URL and proxy paths
+ * this module itself names, controlled by whoever answered instead. Spliced raw
+ * into model-facing text, a body with newlines could open its own paragraph and
+ * speak in this module's instruction voice (panel, #93). Strip control,
+ * format/bidi and line/paragraph separators so the quoted body stays one inert
+ * line; the guidance above it is the only voice here.
+ *
+ * Shared with {@link explainUnreadableBody}, whose preview is quoted from
+ * exactly the same kind of source — a body written by whoever answered.
+ */
+function inertOneLine(s: string): string {
+  return s.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ");
+}
+
 /** The debugging half: what the wire actually said, still carrying the literal
  *  `Mnemoverse API error <status>` that predates this module. */
 function rawDetail(f: ApiFailure): string {
@@ -435,14 +459,7 @@ function rawDetail(f: ApiFailure): string {
     f.body.length > MAX_BODY_CHARS
       ? `${f.body.slice(0, MAX_BODY_CHARS)}… [body truncated at ${MAX_BODY_CHARS} chars]`
       : f.body;
-  // The body is server-controlled — or, on the misconfigured-URL and proxy
-  // paths this module itself names, controlled by whoever answered instead.
-  // Spliced raw into model-facing text, a body with newlines could open its
-  // own paragraph and speak in this module's instruction voice (panel, #93).
-  // Strip control, format/bidi and line/paragraph separators so the quoted
-  // body stays one inert line; the guidance above it is the only voice here.
-  const inert = body.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ");
-  return `Raw detail — Mnemoverse API error ${f.status} on ${f.method} ${f.path}: ${inert}`;
+  return `Raw detail — Mnemoverse API error ${f.status} on ${f.method} ${f.path}: ${inertOneLine(body)}`;
 }
 
 /**
@@ -458,6 +475,12 @@ function rawDetail(f: ApiFailure): string {
  * A timeout is named separately because the advice differs in one word: an
  * unreachable host is unlikely to become reachable in three seconds, whereas a
  * request that ran out of time may well succeed on a second try.
+ *
+ * NARROWED to `fetch()` itself rejecting. Reading the BODY of a response that
+ * did arrive used to land here too, so a 200 carrying a sign-in page printed
+ * "no HTTP response came back" — see {@link explainUnreadableBody}, which owns
+ * that case now. Every sentence below asserts that nothing answered, so it may
+ * only be reached when nothing did.
  */
 export function explainNetworkFailure(
   method: string,
@@ -482,6 +505,119 @@ export function explainNetworkFailure(
     "user memory is unreachable and carry on without it rather than retrying.\n\n" +
     `Raw detail — request to ${method} ${path} failed: ${detail}`
   );
+}
+
+/** How much of an unreadable body is worth quoting. A sign-in page, an SPA
+ *  shell or a proxy notice announces itself in its first line; the rest is
+ *  markup, and an error message is not a place to spend a model's context. */
+const MAX_PREVIEW_CHARS = 200;
+
+/** A 2xx-or-not response whose BODY this client could not turn into the JSON
+ *  this API speaks. The status is known — a reply arrived — which is the whole
+ *  difference between this and {@link ApiFailure} or a transport failure. */
+export interface UnreadableBody {
+  /** HTTP status, as it actually arrived. */
+  status: number;
+  /** Uppercase HTTP verb. */
+  method: string;
+  /** Path below the API base. Never the full URL — the base can carry
+   *  credentials, and the path alone identifies the operation. */
+  path: string;
+  /** The bytes that failed to parse, when they were read at all. Absent when
+   *  the body READ itself failed, which is a different sentence below. */
+  bodyPreview?: string;
+  /** The SyntaxError, TypeError or abort that stopped the read. */
+  cause: unknown;
+}
+
+/**
+ * A reply ARRIVED and could not be read — which is not a dead network.
+ *
+ * WHY THIS IS SEPARATE FROM {@link explainNetworkFailure}. Both failures used
+ * to throw the same NetworkError, so `JSON.parse` choking on a 200 printed
+ * "the memory service could not be reached at all — POST /memory/read failed
+ * before any HTTP response came back… That is a connectivity or DNS problem".
+ * Against a captive portal, a MITM proxy, an SPA that serves its shell with a
+ * 200, or a body that stops mid-stream, every clause of that is false: a reply
+ * came, with a status, and the Raw detail underneath it quoted a SyntaxError
+ * out of the body it had just called nonexistent.
+ *
+ * The cost is the same one this module exists to remove — a confident wrong
+ * cause. "Connectivity or DNS" sends the user to debug working wifi while a
+ * portal or a mis-set MNEMOVERSE_API_URL answers every request with a page.
+ *
+ * WHAT THIS MESSAGE MAY CLAIM. Only what the status proves: something answered,
+ * and its answer is not this API's JSON. It does NOT name who answered — this
+ * client cannot tell the engine from a gateway in front of it — and it does NOT
+ * say whether the operation ran, because a body it cannot read is no evidence
+ * either way. That last clause matters most for a write.
+ */
+export function explainUnreadableBody(f: UnreadableBody): string {
+  // TWO ARMS, because the two failures have different causes and the wrong one
+  // is a wrong instruction. A body that PARSED WRONG is a foreign answer — a
+  // portal, a proxy, a base URL aimed elsewhere. A body that stopped ARRIVING
+  // is a dropped connection, where "check MNEMOVERSE_API_URL" would be the
+  // same kind of confident wrong cause this module removes everywhere else.
+  const body =
+    typeof f.bodyPreview === "string"
+      ? `the body is not JSON this API produces — this client could not read ` +
+        `the result. A reply DID arrive, so this is neither a dead network ` +
+        `nor a rejected key: nothing here failed to connect, and nothing here ` +
+        `refused anything. Do not send the user to debug their connection, ` +
+        `and do not tell them their key is the problem. A 2xx in a foreign ` +
+        `shape comes from something in FRONT of the API — a captive portal or ` +
+        `sign-in page, a proxy or gateway, or MNEMOVERSE_API_URL aimed at ` +
+        `something that is not the Mnemoverse API. One retry is reasonable; ` +
+        `if it repeats, quote the detail below and have the user check ` +
+        `MNEMOVERSE_API_URL and whatever sits between them and the API.`
+      : `the body could not be read to the end — it stopped part-way, after ` +
+        `that status had already arrived. That is a dropped connection ` +
+        `or a deadline firing mid-body; it is NOT a refusal and it says ` +
+        `nothing about the user's key. One retry is reasonable; if it ` +
+        `repeats, tell the user the reply is arriving incomplete and quote ` +
+        `the detail below, status included.`;
+  return (
+    `Mnemoverse: something answered HTTP ${f.status} for ${f.method} ` +
+    `${f.path}, but ${body} Whether the operation itself ran is unknown ` +
+    `either way — if this was a write, treat it as neither saved nor ` +
+    `refused.\n\n${rawUnreadableDetail(f)}`
+  );
+}
+
+/** The debugging half for an unreadable body: what stopped the read, and the
+ *  first bytes of what arrived — through the same inert filter as
+ *  {@link rawDetail}, because the preview has exactly the same provenance. */
+function rawUnreadableDetail(f: UnreadableBody): string {
+  const detail =
+    f.cause instanceof Error ? `${f.cause.name}: ${f.cause.message}` : String(f.cause);
+  const head =
+    `Raw detail — HTTP ${f.status} on ${f.method} ${f.path}, body this client ` +
+    `could not read: ${inertOneLine(detail)}`;
+  if (typeof f.bodyPreview !== "string" || f.bodyPreview === "") return head;
+  const note =
+    f.bodyPreview.length > MAX_PREVIEW_CHARS
+      ? ` … [preview truncated at ${MAX_PREVIEW_CHARS} chars]`
+      : "";
+  return `${head} First bytes: ${inertOneLine(f.bodyPreview.slice(0, MAX_PREVIEW_CHARS))}${note}`;
+}
+
+/**
+ * {@link explainUnreadableBody} as an error, so a caller can tell "a reply
+ * arrived and was unreadable" from "no reply arrived" by TYPE rather than by
+ * matching a sentence — the same reason {@link ApiError} carries fields.
+ */
+export class UnreadableBodyError extends Error {
+  readonly status: number;
+  readonly method: string;
+  readonly path: string;
+
+  constructor(f: UnreadableBody) {
+    super(explainUnreadableBody(f), { cause: f.cause });
+    this.name = "UnreadableBodyError";
+    this.status = f.status;
+    this.method = f.method;
+    this.path = f.path;
+  }
 }
 
 /**
