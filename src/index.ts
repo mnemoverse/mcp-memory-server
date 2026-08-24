@@ -97,8 +97,11 @@ function probeScope(searched: string | undefined): Promise<ReadScope> {
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
-const API_URL =
-  process.env.MNEMOVERSE_API_URL || "https://core.mnemoverse.com/api/v1";
+/** Where the key goes when the user names no host. Referenced by the base-URL
+ *  refusal below, which has to tell them what to set it back to. */
+const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
+
+const API_URL = process.env.MNEMOVERSE_API_URL || DEFAULT_API_URL;
 const API_KEY = process.env.MNEMOVERSE_API_KEY || "";
 
 // Hard cap on tool result size — required by Claude Connectors Directory
@@ -113,6 +116,115 @@ const MAX_RESULT_CHARS = 24_000 * 4;
 // and clients may browse capabilities before sign-in; a startup exit on a
 // missing key blocks all of that. A tool *invocation* without a key returns a
 // clear, actionable error instead (see apiFetch).
+
+/**
+ * A base URL the key may not go to, spelled for each of its two readers.
+ *
+ * They are computed together, from one parse, so they cannot come to disagree
+ * about why the call was refused — but they are NOT the same sentence, because
+ * the readers differ. A tool result is read by a MODEL and is written as
+ * instructions about the user ("tell them to…"); a startup line is read by the
+ * USER in their client's connection log and addresses them directly.
+ */
+interface BaseUrlRefusal {
+  /** What a tool CALL answers instead of running. */
+  toolCall: string;
+  /** The one line stderr gets at startup, in place of the key probe. */
+  startupLog: string;
+}
+
+/**
+ * Is `MNEMOVERSE_API_URL` an address this client may attach the API key to —
+ * and if not, what does the user have to change (#99, CWE-319)?
+ *
+ * `apiFetch` attaches `X-Api-Key` to whatever this variable holds. Until this
+ * check existed, a base URL spelled `http://` — a typo, a copied tunnel address,
+ * a misread doc — put a live `mk_live_` key in cleartext on every tool call, on
+ * every hop between the user and that host, with nothing anywhere saying so.
+ * The key is the whole account: it reads and writes that user's memory.
+ *
+ * TWO HOSTS ARE EXEMPT, AND ONLY AS LITERAL HOSTNAMES. `http://localhost` and
+ * `http://127.0.0.1` are legitimate — a self-hosted engine, this repo's own test
+ * harness — and a guard that demanded https unconditionally would break them.
+ * The comparison is against `URL.hostname`, NOT a prefix or suffix of the raw
+ * string, because `http://localhost.evil.example` passes a prefix test and
+ * `http://evil.localhost` passes a suffix test while both resolve to somebody
+ * else's server. `::1` is deliberately NOT in the list: it is a follow-up (#99),
+ * not an oversight, and a self-hoster on IPv6 loopback can spell it `localhost`
+ * today. The exemption is also scheme-bound — `ftp://localhost` is refused —
+ * since "aimed at loopback" is not by itself a reason to trust a transport.
+ *
+ * RETURNS A STRING RATHER THAN THROWING, and is called at import rather than
+ * on each request, because a throw at import would take the server down before
+ * `tools/list` — the one thing that is documented to work without any config at
+ * all (registries boot this server to enumerate its tools). The refusal has to
+ * land where the keyless refusal lands: inside a tool CALL.
+ *
+ * THE MESSAGE NEVER QUOTES THE URL, only its scheme. src/errors.ts keeps the
+ * base URL out of every message it builds on the stated grounds that the base
+ * can carry credentials — `http://user:pass@host` is exactly the case this guard
+ * fires on, so the one message whose subject IS the base URL is also the one
+ * most likely to leak it into a model's context and a client's logs. A scheme
+ * is safe to interpolate for a second reason: the URL parser restricts it to
+ * `[a-z0-9+.-]`, so it cannot carry a newline and open its own paragraph in
+ * this file's instruction voice.
+ */
+function refuseInsecureBaseUrl(raw: string): BaseUrlRefusal | undefined {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return {
+      toolCall:
+        "Mnemoverse: this tool did not run, because MNEMOVERSE_API_URL is not " +
+        "a URL this client can parse — so it cannot tell whether sending the " +
+        "API key to it would expose the key, and it will not guess. Nothing " +
+        "was sent. This is the user's configuration: their key, their network " +
+        "and the service are all fine. Tell them to set MNEMOVERSE_API_URL to " +
+        "a complete https:// URL including the scheme and the path — the " +
+        `default is ${DEFAULT_API_URL} — or to unset it and use that default. ` +
+        "A local engine is the one exception and must be addressed as " +
+        "http://localhost or http://127.0.0.1. Do not retry until it is " +
+        "changed; every memory tool will fail the same way until then.",
+      startupLog:
+        "Mnemoverse: startup key check SKIPPED, and nothing was sent — " +
+        "MNEMOVERSE_API_URL is not a URL this server can parse, so it cannot " +
+        "tell whether sending your API key over it would expose it. Set it to " +
+        `a complete https:// URL such as ${DEFAULT_API_URL}, or unset it to ` +
+        "use that default. Every memory tool will fail until it is changed.",
+    };
+  }
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol === "https:" || (url.protocol === "http:" && loopback)) {
+    return undefined;
+  }
+  return {
+    toolCall:
+      "Mnemoverse: this tool did not run, because MNEMOVERSE_API_URL does not " +
+      `address the API over https — its scheme is ${url.protocol}// — and ` +
+      "sending the API key to it would put a live mk_live_ key on the wire in " +
+      "cleartext, readable by anything on the path. Nothing was sent: this " +
+      "client refuses the call instead. This is the user's configuration, not " +
+      "a fault of the key, the network or the service. Tell them to change " +
+      "MNEMOVERSE_API_URL to the https:// form of the same host — the default " +
+      `is ${DEFAULT_API_URL} — or, if they are deliberately running the ` +
+      "engine on their own machine, to address it as http://localhost or " +
+      "http://127.0.0.1, the only two plain-http hosts this client accepts. " +
+      "Do not retry until it is changed; every memory tool will fail the same " +
+      "way until then.",
+    startupLog:
+      "Mnemoverse: startup key check SKIPPED, and nothing was sent — " +
+      `MNEMOVERSE_API_URL has the scheme ${url.protocol}// rather than ` +
+      "https://, and this server will not put your API key on the wire in " +
+      `cleartext. Set it to ${DEFAULT_API_URL}, or to http://localhost or ` +
+      "http://127.0.0.1 if you run the engine yourself. Every memory tool " +
+      "will fail until it is changed.",
+  };
+}
+
+/** The verdict on this process's base URL, computed once. `undefined` means the
+ *  key may go out; anything else is what each surface says instead. */
+const BASE_URL_REFUSAL = refuseInsecureBaseUrl(API_URL);
 
 /**
  * Fetch from the Mnemoverse core API with authentication.
@@ -148,10 +260,29 @@ async function apiFetch<T = unknown>(
         "tool will fail the same way until then.",
     );
   }
+  if (BASE_URL_REFUSAL !== undefined) {
+    // Alongside the key check, and after it: with no key configured there is
+    // nothing to expose, and "set the variable" is the more useful first thing
+    // to tell someone who has set neither. Both are decided from CONFIGURATION
+    // alone, which is why both belong here rather than in a diagnosis of the
+    // response — a guard that fired after fetch would print the right sentence
+    // about a key it had already put on the wire.
+    throw new Error(BASE_URL_REFUSAL.toolCall);
+  }
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...options,
+      // AFTER the spread, so no call site can opt out of it. `fetch` defaults to
+      // "follow", and Node re-sends request headers to the redirect target: the
+      // WHATWG rules strip Authorization, Cookie and Proxy-Authorization when
+      // the origin changes and say nothing about a custom header, so
+      // `X-Api-Key` rides along to whoever answered (#99, CWE-200). This API
+      // serves one stable base path and never redirects legitimately, so the
+      // only traffic this refuses is an exfiltration path. The resulting
+      // rejection is named by explainNetworkFailure rather than left to look
+      // like a dead host.
+      redirect: "error",
       headers: {
         "Content-Type": "application/json",
         "X-Api-Key": API_KEY,
@@ -1567,10 +1698,33 @@ server.registerTool(
  */
 function probeApiKeyInBackground(): void {
   if (!API_KEY) return;
+  if (BASE_URL_REFUSAL !== undefined) {
+    // THE SECOND CREDENTIAL-BEARING CALL SITE (#99). This probe predates
+    // apiFetch's base-URL guard and calls `fetch` directly, so the guard does
+    // not reach it — and this one fires on every server START, before any tool
+    // is called. Left alone, a user whose MNEMOVERSE_API_URL is spelled
+    // `http://` would leak the key by launching their editor, and the tool-call
+    // guard would then dutifully refuse to leak the key it had already leaked.
+    //
+    // Saying nothing is not an option either: a silent server whose every tool
+    // then fails is the exact invisible failure mode this probe was added to
+    // end. So it reports the skip on stderr — where MCP clients surface
+    // connection logs — in the user's own register.
+    console.error(BASE_URL_REFUSAL.startupLog);
+    return;
+  }
   void (async () => {
     try {
       const res = await fetch(`${API_URL}/memory/stats`, {
         headers: { "X-Api-Key": API_KEY },
+        // Same reason as apiFetch: following a redirect re-sends this header to
+        // the new host (#99, CWE-200), and this request carries the key just as
+        // a tool call does. The rejection lands in the catch below with every
+        // other probe failure — deliberately, since the probe is fire-and-forget
+        // and must never take the server down. Nothing is lost by the silence:
+        // the same redirect meets the first real tool call, where
+        // explainNetworkFailure names it in full.
+        redirect: "error",
         signal: AbortSignal.timeout(10_000),
       });
       // Drain the body so the connection returns to the pool immediately —

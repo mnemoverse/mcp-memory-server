@@ -37,6 +37,120 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+A BEHAVIOUR change, and therefore MINOR rather than a patch under this file's
+own rules: there are two things `apiFetch` used to do with the API key that it
+no longer does. Both were CodeRabbit findings on #93, both were pre-existing,
+and both were deliberately kept OUT of that release — its entry declares itself
+text-only ("no new request is made"), and a transport change riding inside a
+wording release is exactly what that declaration exists to prevent (#99).
+
+### Security
+
+- **`MNEMOVERSE_API_URL` must address the API over https, or the tool refuses
+  to run (CWE-319).** `apiFetch` attached `X-Api-Key` to whatever the variable
+  held, so a base URL spelled `http://` — a typo, a copied tunnel address, a
+  misread doc — put a live `mk_live_` key in cleartext on every hop between the
+  user and that host, on every single tool call, with nothing anywhere saying
+  so. The key is the whole account: it reads and writes that user's memory. A
+  refused base URL now fails the call **before the request is made**, with:
+
+  > Mnemoverse: this tool did not run, because MNEMOVERSE_API_URL does not
+  > address the API over https — its scheme is `http://` — and sending the API
+  > key to it would put a live `mk_live_` key on the wire in cleartext […] Tell
+  > them to change MNEMOVERSE_API_URL to the https:// form of the same host […]
+  > or, if they are deliberately running the engine on their own machine, to
+  > address it as http://localhost or http://127.0.0.1 […]
+
+  `http://localhost` and `http://127.0.0.1` stay legal, because a self-hosted
+  engine is a real setup. They are compared as literal HOSTNAMES, not as string
+  prefixes: `http://localhost.evil.example` passes a prefix test and
+  `http://evil.localhost` passes a suffix test, and both are somebody else's
+  server. The message names the scheme but never quotes the URL — the URL is
+  where `http://user:pass@host` keeps its credentials.
+
+- **A credential-bearing request no longer follows redirects (CWE-200).**
+  `fetch` defaults to `redirect: "follow"` and Node re-sends request headers to
+  the redirect target — the WHATWG rules strip `Authorization`, `Cookie` and
+  `Proxy-Authorization` on a cross-origin hop and say nothing about a custom
+  header, so `X-Api-Key` rode along. An endpoint answering
+  `302 Location: https://attacker.example` therefore received a live key, and
+  the tool call SUCCEEDED, so nothing looked wrong. `apiFetch` now sends
+  `redirect: "error"`, after the options spread so no call site can opt out.
+  This API serves one stable base path and never redirects legitimately, so the
+  only traffic this refuses is an exfiltration path.
+
+- **A refused redirect says so, instead of being read as a dead network.**
+  Undici reports it as `TypeError: fetch failed`, identical to an unreachable
+  host, so without a branch of its own it would have landed in the transport
+  message and told the user to debug a "connectivity or DNS problem" on a
+  network that is working perfectly. `explainNetworkFailure` now recognises it
+  and names the cause: the API tried to redirect the call, the key was not sent
+  to the target, check `MNEMOVERSE_API_URL`. This is why the fix is three
+  changes and not one line.
+
+- **The startup key probe is covered too — it is the SECOND credential-bearing
+  call site.** `probeApiKeyInBackground` (0.8.4) calls `fetch` directly rather
+  than through `apiFetch`, so neither guard above reached it, and it fires on
+  every server START rather than on a tool call: a user whose
+  `MNEMOVERSE_API_URL` was spelled `http://` leaked the key by launching their
+  editor, and the tool-call guard would then have refused to leak a key that was
+  already out. Closing one call site and not the other would have made this
+  entry's own security claim a half-truth. The probe now makes no request at all
+  against a refused base URL, and sends `redirect: "error"` when it does run.
+  A skipped probe is not silent — silence is the invisible failure the probe
+  exists to end — so stderr, where MCP clients surface connection logs, gets:
+
+  > Mnemoverse: startup key check SKIPPED, and nothing was sent —
+  > MNEMOVERSE_API_URL has the scheme http:// rather than https://, and this
+  > server will not put your API key on the wire in cleartext. Set it to
+  > https://core.mnemoverse.com/api/v1, or to http://localhost or
+  > http://127.0.0.1 if you run the engine yourself. Every memory tool will fail
+  > until it is changed.
+
+  A probe whose redirect is refused stays silent, like every other probe
+  failure: it is fire-and-forget and must never take the server down, and the
+  same redirect meets the first real tool call, which explains it in full.
+
+### Who this breaks
+
+Anyone who deliberately pointed `MNEMOVERSE_API_URL` at a plain-`http://` host
+that is not `localhost` or `127.0.0.1`, and anyone whose endpoint answers a
+redirect. Both were sending the API key somewhere it should not go, which is
+why the break is the fix — but it is a break, and that is what makes this
+release MINOR.
+
+### Known and NOT fixed here
+
+- **`::1` is not in the loopback exemption.** IPv6 loopback is a legitimate
+  self-host address and `http://[::1]:8100` is refused today; a user on it can
+  spell the same engine `http://localhost`. Adding it (and deciding what to do
+  about container hostnames such as `host.docker.internal`) is a follow-up on
+  #99, not part of this change.
+
+### Tests
+
+`test/base-url-guard.test.ts` boots the server once per base URL
+(`vi.resetModules()` plus a dynamic import — the seam `test/startup.test.ts`
+already uses, since `API_URL` is a module-level constant) behind a recording
+`fetch`, so "refused" is asserted as *no request was made and no key was seen*,
+not as *the right sentence came back*. `test/redirect-refusal.test.ts`
+deliberately does NOT stub `fetch`: a stub has no redirect handling, so
+`redirect: "error"` is inert inside one and a test written there would pass with
+the option removed. It stands up two real `node:http` servers on loopback and
+asserts the redirect target is never contacted at all. With the fix reverted,
+that test does not merely fail — it records the attacker's server receiving
+`GET /steal` with the header `x-api-key: mk_live_…`, and the tool answering
+`Stored (importance: 0.90). ID: leaked`.
+
+The startup probe had no tests at all before this change — `test/startup.test.ts`
+*ran* it (autostart calls it) while asserting nothing about it, which is how a
+second credential-bearing call site stayed invisible through two releases. It is
+now covered there, on the autostart path with `fetch` and stderr recorded: no
+request against a refused URL, the skip line pinned verbatim, `redirect: "error"`
+on the request it does make, and — as regression guards, so the fix cannot become
+a mute button — a healthy https URL and a plain-http `localhost` still probed,
+with the key, in silence.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,
