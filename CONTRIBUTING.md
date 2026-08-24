@@ -100,9 +100,9 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 
 ## Versioning and releases
 
-`package.json#version` → `src/index.ts#version` (server name reported to MCP clients) → `server.json#version` (Official MCP Registry).
+`package.json#version` is the single source of truth. `src/index.ts` **reads** it at runtime (it becomes the server name reported to MCP clients — there is nothing to edit there), and `server.json#version` (Official MCP Registry) is **generated** from it.
 
-These are bumped manually in the first two files and propagated by the generator to the third. If they drift, the drift check on `server.json` catches it on every PR.
+So you bump the version in `package.json` only; the generator propagates it to `server.json`. If `server.json` drifts, the drift check catches it on every PR.
 
 ### Changelog
 
@@ -122,32 +122,29 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
 The workflow is triggered by any tag matching `v*` pushed to the repo. To release:
 
 ```bash
-# 1. Bump version in package.json
+# 1. Bump version in package.json (src/index.ts reads it from here — no edit)
 $EDITOR package.json
 
-# 2. Match it in src/index.ts (search for version: "...")
-$EDITOR src/index.ts
-
-# 3. Regenerate (this updates server.json to match)
+# 2. Regenerate (this updates server.json to match)
 npm run generate:configs
 
-# 4. Flip CHANGELOG.md: rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
+# 3. Flip CHANGELOG.md: rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
 #    and leave a fresh empty `## [Unreleased]` above it. release.yml REFUSES to
 #    publish without this dated section, and it becomes the release notes.
 $EDITOR CHANGELOG.md
 
-# 5. Build and run any local checks you want before tagging
+# 4. Build and run any local checks you want before tagging
 npm run build
 npm run verify:configs
 
-# 6. PR + squash-merge to main (drift CI runs on the PR)
+# 5. PR + squash-merge to main (drift CI runs on the PR)
 git checkout -b release/vX.Y.Z
 git add -A && git commit -m "release: vX.Y.Z"
 git push -u origin release/vX.Y.Z
 gh pr create --fill && gh pr merge --squash --delete-branch
 git checkout main && git pull --ff-only
 
-# 7. Tag main and push the tag
+# 6. Tag main and push the tag
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
