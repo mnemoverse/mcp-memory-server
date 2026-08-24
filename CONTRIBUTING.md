@@ -108,7 +108,7 @@ These are bumped manually in the first two files and propagated by the generator
 
 Every change to the **tool surface** — what a tool does, returns, or says about itself — gets an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in the same PR that makes the change. Read that file's preamble for exactly where the patch/minor line falls: even a pure text change (a tool or parameter description) is a release-worthy patch, because that text is all a model ever sees.
 
-An **internal refactor with identical observable behaviour** gets no entry. Declare it with the `no-changelog` label, or put `[skip changelog]` in the PR description.
+An **internal refactor with identical observable behaviour** gets no entry. Declare it by putting `[skip changelog]` in the PR description.
 
 Two gates keep this honest, and they are two halves of one rule:
 
