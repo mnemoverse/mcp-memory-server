@@ -980,9 +980,13 @@ server.registerTool(
       const next = r?.next_cursor;
       // Measured on the TEXT THAT WOULD SHIP, rendered by the same function
       // that renders the answer — an estimate from item lengths would drift
-      // from the renderer the first time a line gained a field.
+      // from the renderer the first time a line gained a field. The early-stop
+      // note's length is reserved up front: it is appended only when a LATER
+      // sub-request fails, which cannot be known while this batch is being
+      // sized, so every page keeps room for it (CodeRabbit, PR #108).
       const fits =
-        formatRecentPage(accepted.concat(batch), next).length <= LIST_PAGE_CHAR_BUDGET;
+        formatRecentPage(accepted.concat(batch), next).length <=
+        LIST_PAGE_CHAR_BUDGET - LIST_PAGE_EARLY_STOP_NOTE.length;
 
       if (fits) {
         accepted.push(...batch);
@@ -1009,6 +1013,16 @@ server.registerTool(
       // is the entry that exceeds the budget alone: it ships whole, because
       // dropping it is silent loss and truncating it needs a fetch-by-id verb
       // that does not exist yet (#104).
+      //
+      // KNOWN EDGE, inherited rather than introduced (CodeRabbit, PR #108):
+      // when a limit-ignoring server's batch ships whole and capResult then
+      // truncates the tail, the printed cursor points past entries the reader
+      // never saw. 0.9.1 had the identical hazard (one request, the server's
+      // cursor, the same cap). The alternatives are worse lies: slicing to
+      // `ask` keeps the server's cursor and SKIPS the sliced entries silently;
+      // rejecting the batch outright answers a working feed with "unreadable".
+      // A contract-violating server is the precondition; the real fix is
+      // fetch-by-id (#104 follow-up), not a guess here.
       const narrower = Math.max(1, Math.min(Math.floor(ask / 2), batch.length - 1));
       if (batch.length <= 1 || batch.length > ask || narrower >= ask) {
         accepted.push(...batch);

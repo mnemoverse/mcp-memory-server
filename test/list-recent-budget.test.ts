@@ -292,6 +292,26 @@ describe("a sub-request that fails after entries were already accepted", () => {
     expect(text).toContain("did not come back usable");
   });
 
+  it("a page that stopped early still fits the budget, note included", async () => {
+    // The note is appended AFTER the batches were sized, so its space is
+    // reserved during sizing (CodeRabbit, PR #108) — the invariant pinned
+    // here is end-to-end: accepted page PLUS the failure note never exceeds
+    // the budget, even when the accepted half filled most of it. The reserve
+    // itself is structural (the fits check subtracts the note's length), so
+    // this guards against gross regressions — the budget check disappearing,
+    // or the note outgrowing its reservation.
+    const feed = pagingFeed(entries(100, 3_800));
+    let n = 0;
+    mcp.on(RECENT, (req: StubbedRequest) =>
+      ++n === 1 ? feed(req) : httpError(503, "down"),
+    );
+
+    const text = await mcp.callText("memory_list_recent", { limit: 100 });
+
+    expect(text).toContain("stopped early");
+    expect(text.length).toBeLessThanOrEqual(BUDGET);
+  });
+
   it("still surfaces the failure when it happens on the FIRST sub-request", async () => {
     // Nothing was accepted, so there is no page to return and no reason to
     // soften the error — the pre-#104 behaviour, unchanged.
