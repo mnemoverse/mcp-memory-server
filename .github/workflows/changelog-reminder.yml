@@ -64,17 +64,21 @@ jobs:
         # Human-supplied fields (labels, PR body) arrive through env as DATA,
         # never interpolated into the shell source — same rule release.yml
         # follows for the dispatch tag (#81).
+        #
+        # The base/head SHAs come from the event payload, and `fetch-depth: 0`
+        # above already has both locally — so this needs NO `git fetch`. A
+        # post-checkout fetch would rely on ambient credentials (fine here while
+        # the repo is public, a credential prompt the day it isn't); diffing the
+        # event SHAs is credential-free and portable.
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
-          git fetch --no-tags --depth=200 origin "$BASE_REF"
-          BASE="origin/$BASE_REF"
-
-          CHANGED="$(git diff --name-only "$BASE...HEAD")"
+          CHANGED="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
           echo "--- files changed in this PR ---"
           echo "$CHANGED"
           echo "--------------------------------"
@@ -114,7 +118,7 @@ jobs:
             ' "$1"
           }
 
-          git show "$BASE:CHANGELOG.md" > "$RUNNER_TEMP/base-changelog.md" 2>/dev/null || : > "$RUNNER_TEMP/base-changelog.md"
+          git show "$BASE_SHA:CHANGELOG.md" > "$RUNNER_TEMP/base-changelog.md" 2>/dev/null || : > "$RUNNER_TEMP/base-changelog.md"
           extract_unreleased "$RUNNER_TEMP/base-changelog.md" > "$RUNNER_TEMP/base-unreleased.txt"
           extract_unreleased CHANGELOG.md                     > "$RUNNER_TEMP/head-unreleased.txt"
 
