@@ -37,6 +37,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-08-24
+
 Text under this file's own rules: what a tool returns when it fails. No tool,
 parameter, annotation or route changes; no new request is made — the one new
 thing read off the wire is the `Retry-After` header of a response that had
