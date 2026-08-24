@@ -46,7 +46,6 @@
     "cross-tool",
     "model-context-protocol",
     "hosted-memory",
-    "forgetting",
     "vendor-neutral"
   ],
   "author": "Mnemoverse <hello@mnemoverse.com>",

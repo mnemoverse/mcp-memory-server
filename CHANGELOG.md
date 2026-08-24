@@ -37,6 +37,38 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The room usage line names what the membership scope actually allows.**
+  `memory_join_room`'s description and its usage sentence, and
+  `memory_list_rooms`'s per-room tail, all used to say "use domain=... [on
+  memory_write / memory_read] to read and write the shared room" — true for a
+  `read_write` membership, false for a `read` one: core refuses that member's
+  `memory_write` with a 403 "Read-only membership cannot write to this room".
+  All three surfaces now name `memory_read` unconditionally and only promise
+  `memory_write` where the scope is `read_write`; a `read` membership is told
+  the write will be refused, and a scope the response did not report at all
+  gets no promise about write either way. Text-only.
+- **`memory_write.domain` now says names are matched byte-for-byte.** The
+  handler has long refused to trim or normalise a domain — a leading space
+  opens a separate, permanent store beside the intended one — and
+  `memory_read.domain` already explained its half of the same rule. This is
+  the one place the fork actually gets CREATED, and it was the only silent
+  one; the description now says so and points at `memory_stats` for the exact
+  name, and names the room-address escape hatch. Text-only.
+- **The npm package keyword list no longer claims "forgetting".** 0.9.1
+  retracted "learns and forgets" from the README as false — unhelpful
+  memories are out-ranked, not erased, and deletion is administrative-only
+  since 0.9.0 — but the same claim survived as an npm keyword. Removed as
+  part of the same retraction.
+- **`llms.txt`'s install command now pins `@latest`,** matching every other
+  install snippet in this repo. The bare form npm caches indefinitely and
+  stops re-checking the registry (README, "Why `@latest`?") — an agent
+  following `llms.txt` verbatim would have installed once and silently
+  stopped receiving updates. `llms.txt` is hand-maintained (confirmed against
+  `scripts/generate-configs.mjs`'s `OUTPUTS` list, which does not include it),
+  so the fix is direct.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,

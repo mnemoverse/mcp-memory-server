@@ -328,6 +328,28 @@ function isRoomDomain(domain: string | undefined): boolean {
   return typeof domain === "string" && domain.startsWith("xroom:");
 }
 
+/**
+ * The three outcomes this client will ever print a WRITE promise about for a
+ * room membership. Core grants exactly two scopes — "read" and "read_write"
+ * (rooms_routes.py `_VALID_SCOPES`) — and refuses a read-only member's
+ * memory_write with a 403 "Read-only membership cannot write to this room"
+ * (src/errors.ts). Anything else on the wire (missing field, a Copilot-shaped
+ * partial body) is UNSPECIFIED: the server did not say what memory_write would
+ * do for this membership, so this client does not guess either — it is treated
+ * like "read" for the purpose of NOT promising write, but is not told it is
+ * read-only, because that is also a claim the response did not make.
+ *
+ * Bug hunt (pre-0.9.2, P2): memory_join_room's usage sentence and
+ * memory_list_rooms's per-row tail both used to print "use domain=... [on
+ * memory_write / memory_read] to read and write" unconditionally — true for a
+ * read_write membership, false for a read-only one.
+ */
+function roomScopeVerdict(scope: string | undefined): "read_write" | "read" | "unspecified" {
+  if (scope === "read_write") return "read_write";
+  if (scope === "read") return "read";
+  return "unspecified";
+}
+
 // --- Tool: memory_write ---
 
 server.registerTool(
@@ -353,7 +375,12 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')",
+          "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')." +
+            " Matched byte-for-byte — a leading space, a different case, or an invisible" +
+            " character opens a SEPARATE, permanent store, so reuse an exact name from" +
+            " memory_stats rather than retyping one. To write into a shared room, pass its" +
+            " address here instead (e.g. 'xroom:room_01ABC'). Find room addresses with" +
+            " memory_list_rooms.",
         ),
     },
     annotations: {
@@ -1296,7 +1323,7 @@ server.registerTool(
   "memory_join_room",
   {
     description:
-      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_write/memory_read to read and write the shared room.",
+      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result names your membership scope, and memory_write to that address is only allowed when it is read_write; a read-only membership has that write refused.",
     inputSchema: {
       code: z.string().min(1).max(200).describe("The invite code (mnvr_...)."),
     },
@@ -1331,9 +1358,18 @@ server.registerTool(
       ? `You're already a member of ${roomName}.`
       : `Joined ${roomName} (${scope}).`;
     // Don't print broken `domain=""` guidance if no address came back (Copilot).
-    const usage = address
-      ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
-      : `The server did not return a room address — retry, or check that your API key is set.`;
+    // The write half of this sentence is scope-gated (roomScopeVerdict, above
+    // isRoomDomain): a "read" invite gets told memory_write will be refused
+    // rather than offered it, and a scope the response did not report at all
+    // gets no promise about write either way.
+    const verdict = roomScopeVerdict(r?.scope);
+    const usage = !address
+      ? `The server did not return a room address — retry, or check that your API key is set.`
+      : verdict === "read_write"
+        ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
+        : verdict === "read"
+          ? `Use it: pass domain="${address}" on memory_read to read it; this membership is read-only, so memory_write to that address will be refused.`
+          : `Use it: pass domain="${address}" on memory_read to read it — the server did not report this membership's write access, so whether memory_write to that address would succeed is unknown.`;
     return {
       content: [
         {
@@ -1352,7 +1388,7 @@ server.registerTool(
   "memory_list_rooms",
   {
     description:
-      "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_write / memory_read. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
+      "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
     inputSchema: {},
     annotations: {
       title: "List rooms",
@@ -1412,13 +1448,24 @@ server.registerTool(
       // src/scope.ts), so that clause was an instruction to make a call that
       // cannot succeed. The address stays visible — it is the room's identity —
       // but the line says what a read against it will do.
+      //
+      // For a live room, the write half is scope-gated the same way
+      // memory_join_room's usage sentence is (roomScopeVerdict, near
+      // isRoomDomain): this used to say "use domain=..." with no operation
+      // named, which read as an unqualified read+write invitation even for a
+      // "read" member — false, since core refuses that member's memory_write.
+      const verdict = roomScopeVerdict(scope);
       const tail = r?.archived
         ? address
           ? ` [archived] — address ${address}, but every read is refused while it is archived`
           : ` [archived] — every read is refused while it is archived`
-        : address
-          ? ` — use domain="${address}"`
-          : "";
+        : !address
+          ? ""
+          : verdict === "read_write"
+            ? ` — use domain="${address}" to read and write it`
+            : verdict === "read"
+              ? ` — use domain="${address}" on memory_read only; this membership is read-only, so memory_write to it will be refused`
+              : ` — use domain="${address}" on memory_read; this membership's write access was not reported`;
       return `- ${name} (${role}${scope ? `, ${scope}` : ""})${tail}`;
     });
     const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
