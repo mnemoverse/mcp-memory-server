@@ -12,6 +12,7 @@
  */
 
 import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
+import { parseAsUtc } from "./time.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
@@ -61,9 +62,27 @@ export type RecentItem = {
  * quoted as "Zo" — a different name presented as the name. The exact literal
  * is single-line with quotes and invisibles escaped, so it carries the same
  * anti-injection property without the renaming.
+ *
+ * `s` is `unknown` — like `roomNamePhrase` and `exactLiteral`, and for the same
+ * reason. Every call site reads a field off the wire where the response types
+ * are aspirational, and this was `(s ?? "").replace(…)`, which throws on
+ * anything that is not a string. The SDK turns a thrown Error into the WHOLE
+ * tool result, so one numeric `agent_name` on one item of fifty replaced a page
+ * of memories with `(s ?? "").replace is not a function` — no `Mnemoverse: `
+ * prefix, no diagnosis, nothing to act on. `asRoom` (src/scope.ts) narrowed the
+ * room list for exactly this reason and recorded it as "a latent crash fixed";
+ * the five remaining call sites (the author tag here, and address / room_id /
+ * scope / alias / context in src/index.ts) are closed by the guard below.
+ *
+ * A non-string sanitises to "" rather than to `String(s)`: this output is
+ * interpolated into sentences that are already written to handle a missing
+ * value — an absent author tag, "(no alias)", "the server did not return a room
+ * address" — and every one of those is true of a field we cannot read, while
+ * `"[object Object]"` as an author would not be.
  */
-export function safeInline(s: string | undefined | null, cap = 200): string {
-  return (s ?? "")
+export function safeInline(s: unknown, cap = 200): string {
+  if (typeof s !== "string") return "";
+  return s
     .replace(/[^\w .@:+/-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -118,12 +137,27 @@ export function formatDomainTag(domain?: string): string {
  * ` · 2026-08-01 21:04Z` — minute-precision UTC, compact enough for a line
  * tail, precise enough to order a same-day room conversation by eye.
  * Empty for legacy atoms without a timestamp.
+ *
+ * The `Z` is an ASSERTION, and until now it was made about a number this
+ * function had not established. `new Date(createdAt)` reads an offset-less
+ * `created_at` as LOCAL time — the reading core's schema and this server's own
+ * `since` descriptions both contradict — and `toISOString()` then stamped the
+ * local reading with a `Z`. So one stored atom rendered a different clock time
+ * in every timezone the client happened to sit in: `2026-08-01T23:30:00` was
+ * `23:30Z` in UTC, `14:30Z` in Asia/Tokyo, and `2026-08-02 06:30Z` in
+ * America/Los_Angeles — a memory dated to a day it was not written, on the tag
+ * a reader uses to order a conversation and to decide what is recent.
+ *
+ * `parseAsUtc` (src/time.ts) is the same reader src/scope.ts uses for the
+ * future-watermark note, which is the point: the convention is now implemented
+ * once. It also rejects a non-string, so a `created_at` that arrives as epoch
+ * millis degrades to no tag rather than to a date the contract does not
+ * promise.
  */
 export function formatDateTag(createdAt?: string): string {
-  if (!createdAt) return "";
-  const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return "";
-  const iso = d.toISOString();
+  const t = parseAsUtc(createdAt);
+  if (t === null) return "";
+  const iso = new Date(t).toISOString();
   return ` · ${iso.slice(0, 10)} ${iso.slice(11, 16)}Z`;
 }
 

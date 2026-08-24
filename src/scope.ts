@@ -32,6 +32,11 @@ import {
   roomNamePhrase,
   withDomainEscapeLegend,
 } from "./names.js";
+// "naive = UTC" is the convention core's schema and both `since` descriptions
+// state; it used to be implemented here and nowhere else, which is how the
+// renderer came to read the same wire value as local time. One implementation,
+// two readers (src/time.ts).
+import { parseAsUtc } from "./time.js";
 
 /**
  * How to NAME the scope inside a sentence, so the sentence is true on its own
@@ -99,29 +104,6 @@ export function futureSinceNote(since: string | undefined, nowMs: number): strin
     `(the server's may differ slightly). Check the watermark you passed — a timezone ` +
     `slip is the usual cause.`
   );
-}
-
-/**
- * Parse an ISO-8601 instant the way the SERVER does: an offset-less value is
- * UTC, not local time.
- *
- * `Date.parse("2026-08-08T13:00:00")` returns LOCAL midnight-relative millis,
- * while both tool descriptions here and core's schema say "naive = UTC". The
- * mismatch made this note lie in both directions (review, 2026-08-08): west of
- * UTC a perfectly sane watermark was declared to be in the future and every
- * clause of the note was false; east of UTC a genuinely future watermark was
- * shifted into the past and the note stayed silent, missing the one case it
- * exists for.
- *
- * Date-only values ("2026-08-08") are already parsed as UTC by spec, so only
- * date-TIME values without an offset need the Z.
- */
-function parseAsUtc(iso: string): number | null {
-  const s = iso.trim();
-  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
-  const isDateTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s);
-  const t = Date.parse(isDateTime && !hasOffset ? `${s.replace(" ", "T")}Z` : s);
-  return Number.isNaN(t) ? null : t;
 }
 
 /**
