@@ -4,15 +4,24 @@ name: release
 #
 # Trigger: push a semver tag `vX.Y.Z` to main (e.g. `git tag v0.3.2 && git push origin v0.3.2`).
 #
-# What this workflow does, in order:
-#   1. Checks that the tag's version matches package.json#version (catches "forgot to bump" mistakes).
-#   2. npm ci + npm run build (prebuild regenerates every generated artifact from source.json).
-#   3. npm run verify:configs — drift check, fails fast if anything is out of sync with source.json.
-#   4. npm publish — uses a repo-scoped automation token stored in the NPM_TOKEN secret.
-#   5. Installs mcp-publisher CLI (Linux amd64 bottle from the releases bucket).
-#   6. mcp-publisher login github-oidc — uses GitHub Actions' OIDC token, NO stored PAT.
-#   7. mcp-publisher publish — uploads the freshly-generated server.json to registry.modelcontextprotocol.io.
-#   8. gh release create — posts a GitHub release with auto-generated notes.
+# What this workflow does, in order — every gate BEFORE the first irreversible
+# step (`npm publish`), ordered so the cheapest checks fail first:
+#   1. Checks the tag commit is an ancestor of main (#87) — an unmerged branch's
+#      tag must never publish: npm and the MCP Registry are irreversible per version.
+#   2. Checks the tag's version matches package.json, package-lock.json and server.json.
+#   3. Checks CHANGELOG.md has a dated `## [X.Y.Z] — YYYY-MM-DD` section and
+#      extracts it as the release notes (#74).
+#   4. Drift check against the COMMITTED tree (#86) — before anything regenerates it.
+#   5. npm ci + npm run build (prebuild regenerates every artifact from source.json).
+#   6. Validates and packs the .mcpb bundle (#85).
+#   7. Smokes the packed npm tarball through its bin entry (#69 follow-up).
+#   8. npm publish — repo-scoped automation token from the NPM_TOKEN secret.
+#   9. mcp-publisher login github-oidc + publish — uploads server.json to
+#      registry.modelcontextprotocol.io, then verifies the entry propagated.
+#  10. gh release create — hand-written CHANGELOG section as the body,
+#      auto-generated commit list appended, .mcpb bundle attached.
+#  11. repository_dispatch to mnemoverse-docs so the docs site learns the new
+#      version immediately (#98); its daily cron is the fallback.
 #
 # Why OIDC instead of a PAT:
 # The GitHub OIDC provider issues a short-lived JWT that the MCP Registry trusts on the basis
@@ -23,13 +32,19 @@ name: release
 # Prerequisite secrets you must add at repo Settings > Secrets and variables > Actions:
 #   - NPM_TOKEN — npm automation token from npmjs.com/settings/{org}/tokens/granular-access-tokens/new
 #                 (select "Automation", grant publish access to @mnemoverse/mcp-memory-server).
+#   - DOCS_DISPATCH_TOKEN (optional) — fine-grained PAT, mnemoverse-docs only,
+#                 contents:write. Missing token degrades to a warning: the docs
+#                 site's daily cron catches up within a day.
 #
 # To release:
-#   1. Bump version in package.json + src/index.ts on main (keep them in sync).
+#   1. Bump version in package.json (src/index.ts reads it from there) and run
+#      `npm install` so package-lock.json follows.
 #   2. `npm run generate:configs` to propagate the new version to server.json.
-#   3. Commit, push to main (through PR, drift CI passes).
-#   4. `git tag v$(node -p "require('./package.json').version")`.
-#   5. `git push origin v0.x.y`.
+#   3. Flip CHANGELOG.md's `## [Unreleased]` header to `## [X.Y.Z] — YYYY-MM-DD`
+#      (step 3 above fails the release if you forget).
+#   4. Commit, push to main (through PR, drift CI passes).
+#   5. `git tag v$(node -p "require('./package.json').version")`.
+#   6. `git push origin v0.x.y`.
 # The workflow does the rest.
 
 on:
@@ -45,6 +60,14 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Trust boundary (adversarial review F1): every gate below lives in THIS
+    # file, and GitHub runs the file at the pushed tag's commit — so the gates
+    # stop mistakes, not a write-access actor who tags a branch carrying a
+    # gutted copy. The half that closes that hole lives in repo SETTINGS, not
+    # here: protect this `release` environment (required reviewers and/or
+    # deployment tag rules) and keep NPM_TOKEN as an environment secret; add a
+    # ruleset restricting who may create v* tags.
+    environment: release
     permissions:
       # contents:write — needed to create the GitHub release.
       # id-token:write — required by `mcp-publisher login github-oidc`.
@@ -57,6 +80,22 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
+
+      # Both publish targets are irreversible per version, so a tag pushed from
+      # an unmerged branch would publish unreviewed code forever (#87). HEAD is
+      # the tag's peeled commit after checkout; requiring it to be an ancestor
+      # of main means every published tree went through a merged PR.
+      - name: Verify the tag commit is on main
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$(git rev-parse HEAD^{commit})" origin/main; then
+            echo "::error::tag $TAG is not an ancestor of main — refusing to publish an unreviewed tree"
+            exit 1
+          fi
+          echo "✓ $TAG is on main"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -103,17 +142,99 @@ jobs:
           done
           [ "$FAIL" -eq 0 ] || exit 1
 
+      # The hand-written CHANGELOG entry is the half of the release notes a
+      # commit list cannot replace, and until now the workflow never read the
+      # file at all (#74): the header stayed [Unreleased] forever and the
+      # release page showed only auto-generated notes. Fail early if the header
+      # was never flipped; extract the section for the release body.
+      - name: CHANGELOG has a dated section for this version — extract it
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          # Anchored full-date regex, not a fixed-string prefix: '— 20' alone
+          # would accept '## [X.Y.Z] — 20unreleased' (Copilot, #100). The dots
+          # in the version are escaped so 0.9.0 cannot match 0x9x0.
+          VER_RE="$(printf '%s' "$VERSION" | sed 's/\./\\./g')"
+          if ! grep -qE "^## \[$VER_RE\] — 20[0-9]{2}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated '## [$VERSION] — YYYY-MM-DD' section — flip [Unreleased] before tagging"
+            exit 1
+          fi
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          awk -v hdr="## [$VERSION]" '
+            index($0, hdr) == 1 { found = 1; next }
+            found && /^## \[/   { exit }
+            found               { print }
+          ' CHANGELOG.md > "$NOTES"
+          # A flipped header with no body (or a header-like string in prose)
+          # would produce an empty section and defeat the gate vacuously.
+          if ! grep -q '[^[:space:]]' "$NOTES"; then
+            echo "::error::the CHANGELOG section for $VERSION is empty — write the entry before tagging"
+            exit 1
+          fi
+          {
+            echo ""
+            echo "- npm: https://www.npmjs.com/package/@mnemoverse/mcp-memory-server"
+            echo "- MCP Registry: https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse"
+          } >> "$NOTES"
+          echo "--- release notes ---"
+          cat "$NOTES"
+
+      # Drift gate that can actually fail (#86). `npm run build` regenerates
+      # every artifact via prebuild, so a check AFTER the build compares the
+      # generator's output with itself and passes by construction. This one
+      # runs against the COMMITTED tree, before anything rewrites it —
+      # generate-configs.mjs is dependency-free, so it needs no npm ci.
+      - name: Verify committed artifacts match source.json (pre-build)
+        run: node scripts/generate-configs.mjs --check
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build (runs generate:configs via prebuild)
         run: npm run build
 
+      # Belt to the pre-build gate above: catches a generator that is itself
+      # non-deterministic between two runs in the same job.
       - name: Verify no drift between source.json and generated artifacts
         run: npm run verify:configs
 
+      # The manifest.json fixes shipped in 0.8.x reached nobody: no workflow
+      # ever packed the .mcpb bundle (#85). Pack BEFORE npm publish so a broken
+      # bundle blocks the release while everything is still reversible.
+      - name: Validate and pack the .mcpb bundle
+        run: |
+          set -euo pipefail
+          npm run mcpb:validate
+          npm run mcpb:pack
+          ls -l dist-mcpb/mnemoverse-memory.mcpb
+
+      # The PR-time smoke (test.yml smoke-node18) drives dist/index.js in the
+      # working tree. This drives the PACKED tarball through its bin entry —
+      # the two slivers the PR smoke cannot see: the `files` list actually
+      # shipping dist/, and the bin path resolving after install (#69).
+      - name: Smoke the packed tarball through its bin entry
+        run: |
+          set -euo pipefail
+          TARBALL="$(npm pack --silent)"
+          SMOKE="$RUNNER_TEMP/pack-smoke"
+          mkdir -p "$SMOKE"
+          ( cd "$SMOKE" && npm init -y >/dev/null 2>&1 && npm install --no-audit --no-fund "$GITHUB_WORKSPACE/$TARBALL" >/dev/null )
+          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-06-18","capabilities":{},"clientInfo":{"name":"pack-smoke","version":"0"}}}'
+          OUT="$(echo "$REQ" | timeout 30 "$SMOKE/node_modules/.bin/mcp-memory-server" 2>/dev/null | head -c 400 || true)"
+          echo "$OUT"
+          case "$OUT" in
+            *'"serverInfo"'*'"name":"mnemoverse-memory"'*) echo "packed bin: handshake ok" ;;
+            *) echo "::error::the packed tarball's bin entry did not complete an MCP initialize"; exit 1 ;;
+          esac
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+
+      # Publishing the TARBALL (not the directory) ships byte-for-byte what the
+      # smoke just verified; a directory publish would re-pack and re-run
+      # lifecycle scripts, reopening a gap between tested and shipped.
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish "$TARBALL" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -131,34 +252,61 @@ jobs:
       - name: Publish to Official MCP Registry
         run: ./mcp-publisher publish
 
+      # Post-publish OBSERVATION, not a gate: `mcp-publisher publish` above has
+      # already failed hard if the upload failed. This step only confirms
+      # propagation — and it must not strand the release: it used to sit as a
+      # hard failure between npm publish and the GitHub release, so one slow
+      # propagation left no release page and no .mcpb asset, and a re-run died
+      # at npm publish (version exists, 403). Poll, then degrade to a warning.
       - name: Verify the registry entry shows the new version
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           VERSION="${TAG#v}"
-          echo "Waiting a few seconds for the registry to propagate..."
-          sleep 3
-          RESULT="$(curl -sS "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mnemoverse%2Fmcp-memory-server/versions/$VERSION")"
-          echo "$RESULT" | python3 -m json.tool
-          echo "$RESULT" | python3 -c "
+          URL="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mnemoverse%2Fmcp-memory-server/versions/$VERSION"
+          for i in $(seq 1 10); do
+            RESULT="$(curl -sS "$URL" || true)"
+            if echo "$RESULT" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           srv = d['server']
-          assert srv['version'] == '$VERSION', f\"registry version {srv['version']} != $VERSION\"
+          assert srv['version'] == '$VERSION'
           print(f'✓ Registry shows {srv[\"name\"]}@{srv[\"version\"]}')
-          "
+          " 2>/dev/null; then
+              exit 0
+            fi
+            echo "attempt $i/10: not visible yet, waiting 6s..."
+            sleep 6
+          done
+          echo "::warning::registry entry for $VERSION not visible after 60s — check https://registry.modelcontextprotocol.io manually; NOT failing the release"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: ${{ github.event.inputs.tag || github.ref_name }}
+          # The hand-written CHANGELOG section is the body; the auto-generated
+          # commit list is appended after it (#74).
+          body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
-          body: |
-            Published via automated release pipeline (`.github/workflows/release.yml`).
+          files: dist-mcpb/mnemoverse-memory.mcpb
 
-            - npm: https://www.npmjs.com/package/@mnemoverse/mcp-memory-server
-            - MCP Registry: https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse
-
-            Full changelog below.
+      # Tell the docs site a release happened (#98). The receiver
+      # (mnemoverse-docs .github/workflows/mcp-version-watch.yml, event type
+      # mcp-release) also polls npm daily, so a missing token means at most one
+      # day of staleness — a warning here, never a failed release.
+      - name: Notify mnemoverse-docs
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::DOCS_DISPATCH_TOKEN not set — the docs site will catch up via its daily cron"
+            exit 0
+          fi
+          if gh api repos/mnemoverse/mnemoverse-docs/dispatches -f event_type=mcp-release; then
+            echo "✓ dispatched mcp-release to mnemoverse-docs"
+          else
+            echo "::warning::dispatch failed (expired/revoked DOCS_DISPATCH_TOKEN?) — the docs cron will catch up within a day"
+          fi
