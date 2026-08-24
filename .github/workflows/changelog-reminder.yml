@@ -131,14 +131,20 @@ jobs:
           extract_unreleased "$RUNNER_TEMP/base-changelog.md" > "$RUNNER_TEMP/base-unreleased.txt"
           extract_unreleased CHANGELOG.md                     > "$RUNNER_TEMP/head-unreleased.txt"
 
-          # Head's [Unreleased] must (a) differ from base's and (b) carry real
-          # content — so removing lines, or flipping the header away, cannot pass.
+          # Head's [Unreleased] must (a) carry real content and (b) contain a
+          # nonblank line that base did NOT — a genuine addition. Requiring a NEW
+          # line (not merely "differs") means deleting or rewriting an existing
+          # entry cannot pass; only adding one does. comm on the nonblank line
+          # sets — not a line count — so a simultaneous add+remove is not a false
+          # failure.
           if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/head-unreleased.txt"; then
             echo "::error::src/**/*.ts changed but CHANGELOG.md '## [Unreleased]' is empty. Add an entry describing the change (or add '[skip changelog]' to the PR description if this is an internal refactor with identical observable behaviour). See CONTRIBUTING.md → Changelog."
             exit 1
           fi
-          if diff -q "$RUNNER_TEMP/base-unreleased.txt" "$RUNNER_TEMP/head-unreleased.txt" >/dev/null; then
-            echo "::error::src/**/*.ts changed but this PR did not add anything under CHANGELOG.md '## [Unreleased]'. Add an entry describing the change (or add '[skip changelog]' to the PR description if this is an internal refactor with identical observable behaviour). See CONTRIBUTING.md → Changelog."
+          grep -v '^[[:space:]]*$' "$RUNNER_TEMP/base-unreleased.txt" | sort -u > "$RUNNER_TEMP/base-nb.txt" || true
+          grep -v '^[[:space:]]*$' "$RUNNER_TEMP/head-unreleased.txt" | sort -u > "$RUNNER_TEMP/head-nb.txt" || true
+          if [ -z "$(comm -13 "$RUNNER_TEMP/base-nb.txt" "$RUNNER_TEMP/head-nb.txt")" ]; then
+            echo "::error::src/**/*.ts changed but this PR added no NEW line under CHANGELOG.md '## [Unreleased]' (deleting or rewriting an existing entry does not count). Add an entry describing the change (or add '[skip changelog]' to the PR description if this is an internal refactor with identical observable behaviour). See CONTRIBUTING.md → Changelog."
             exit 1
           fi
 
