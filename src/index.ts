@@ -750,17 +750,81 @@ server.registerTool(
 
 // --- Tool: memory_list_recent ---
 
+/**
+ * How big ONE feed page may get, and how the handler stays under it (#104).
+ *
+ * THE INCIDENT. `memory_list_recent(domain: "xroom:…", limit: 40, cursor: …)`
+ * over a shared room of long archival entries produced a single tool result of
+ * 72,648 characters. Claude Code refused to inline it and spilled it to a file;
+ * a client without that fallback loses the page. MAX_RESULT_CHARS did not fire,
+ * and could not have: 72,648 is comfortably under 96,000. That number is
+ * `24,000 tokens × 4 chars/token`, and the 4 is an average over ordinary prose —
+ * archival room entries carry ids, code, punctuation and non-ASCII, which
+ * tokenize far worse. A cap derived from an optimistic ratio is not a promise
+ * about a client's real limit.
+ *
+ * WHY `limit` COULD NOT SOLVE IT. `limit` bounds the COUNT. Whether a count is
+ * safe depends entirely on how long the entries happen to be — 1,500–4,000+
+ * chars each in coordination rooms, against a 10,000-char write cap — and the
+ * caller cannot know that before asking. Too high explodes; too low costs
+ * dozens of round trips for the same catch-up.
+ *
+ * WHAT THIS IS. A page is assembled from small sub-requests and stops BEFORE
+ * the budget is exceeded, returning the server cursor of the last FULLY
+ * accepted sub-batch. The cursor is per-batch, which is why the batch is small:
+ * it is the granularity at which the page can end without losing or repeating
+ * an entry. Nothing is dropped silently — an entry that exceeds the budget on
+ * its own is returned whole, as a page of one, because per-entry truncation
+ * needs a fetch-one-by-id verb this server does not have (#104, suggestion 2).
+ *
+ * THE NUMBER IS DELIBERATELY CONSERVATIVE AND DELIBERATELY LOCAL. 40,000 is
+ * roughly half of what already failed in production; the true boundary of any
+ * given client is unmeasured, and calibrating it is follow-up work. It does NOT
+ * touch MAX_RESULT_CHARS, which is shared with memory_read and every other
+ * surface and remains the final backstop after this budget has done its work.
+ */
+const LIST_PAGE_CHAR_BUDGET = 40_000;
+
+/**
+ * Entries per sub-request. Small enough that the budget can end a page at a
+ * useful granularity, large enough that an ordinary short-entry feed still
+ * costs one or two round trips (the default `limit` of 20 costs two).
+ */
+const LIST_PAGE_CHUNK = 10;
+
+/**
+ * A ceiling on sub-requests per call — the loop's own stop condition is the
+ * budget, the caller's `limit`, or the end of the feed, and this fires only if
+ * a server answers in a way none of those three catch. `limit: 100` needs ten,
+ * plus a few for narrowing an over-budget batch.
+ */
+const LIST_PAGE_MAX_REQUESTS = 16;
+
+/**
+ * Appended when the page stopped because a LATER sub-request failed. Chunking
+ * multiplies the requests per call and therefore the chance one of them fails
+ * mid-page; discarding the entries already in hand would make this change a
+ * regression for exactly the long-entry rooms it exists for. Saying nothing
+ * would be worse — a short page with a valid cursor is indistinguishable from
+ * a page the budget ended, which is the could-not-fetch/does-not-exist
+ * collision this codebase keeps closing.
+ */
+const LIST_PAGE_EARLY_STOP_NOTE =
+  "\n\n(This page stopped early — the request for the next batch of older " +
+  "entries did not come back usable, so this page holds fewer entries than " +
+  "asked for. The cursor above is unaffected: continue from it.)";
+
 server.registerTool(
   "memory_list_recent",
   {
     description:
-      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
+      "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
     inputSchema: {
       domain: z
         .string()
         .optional()
         .describe(
-          "Restrict to one domain. REQUIRED to read a shared room — pass its address ('xroom:room_01ABC'), because rooms are separate stores that an unscoped feed does NOT cover. Omit only when you mean your own domains. Room addresses come from memory_list_rooms.",
+          "Restrict to one domain. REQUIRED to read a shared room — pass its address ('xroom:room_01ABC'), because rooms are separate stores that an unscoped feed does NOT cover. Omit only when you mean your own domains. Room addresses come from memory_list_rooms. Room entries are often long — a room feed usually reaches its size budget after a handful of them, so expect to page (see `limit`).",
         ),
       since: z
         .string()
@@ -787,7 +851,9 @@ server.registerTool(
         .min(1)
         .max(100)
         .optional()
-        .describe("Page size (default: 20). Newest first."),
+        .describe(
+          "Most entries per page (default: 20). Newest first. ⚠️ A CEILING, not a promise: the page is ALSO bounded by size, so a page of long entries stops early and returns a cursor for the rest. In rooms whose entries run long, ask for 5–10 — a large `limit` there buys nothing the size budget will not take back, and costs round trips.",
+        ),
       cursor: z
         .string()
         .max(512)
@@ -808,67 +874,153 @@ server.registerTool(
     // ONE value for the request and for every decision about it — see the note
     // at the top of memory_read.
     const searched = searchedScope(domain);
-    let r: { items?: RecentItem[]; next_cursor?: string | null };
-    try {
-      r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
-        "/memory/recent",
-        {
-          method: "POST",
-          body: JSON.stringify(
-            recentRequestBody({ domain, since, until, exclude_author, limit, cursor }),
-          ),
-        },
-      );
-    } catch (e) {
-      // Graceful degradation while the server side rolls out: a 404 with no
-      // error `code` in the body is what an undeployed /memory/recent looks
-      // like, so degrade to a usable alternative instead of surfacing a raw
-      // HTTP error.
-      //
-      // NAMED FOR WHAT IT TESTS. This was `endpointAbsent`, which asserted a
-      // deployment fact the check cannot establish: every engine 404 carries a
-      // `code`, so a real room-404 is excluded, but a gateway, a proxy or a
-      // wrong MNEMOVERSE_API_URL produces the same bare 404 and is
-      // indistinguishable from here. The MESSAGE below still states the
-      // deployment cause outright, which is more than this boolean knows —
-      // listed in CHANGELOG's "Known and NOT fixed here" rather than papered
-      // over with a hedge.
-      //
-      // NOW READ FROM STRUCTURED FIELDS. It used to be
-      // `e.message.startsWith("Mnemoverse API error 404:")` plus a substring
-      // hunt for `"code"` in the same string — a behavioural branch keyed to the
-      // exact prefix of a user-facing sentence. Rewording that sentence, which
-      // is precisely what src/errors.ts does, would have flipped this branch
-      // silently: every per-request 404 would have degraded into "the service
-      // does not support the feed yet". `ApiError.isBare404` asks the parsed
-      // envelope instead, so the prose and the branch can no longer collide.
-      const bare404 = e instanceof ApiError && e.isBare404;
-      if (bare404) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "The memory service does not support the recent-entries feed yet. " +
-                "Use memory_read with order_by: 'recency' as an approximation.",
-            },
-          ],
-        };
+
+    // The caller's `limit` is a CEILING on the item count. The page also has a
+    // character budget (LIST_PAGE_CHAR_BUDGET), and whichever binds first ends
+    // the page — which is why this is a loop over small sub-requests rather
+    // than one request for `limit` entries followed by a cap that arrives too
+    // late to do anything but truncate.
+    const ceiling = limit || 20;
+    const accepted: RecentItem[] = [];
+    // The server cursor of the last FULLY accepted sub-batch: the only value
+    // that can be handed back without losing or repeating an entry, since a
+    // cursor names a batch boundary and nothing finer.
+    let acceptedCursor: string | null | undefined;
+    // Where the next sub-request continues from — the caller's cursor first,
+    // the server's thereafter. Resending the caller's would replay page one.
+    let position = cursor || undefined;
+    let ask = Math.min(LIST_PAGE_CHUNK, ceiling);
+    let stoppedEarly = false;
+
+    for (let attempt = 0; attempt < LIST_PAGE_MAX_REQUESTS; attempt++) {
+      let r: { items?: RecentItem[]; next_cursor?: string | null };
+      try {
+        r = await apiFetch<{ items?: RecentItem[]; next_cursor?: string | null }>(
+          "/memory/recent",
+          {
+            method: "POST",
+            body: JSON.stringify(
+              recentRequestBody({
+                domain,
+                since,
+                until,
+                exclude_author,
+                limit: ask,
+                cursor: position,
+              }),
+            ),
+          },
+        );
+      } catch (e) {
+        // A failure with entries already in hand ends the page instead of the
+        // call: the caller keeps what was fetched plus a cursor that still
+        // continues correctly, and the appended note says the page was cut
+        // short by a failed request rather than by the budget. With nothing
+        // accepted there is no page to return, so the error surfaces exactly
+        // as it did before chunking.
+        if (accepted.length > 0) {
+          stoppedEarly = true;
+          break;
+        }
+        // Graceful degradation while the server side rolls out: a 404 with no
+        // error `code` in the body is what an undeployed /memory/recent looks
+        // like, so degrade to a usable alternative instead of surfacing a raw
+        // HTTP error.
+        //
+        // NAMED FOR WHAT IT TESTS. This was `endpointAbsent`, which asserted a
+        // deployment fact the check cannot establish: every engine 404 carries a
+        // `code`, so a real room-404 is excluded, but a gateway, a proxy or a
+        // wrong MNEMOVERSE_API_URL produces the same bare 404 and is
+        // indistinguishable from here. The MESSAGE below still states the
+        // deployment cause outright, which is more than this boolean knows —
+        // listed in CHANGELOG's "Known and NOT fixed here" rather than papered
+        // over with a hedge.
+        //
+        // NOW READ FROM STRUCTURED FIELDS. It used to be
+        // `e.message.startsWith("Mnemoverse API error 404:")` plus a substring
+        // hunt for `"code"` in the same string — a behavioural branch keyed to the
+        // exact prefix of a user-facing sentence. Rewording that sentence, which
+        // is precisely what src/errors.ts does, would have flipped this branch
+        // silently: every per-request 404 would have degraded into "the service
+        // does not support the feed yet". `ApiError.isBare404` asks the parsed
+        // envelope instead, so the prose and the branch can no longer collide.
+        const bare404 = e instanceof ApiError && e.isBare404;
+        if (bare404) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text:
+                  "The memory service does not support the recent-entries feed yet. " +
+                  "Use memory_read with order_by: 'recency' as an approximation.",
+              },
+            ],
+          };
+        }
+        throw e;
       }
-      throw e;
+
+      // Same guard as memory_read: a 200 without an items array is UNREADABLE,
+      // not empty — and the feed's empty heads below are precisely the absence
+      // claims that must not be derived from it (truth F13, 2026-08-08). Mid
+      // page it is treated like a failed sub-request, for the same reason.
+      const batch = r?.items;
+      if (!Array.isArray(batch)) {
+        if (accepted.length > 0) {
+          stoppedEarly = true;
+          break;
+        }
+        return unreadableListReply(
+          "The recent-entries feed",
+          "an empty feed",
+          "there is nothing to list",
+        );
+      }
+
+      const next = r?.next_cursor;
+      // Measured on the TEXT THAT WOULD SHIP, rendered by the same function
+      // that renders the answer — an estimate from item lengths would drift
+      // from the renderer the first time a line gained a field.
+      const fits =
+        formatRecentPage(accepted.concat(batch), next).length <= LIST_PAGE_CHAR_BUDGET;
+
+      if (fits) {
+        accepted.push(...batch);
+        acceptedCursor = next;
+        position = typeof next === "string" && next ? next : undefined;
+        // No cursor: the feed ended, and the page says so. No entries: the
+        // server is not advancing, so continuing would spend requests on the
+        // same nothing. Ceiling reached: the caller's count is spent.
+        if (!position || batch.length === 0 || accepted.length >= ceiling) break;
+        ask = Math.min(LIST_PAGE_CHUNK, ceiling - accepted.length);
+        continue;
+      }
+
+      // Over budget. With entries already accepted, THIS is the ordinary stop:
+      // keep the batches that fit and hand back the cursor of the last one.
+      if (accepted.length > 0) break;
+
+      // Nothing accepted yet, so this one batch is over budget by itself and
+      // the page cannot be empty — something must be returned.
+      //
+      // `batch.length > ask` means the server ignored `limit`; asking again,
+      // smaller, would be a wasted round trip against a deployment that is not
+      // listening, and MAX_RESULT_CHARS is the backstop for it. A batch of one
+      // is the entry that exceeds the budget alone: it ships whole, because
+      // dropping it is silent loss and truncating it needs a fetch-by-id verb
+      // that does not exist yet (#104).
+      const narrower = Math.max(1, Math.min(Math.floor(ask / 2), batch.length - 1));
+      if (batch.length <= 1 || batch.length > ask || narrower >= ask) {
+        accepted.push(...batch);
+        acceptedCursor = next;
+        break;
+      }
+      // Re-ask the SAME position for fewer entries. `narrower < batch.length`
+      // by construction, so the ask strictly shrinks and the loop converges.
+      ask = narrower;
     }
 
-    // Same guard as memory_read: a 200 without an items array is UNREADABLE,
-    // not empty — and the feed's empty heads below are precisely the absence
-    // claims that must not be derived from it (truth F13, 2026-08-08).
-    const items = r?.items;
-    if (!Array.isArray(items)) {
-      return unreadableListReply(
-        "The recent-entries feed",
-        "an empty feed",
-        "there is nothing to list",
-      );
-    }
+    const items = accepted;
     if (items.length === 0) {
       // THE SENTENCE ITSELF carries the scope — and it is selected by EVERY
       // filter that narrowed the window, not by `since` alone.
@@ -939,9 +1091,17 @@ server.registerTool(
           // 2026-08-08). Same order as memory_read's result page, same
           // automatic drop: a cap that removed every escaped name removes the
           // reason for the legend too.
+          //
+          // The cursor is the last ACCEPTED batch's, never the newest one
+          // seen: a batch that did not fit the budget was not returned, so
+          // pointing past it would skip every entry in it.
           text: withDomainEscapeLegend(
             capResult(
-              formatRecentPage(items, r?.next_cursor),
+              formatRecentPage(items, acceptedCursor) +
+                (stoppedEarly ? LIST_PAGE_EARLY_STOP_NOTE : ""),
+              // Still true, and now only reachable when ONE entry is larger
+              // than the whole budget — the case `limit` cannot fix and the
+              // global cap has to.
               "Lower `limit` or add a `domain` for smaller pages.",
             ),
             ...items.map((it) => it?.domain),

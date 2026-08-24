@@ -115,6 +115,31 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain("Omit only when you mean your own domains");
   });
 
+  it("memory_list_recent says a page is bounded by SIZE too, and that the cursor holds the rest", () => {
+    // #104: the caller cannot know how long the entries are before asking, so
+    // a short page must not read as the end of the feed. Both halves are
+    // pinned — that the page can come back short, and that nothing was lost.
+    const d = description("memory_list_recent");
+    expect(d).toContain("bounded by SIZE");
+    expect(d).toContain("shorter than `limit`");
+    expect(d).toContain("nothing is dropped");
+  });
+
+  it("memory_list_recent.limit says it is a CEILING, and what to ask for in long-entry rooms", () => {
+    // Suggestion 3 of #104, which asked for the guidance even if nothing else
+    // changed: an agent discovering the cliff in production is the failure.
+    const d = paramDescription("memory_list_recent", "limit");
+    expect(d).toContain("A CEILING, not a promise");
+    expect(d).toContain("bounded by size");
+    expect(d).toContain("ask for 5–10");
+  });
+
+  it("memory_list_recent.domain warns that room entries are long enough to page", () => {
+    const d = paramDescription("memory_list_recent", "domain");
+    expect(d).toContain("Room entries are often long");
+    expect(d).toContain("expect to page");
+  });
+
   it("memory_list_recent.exclude_author carries the same not-usable warning", () => {
     const d = paramDescription("memory_list_recent", "exclude_author");
     expect(d).toContain("NOT USABLE FROM HERE YET");

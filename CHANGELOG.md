@@ -37,6 +37,90 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+MINOR by this file's own rules, and stated up front: `memory_list_recent`
+changes what goes on the wire. One request for the caller's `limit` becomes a
+short series of small ones, and `limit` — which the schema already described as
+a page size — is now a ceiling the page may legitimately come in under. No
+tool, parameter, annotation or route changes; nothing moves data.
+
+### Fixed
+
+- **A feed page is bounded by SIZE, not only by item count (#104).** Catching
+  up on a shared room of long archival entries with
+  `memory_list_recent(domain: "xroom:…", limit: 40, cursor: …)` returned ONE
+  tool result of 72,648 characters. Claude Code refused to inline it and
+  spilled it to a local file, which the agent then had to re-read in chunks; a
+  client without that fallback loses the page entirely. This is the read-side
+  half of a failure already recorded on the write side — the ten-agent dogfood
+  of 2026-08-07 (#64) lost an agent to "died on the output limit".
+
+  The global cap did not fire, and could not have. `MAX_RESULT_CHARS` is
+  96,000, i.e. `24,000 tokens × 4 chars/token`, and 4 chars per token is an
+  average over ordinary prose. Archival room entries carry ids, code,
+  punctuation and non-ASCII and tokenize far worse, so a page that is 25%
+  under the cap by that arithmetic was already past what the client would take.
+  A cap derived from an optimistic ratio is not a promise about anyone's real
+  limit.
+
+  `limit` could not solve this from the caller's side either. It bounds the
+  COUNT, and whether a count is safe depends on how long the entries happen to
+  be — 1,500–4,000+ characters each in coordination rooms, against a 10,000
+  write cap — which the caller cannot know before asking. Too high explodes;
+  too low costs dozens of round trips for the same catch-up.
+
+  The handler now assembles a page from sub-requests of at most ten entries and
+  stops BEFORE a character budget (40,000) is exceeded, returning the server
+  cursor of the last FULLY accepted sub-batch. The batch is small because a
+  cursor names a batch boundary and nothing finer: that boundary is the
+  granularity at which a page can end without skipping or repeating an entry.
+  The returned cursor therefore continues exactly where the page stopped, and
+  the tail already says so. A short-entry feed is unaffected — the budget never
+  binds, the same entries come back with the same cursor.
+
+  Two deliberate limits of the fix. The budget YIELDS to a single entry larger
+  than itself: that entry is returned whole, as a page of one, because dropping
+  it is silent data loss and truncating it needs a fetch-one-entry-by-id verb
+  this server does not have (suggestion 2 of #104, not attempted here).
+  And 40,000 is a conservative guess, not a measurement — roughly half of what
+  already failed — because no client's true boundary has been measured.
+  `MAX_RESULT_CHARS` is untouched: it is shared with `memory_read` and every
+  other surface, and stays the final backstop after this budget has done its
+  work.
+
+- **A sub-request that fails mid-page no longer costs the whole page.**
+  Chunking multiplies requests per call and so multiplies the chance one of
+  them fails; throwing away the entries already fetched would make this change
+  a regression for exactly the rooms it is for. The page is returned with its
+  honest cursor and one sentence saying it stopped early because the next
+  request "did not come back usable" — a short page with a valid cursor is
+  otherwise indistinguishable from a page the budget ended, which is the
+  could-not-fetch/does-not-exist collision this project keeps closing. A
+  failure on the FIRST sub-request still surfaces as the error it is, including
+  the endpoint-absent degrade.
+
+- **The tool now says all of this to the model reading it.**
+  `memory_list_recent` states that a page is bounded by size and that the
+  cursor holds the rest; `limit` is described as a ceiling rather than a page
+  size, with the practical guidance suggestion 3 of #104 asked for (in
+  long-entry rooms, ask for 5–10 — a large `limit` there buys nothing the
+  budget will not take back and costs round trips); `domain` warns that room
+  entries are long enough that paging is the normal case.
+
+### Known and NOT fixed here
+
+- **No per-entry truncation, and no way to fetch one entry by id.** An entry
+  larger than the whole budget still ships whole. `body_max_chars` /
+  `summary: true` (suggestion 2 of #104) would strand the reader without a
+  companion fetch-by-id verb, since ids are usable only for feedback today.
+- **The budget is not calibrated.** 40,000 is chosen to be safely under a
+  known failure at 72,648, not measured against any client's actual
+  tool-result limit.
+- **A large `limit` now costs round trips.** `limit: 100` over a short-entry
+  feed is ten sub-requests where it used to be one, and those are sequential.
+  The engine rate-limits per minute, so a caller who pages aggressively is
+  closer to a 429 than before. Sizing later chunks from the average entry
+  length already measured would remove most of this, and is not attempted here.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,

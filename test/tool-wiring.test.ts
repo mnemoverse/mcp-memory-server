@@ -117,6 +117,23 @@ const CASES: Array<[tool: string, route: string, reply: unknown]> = [
   ["memory_write", "POST /memory/write", { stored: true, atom_id: "a1", importance: 0.7 }],
 ];
 
+/**
+ * The one parameter a handler deliberately does NOT forward verbatim, and why.
+ *
+ * `memory_list_recent.limit` became a CEILING in #104, not a page size: a feed
+ * page is also bounded by characters, so the handler assembles it from small
+ * sub-requests and each one carries the CHUNK size, not the caller's number.
+ * The property that survives — never ask for more entries than the caller
+ * allowed — is pinned below in this tool's own describe block, and in
+ * test/list-recent-budget.test.ts against a paging server.
+ *
+ * This list is a confession, not a convenience. Anything added to it stops
+ * being covered by the check this file exists for, so an entry needs a reason
+ * naming the release that made the parameter mean something else — and a
+ * replacement assertion, or the coverage is simply gone.
+ */
+const NOT_VERBATIM = new Set(["memory_list_recent.limit"]);
+
 describe("every advertised parameter reaches the wire, carrying its own value", () => {
   for (const [tool, route, reply] of CASES) {
     it(`${tool} sends each parameter it advertises`, async () => {
@@ -126,6 +143,7 @@ describe("every advertised parameter reaches the wire, carrying its own value", 
         // never supplies (`include_associations`, the default `top_k`). What
         // must never happen is the other direction.
         expect(body, `${p} is advertised but never sent`).toHaveProperty(p);
+        if (NOT_VERBATIM.has(`${tool}.${p}`)) continue;
         expect(body[p], `${p} is sent, but not the value the caller passed`).toEqual(
           SENTINEL[p],
         );
@@ -144,6 +162,22 @@ describe("memory_list_recent", () => {
       "since",
       "until",
     ]);
+  });
+
+  it("sends a `limit` no larger than the caller's — a ceiling, never an inflation", async () => {
+    // The replacement for the verbatim check above (#104). The direction that
+    // matters is one-sided: asking the server for MORE entries than the caller
+    // allowed is the defect — it would fetch entries the page then has to
+    // discard, and a caller who asked for 3 would pay for 10.
+    const reply = { items: [{ atom_id: "a1", content: "hit" }], next_cursor: null };
+    for (const asked of [1, 3, 11, 100]) {
+      mcp.reset().on("POST /memory/recent", reply);
+      await mcp.callText("memory_list_recent", { limit: asked });
+
+      const sent = mcp.requestTo("POST /memory/recent").body as { limit?: number };
+      expect(sent.limit, `limit: ${asked}`).toBeGreaterThanOrEqual(1);
+      expect(sent.limit, `limit: ${asked}`).toBeLessThanOrEqual(asked);
+    }
   });
 });
 
