@@ -104,6 +104,23 @@ jobs:
               exit 0 ;;
           esac
 
+          # A release PR flips '## [Unreleased]' to a dated
+          # '## [X.Y.Z] — YYYY-MM-DD' section and correctly leaves [Unreleased]
+          # empty — that is the entry promoted, not a missing one. Accept it when
+          # head carries a dated section header that base did not. Mirrors
+          # release.yml's dated-section shape; the separator is left loose so an
+          # em-dash or a hyphen both match.
+          DATED_RE='^## \[[^]]+\] .*20[0-9]{2}-[0-9]{2}-[0-9]{2}'
+          git show "$BASE_SHA:CHANGELOG.md" > "$RUNNER_TEMP/base-cl.md" 2>/dev/null || : > "$RUNNER_TEMP/base-cl.md"
+          grep -E "$DATED_RE" "$RUNNER_TEMP/base-cl.md" 2>/dev/null | sort > "$RUNNER_TEMP/base-dated.txt" || true
+          grep -E "$DATED_RE" CHANGELOG.md              2>/dev/null | sort > "$RUNNER_TEMP/head-dated.txt" || true
+          NEW_DATED="$(comm -13 "$RUNNER_TEMP/base-dated.txt" "$RUNNER_TEMP/head-dated.txt")"
+          if [ -n "$NEW_DATED" ]; then
+            echo "✓ this PR adds a dated release section — accepted:"
+            echo "$NEW_DATED" | sed 's/^/    /'
+            exit 0
+          fi
+
           # Did this PR actually add to the [Unreleased] section? Compare the
           # section body between base and head: if it grew, the PR updated it.
           # Comparing the SECTION (not just "was CHANGELOG.md touched") means you
