@@ -42,7 +42,7 @@ Parameters:
 Returns: Entries newest-first with created_at, author tag, and id; plus a cursor line when older entries exist.
 
 ### memory_feedback
-Report whether a retrieved memory was helpful. Positive feedback strengthens recall. Negative lets memories fade.
+Report whether a retrieved memory was helpful. Positive feedback re-ranks recall so it surfaces sooner; negative lowers it so other memories out-rank it — nothing is erased.
 
 Parameters:
 - atom_ids (string[], required): IDs of memories to give feedback on.

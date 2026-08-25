@@ -27,6 +27,7 @@
  * without booting a stdio server.
  */
 
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SERVER_INSTRUCTIONS } from "../src/teaching.js";
@@ -129,6 +130,14 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     );
   });
 
+  it("memory_feedback states what a downvote does: out-ranks, never erases (#95)", () => {
+    // The claim 0.9.1 put in its place, pinned so the true half cannot be
+    // deleted along with the false one. The ban on the false half is in the
+    // withdrawn-claims block below.
+    const d = description("memory_feedback");
+    expect(d).toContain("other memories out-rank it — nothing is erased");
+  });
+
   it("vault_list promises aliases only — the value is never returned", () => {
     const d = description("vault_list");
     expect(d).toContain("the secret VALUE is never returned");
@@ -215,6 +224,13 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     // exist, which is the kind of mismatch Anthropic's directory policy fails
     // a submission for.
     [/a tool that consumes it/i, "the phantom secret-consumer claim"],
+    // "negative feedback lets it fade" — withdrawn from the README by 0.9.1
+    // (#95) as false for a reason that has nothing to do with the re-ranking
+    // fix: nothing time-decays and nothing is auto-deleted, so a downvoted
+    // memory is out-ranked, not erased. It nevertheless survived the release
+    // on three surfaces a model reads, this one included. The whole word is
+    // banned because no true sentence about this engine needs it.
+    [/\bfades?\b/i, "the 'lets it fade' time-decay claim"],
   ];
 
   it("no tool or parameter description carries one", () => {
@@ -249,6 +265,19 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
         SERVER_INSTRUCTIONS,
         `SERVER_INSTRUCTIONS restores ${why}`,
       ).not.toMatch(banned);
+    }
+  });
+
+  // llms.txt is hand-written — it is NOT one of the 19 artifacts
+  // scripts/generate-configs.mjs emits, so `npm run verify:configs` never
+  // looks at it and no other test did either. That is exactly how it kept
+  // describing feedback as "Negative lets memories fade" through a release
+  // whose own CHANGELOG deletes the claim. It is a surface a model reads;
+  // it gets the same ban as the wire.
+  it("the hand-written llms.txt carries none either", () => {
+    const llms = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
+    for (const [banned, why] of WITHDRAWN) {
+      expect(llms, `llms.txt restores ${why}`).not.toMatch(banned);
     }
   });
 });

@@ -89,6 +89,51 @@ change even though every touched line is prose.
   `scripts/generate-configs.mjs`'s `OUTPUTS` list, which does not include it),
   so the fix is direct.
 
+- **`memory_feedback` reads its own count honestly.** `r?.updated_count ?? 0`
+  folded three different failures onto the same number:
+
+  - **A count the service did not send was reported as zero.** A 200 without
+    the field, an explicit `null`, and a 204 (which `apiFetch` turns into `{}`)
+    all became `0` — and `0` prints *"No feedback was recorded — none of those
+    ids matched a memory in your own domains"* followed by three causes for it.
+    That is an absence claim read out of a body that carried no claim, and
+    against core's async path — which acks before the worker runs — it can be
+    a flat lie about a rating that was applied. The rule `memory_stats` already
+    states in its own source now holds here too: a field the server did not
+    send is UNKNOWN, not zero, and unknown gets its own sentence that diagnoses
+    nothing.
+  - **A string `"0"` is not `0`,** so `??` passed it through and the ±1
+    branches printed *"The service reports 0 memories updated — they should
+    surface sooner next time"*: two clauses contradicting each other inside one
+    sentence. A negative passed through the same way (*"reports -2 memories
+    updated"*). Only a non-negative integer is now treated as a count.
+  - **A partial application was reported as an unqualified success.**
+    `atom_ids.length` was never compared with the count, so five ids and
+    `updated_count: 2` printed the success line and three silent misses — the
+    typical shape of the room case, where half the ids came off a room read
+    this tool cannot reach. The answer now says how many missed and why, reusing
+    the zero branch's causes verbatim so the two cannot drift. A shortfall can
+    only come from core's SYNC path (the async ack is exactly
+    `len(atom_ids)`), where the number is the authoritative count of atoms that
+    existed — so the diagnosis is sound, not a guess. A count LARGER than the
+    ids sent is no shape core produces, but `MNEMOVERSE_API_URL` points
+    wherever it is pointed: it is now named as not-a-per-id-result rather than
+    printed as nine of the caller's memories rated.
+
+- **"Negative feedback lets it fade" is gone from the three surfaces that
+  outlived its own retraction (#95).** 0.9.1's own entry above records the
+  claim as withdrawn — nothing time-decays, nothing is auto-deleted, and
+  deletion has been administrative-only since 0.9.0 — and the README lost it.
+  The `memory_feedback` tool description, the sentence the handler prints after
+  every downvote (*"they should fade"*), and `llms.txt` all kept it. All three
+  now carry the wording that release put in its place: a downvoted memory is
+  **out-ranked, not erased**. `llms.txt` is hand-written — it is not one of the
+  19 artifacts `verify:configs` checks, which is exactly how it went unnoticed
+  — so it is now covered by the withdrawn-claims ban in
+  `test/descriptions.test.ts`, which bans the word corpus-wide.
+
+  Text-only, and one internal branch — a PATCH by this file's own rule.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,
