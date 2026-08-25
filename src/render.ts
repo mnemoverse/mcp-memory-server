@@ -12,6 +12,7 @@
  */
 
 import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
+import { parseAsUtc } from "./time.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
@@ -61,9 +62,27 @@ export type RecentItem = {
  * quoted as "Zo" — a different name presented as the name. The exact literal
  * is single-line with quotes and invisibles escaped, so it carries the same
  * anti-injection property without the renaming.
+ *
+ * `s` is `unknown` — like `roomNamePhrase` and `exactLiteral`, and for the same
+ * reason. Every call site reads a field off the wire where the response types
+ * are aspirational, and this was `(s ?? "").replace(…)`, which throws on
+ * anything that is not a string. The SDK turns a thrown Error into the WHOLE
+ * tool result, so one numeric `agent_name` on one item of fifty replaced a page
+ * of memories with `(s ?? "").replace is not a function` — no `Mnemoverse: `
+ * prefix, no diagnosis, nothing to act on. `asRoom` (src/scope.ts) narrowed the
+ * room list for exactly this reason and recorded it as "a latent crash fixed";
+ * the five remaining call sites (the author tag here, and address / room_id /
+ * scope / alias / context in src/index.ts) are closed by the guard below.
+ *
+ * A non-string sanitises to "" rather than to `String(s)`: this output is
+ * interpolated into sentences that are already written to handle a missing
+ * value — an absent author tag, "(no alias)", "the server did not return a room
+ * address" — and every one of those is true of a field we cannot read, while
+ * `"[object Object]"` as an author would not be.
  */
-export function safeInline(s: string | undefined | null, cap = 200): string {
-  return (s ?? "")
+export function safeInline(s: unknown, cap = 200): string {
+  if (typeof s !== "string") return "";
+  return s
     .replace(/[^\w .@:+/-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -118,12 +137,27 @@ export function formatDomainTag(domain?: string): string {
  * ` · 2026-08-01 21:04Z` — minute-precision UTC, compact enough for a line
  * tail, precise enough to order a same-day room conversation by eye.
  * Empty for legacy atoms without a timestamp.
+ *
+ * The `Z` is an ASSERTION, and until now it was made about a number this
+ * function had not established. `new Date(createdAt)` reads an offset-less
+ * `created_at` as LOCAL time — the reading core's schema and this server's own
+ * `since` descriptions both contradict — and `toISOString()` then stamped the
+ * local reading with a `Z`. So one stored atom rendered a different clock time
+ * in every timezone the client happened to sit in: `2026-08-01T23:30:00` was
+ * `23:30Z` in UTC, `14:30Z` in Asia/Tokyo, and `2026-08-02 06:30Z` in
+ * America/Los_Angeles — a memory dated to a day it was not written, on the tag
+ * a reader uses to order a conversation and to decide what is recent.
+ *
+ * `parseAsUtc` (src/time.ts) is the same reader src/scope.ts uses for the
+ * future-watermark note, which is the point: the convention is now implemented
+ * once. It also rejects a non-string, so a `created_at` that arrives as epoch
+ * millis degrades to no tag rather than to a date the contract does not
+ * promise.
  */
 export function formatDateTag(createdAt?: string): string {
-  if (!createdAt) return "";
-  const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return "";
-  const iso = d.toISOString();
+  const t = parseAsUtc(createdAt);
+  if (t === null) return "";
+  const iso = new Date(t).toISOString();
   return ` · ${iso.slice(0, 10)} ${iso.slice(11, 16)}Z`;
 }
 
@@ -203,18 +237,27 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   // interpolated into instructional text — only echo it when it matches the
   // opaque urlsafe-base64 shape ours always has. Core mirrors the same regex on
   // its side, so a cursor that fails here is a contract violation, not a value.
+  // The regex itself is UNCHANGED (#67 fixed what gets said when it fails,
+  // not what it accepts).
   //
-  // KNOWN DEFECT, not fixed in 0.8.1 and recorded in the CHANGELOG: this one
-  // boolean decides an existence claim about a different thing. `false` means
-  // EITHER "the server said there is nothing older" OR "the server said there IS
-  // more and I refuse to print the token", and both print `(end of feed —
-  // nothing older)`. That is could-not-render spelled exactly like does-not-
-  // exist — the collision this release is about, surviving in the one place the
-  // fix did not reach. It needs a third branch and therefore a new sentence,
-  // which is a behaviour change.
-  const cursorOk = nextCursor != null && /^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor);
-  const tail = cursorOk
-    ? `\n\nMore older entries exist — pass cursor: ${nextCursor}`
-    : `\n\n(end of feed — nothing older)`;
+  // Three outcomes, not two (#67, fixed here — was a single `cursorOk`
+  // boolean that conflated the last two): no cursor at all means the server
+  // says there is nothing older; a cursor that fails the shape check above
+  // means the server says there IS more but this client refuses to print an
+  // untrusted-shaped token; only a cursor that passes it is an actual
+  // continuation. The first two used to share one sentence —
+  // could-not-render read exactly like does-not-exist, the same collision
+  // 0.8.1 fixed everywhere else and recorded here as "Known and NOT fixed
+  // here". The middle case now says entries exist and points at since/until
+  // (already on memory_list_recent) as the way to keep going without the
+  // token.
+  let tail: string;
+  if (nextCursor == null) {
+    tail = `\n\n(end of feed — nothing older)`;
+  } else if (/^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor)) {
+    tail = `\n\nMore older entries exist — pass cursor: ${nextCursor}`;
+  } else {
+    tail = `\n\nMore entries exist but the continuation token could not be displayed — narrow the window with since/until instead`;
+  }
   return lines.join("\n\n") + tail;
 }
