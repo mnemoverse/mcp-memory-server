@@ -37,8 +37,28 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+A MINOR change under this file's own rule: a new branch, not just reworded
+text — see "A patch may NOT change SHAPE or ROUTING" above. `formatRecentPage`
+now decides its tail on three states instead of two, so this is a behaviour
+change even though every touched line is prose.
+
 ### Fixed
 
+- **The recent-feed's end-of-feed line no longer conflates "nothing older"
+  with "cursor could not be printed"** (#67). `formatRecentPage`
+  (`src/render.ts`) used to decide the tail with one boolean: cursor absent,
+  and cursor present-but-failing-the-opaque-shape-check, both printed
+  `(end of feed — nothing older)`. That is could-not-render spelled exactly
+  like does-not-exist — the collision 0.8.1 fixed everywhere else, recorded
+  there as "Known and NOT fixed here" (see the 0.8.1 entry below). The
+  shape check itself is unchanged (CN-032 defense-in-depth stays as strict as
+  it was); only what gets said when a cursor fails it does. There are now
+  three branches: no cursor still says `(end of feed — nothing older)`; a
+  cursor that fails the shape check now says "More entries exist but the
+  continuation token could not be displayed — narrow the window with
+  since/until instead" (`since`/`until` are already parameters on
+  `memory_list_recent`, so the advice is actionable today); a cursor that
+  passes still says "More older entries exist — pass cursor: …".
 - **The room usage line names what the membership scope actually allows.**
   `memory_join_room`'s description and its usage sentence, and
   `memory_list_rooms`'s per-room tail, all used to say "use domain=... [on

@@ -20,9 +20,11 @@
  *    (src/index.ts) appends the legend AFTER capResult, so truncation cannot
  *    eat it (truth F6; behavioural pins in test/handlers.test.ts).
  *
- * Not pinned here: `formatRecentPage`'s end-of-feed wording, beyond the two
- * happy paths below — see the known defect noted at `cursorOk` in
- * src/render.ts.
+ * 7. `formatRecentPage`'s end-of-feed tail is a real three-way branch (#67):
+ *    no cursor, a cursor that fails the opaque-shape check, and a cursor that
+ *    passes it each get their own sentence — a malformed/oversized cursor no
+ *    longer prints the same "(end of feed — nothing older)" as an actually
+ *    empty feed.
  */
 import { describe, expect, it } from "vitest";
 
@@ -124,6 +126,30 @@ describe("formatRecentItem / formatRecentPage", () => {
       null,
     );
     expect(page).toContain("(end of feed — nothing older)");
+  });
+
+  it("page with an oversized cursor (fails the opaque-shape check) does NOT claim the feed is empty (#67)", () => {
+    // 513 chars — one past the regex's {1,512} cap.
+    const oversized = "a".repeat(513);
+    const page = formatRecentPage(
+      [{ atom_id: ID, content: "a", created_at: "2026-08-02T10:00:00Z" }],
+      oversized,
+    );
+    expect(page).toContain(
+      "More entries exist but the continuation token could not be displayed — narrow the window with since/until instead",
+    );
+    expect(page).not.toContain("(end of feed — nothing older)");
+  });
+
+  it("page with a cursor carrying disallowed characters does NOT claim the feed is empty (#67)", () => {
+    const page = formatRecentPage(
+      [{ atom_id: ID, content: "a", created_at: "2026-08-02T10:00:00Z" }],
+      "abc 123/../<script>",
+    );
+    expect(page).toContain(
+      "More entries exist but the continuation token could not be displayed — narrow the window with since/until instead",
+    );
+    expect(page).not.toContain("(end of feed — nothing older)");
   });
 });
 
