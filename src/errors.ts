@@ -78,6 +78,12 @@ const KEYS_URL = "https://console.mnemoverse.com/dashboard/keys";
  *  cannot fix is resolved. Same URL the engine puts in its own 429 bodies. */
 const USAGE_URL = "https://console.mnemoverse.com/dashboard/usage";
 
+/** The base URL a user is sent back to when theirs is aimed somewhere wrong.
+ *  Mirrors `DEFAULT_API_URL` in src/index.ts and is duplicated on purpose: this
+ *  module is imported BY index.ts, so reading the value from there would be a
+ *  cycle. Change one, grep for the other. */
+const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
+
 /** Everything known about one failed call, at the moment it failed. */
 export interface ApiFailure {
   /** HTTP status. */
@@ -463,6 +469,42 @@ function rawDetail(f: ApiFailure): string {
 }
 
 /**
+ * Was this transport failure a REDIRECT this client refused to follow?
+ *
+ * `redirect: "error"` (src/index.ts, apiFetch) makes undici reject with
+ * `TypeError: fetch failed` whose `cause` is `Error: unexpected redirect` —
+ * verified by executing the case against a real local 302
+ * (test/redirect-refusal.test.ts, which uses a real server precisely because a
+ * stubbed fetch has no redirect handling to exercise). The literal string is
+ * `makeNetworkError('unexpected redirect')` and is identical in undici 5
+ * (Node 18), 6 (Node 20 / 22) and 7 (Node 24) — read in all three, because the
+ * CI matrix and this package's `engines` span them.
+ *
+ * WITHOUT THIS BRANCH the failure is indistinguishable from a dead host: same
+ * `TypeError: fetch failed`, and the message below would tell the user to debug
+ * a "connectivity or DNS problem" on a network that is working perfectly, while
+ * the actual cause — a base URL aimed at something that bounces — sat in their
+ * config. That is the confident wrong cause this whole module exists against.
+ *
+ * The cause chain is WALKED rather than read at one depth, since the nesting is
+ * undici's to change; the match is the exact sentinel rather than the word
+ * "redirect", because a DNS failure against a host whose NAME contains
+ * "redirect" would otherwise be diagnosed as one. If a future runtime renames
+ * the sentinel this stops firing and the honest generic sentence takes over —
+ * a degradation, not a lie — and the real-server test goes red, which is where
+ * the rename gets noticed.
+ */
+function refusedRedirect(cause: unknown): boolean {
+  let e: unknown = cause;
+  for (let depth = 0; depth < 5; depth++) {
+    if (!(e instanceof Error)) return false;
+    if (e.message.toLowerCase().includes("unexpected redirect")) return true;
+    e = e.cause;
+  }
+  return false;
+}
+
+/**
  * The request never got an answer at all: DNS, connectivity, a host that does
  * not listen, or this client's own probe deadline firing.
  *
@@ -490,6 +532,22 @@ export function explainNetworkFailure(
   const name = cause instanceof Error ? cause.name : "";
   const timedOut = name === "TimeoutError" || name === "AbortError";
   const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
+  if (refusedRedirect(cause)) {
+    return (
+      `Mnemoverse: ${method} ${path} was answered with a REDIRECT, and this ` +
+      "client refused to follow it — so the API key was never sent to whatever " +
+      "the redirect pointed at. That refusal is the whole point: following a " +
+      "redirect re-sends the request headers to the new host, which hands a " +
+      "live key to whoever answered. This API serves one stable base path and " +
+      "never redirects legitimately, so this means MNEMOVERSE_API_URL is aimed " +
+      "at something else — a proxy, a tunnel, a captive portal, or an address " +
+      "that has been tampered with. It is NOT a rejected key and NOT a broken " +
+      "network: the request arrived somewhere and was answered. Tell the user " +
+      "to check MNEMOVERSE_API_URL and point it straight at the API (the " +
+      `default is ${DEFAULT_API_URL}). Do not retry: the same address will ` +
+      `redirect again.\n\n${rawTransportDetail(method, path, detail)}`
+    );
+  }
   const head = timedOut
     ? `Mnemoverse: the memory service did not answer ${method} ${path} in time.`
     : `Mnemoverse: the memory service could not be reached at all — ${method} ` +
@@ -503,8 +561,14 @@ export function explainNetworkFailure(
     "reply arrived to say anything about either, so do not send the user to " +
     "check their key. One retry is reasonable. If that also fails, tell the " +
     "user memory is unreachable and carry on without it rather than retrying.\n\n" +
-    `Raw detail — request to ${method} ${path} failed: ${detail}`
+    rawTransportDetail(method, path, detail)
   );
+}
+
+/** The debugging half of a transport failure, in one place so the redirect
+ *  branch and the generic one cannot drift into two spellings of it. */
+function rawTransportDetail(method: string, path: string, detail: string): string {
+  return `Raw detail — request to ${method} ${path} failed: ${detail}`;
 }
 
 /** How much of an unreadable body is worth quoting. A sign-in page, an SPA
