@@ -20,6 +20,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   httpError,
   networkDown,
+  noContent,
   startMemoryServer,
   type Route,
   type Harness,
@@ -837,7 +838,15 @@ describe("the load-bearing sentences, as returned", () => {
     // `updated_count` is the number of ids SUBMITTED and this client cannot
     // tell which mode ran. Direction is still echoed, which is what this test
     // is here to protect.
-    expect(await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 1 })).toBe(
+    //
+    // TWO ids, not one. This fixture used to send `["a"]` and stub a count of
+    // 2 — a response no deployment of core can produce (the async ack is
+    // exactly `len(atom_ids)`, the sync count is at most that), and the one
+    // shape whose answer now carries an extra clause. The impossible fixture
+    // is exercised on purpose in its own test below.
+    expect(
+      await mcp.callText("memory_feedback", { atom_ids: ["a", "b"], outcome: 1 }),
+    ).toBe(
       "Rating sent: +1 (helpful). The service reports 2 memories updated — they should surface sooner next time.",
     );
 
@@ -858,6 +867,96 @@ describe("the load-bearing sentences, as returned", () => {
     expect(neutral).not.toContain("neither useful nor wrong");
     expect(neutral).not.toContain("should surface sooner");
     expect(neutral).not.toContain("should fade");
+  });
+
+  it("a count the service did not send is UNKNOWN, not zero", async () => {
+    // `r?.updated_count ?? 0` folded six different "no usable number" shapes
+    // onto the ZERO branch — the branch that states outright that nothing was
+    // recorded and then offers three causes for it. That is an absence claim
+    // read out of a body that carried no claim, which is the same defect
+    // memory_stats fixed with `num()`: a field the server did not send is
+    // unknown, not zero. And it can be a flat lie — the rating may well have
+    // been applied by core's async path while the ack said nothing usable.
+    for (const [label, reply] of [
+      ["the field absent", {}],
+      ["an explicit null", { updated_count: null }],
+      // 204 and a zero-length body both reach the handler as `{}` (apiFetch).
+      ["204 No Content", noContent()],
+      // A string "0" is not 0: `?? 0` passes it through, and the ±1 branches
+      // then printed "The service reports 0 memories updated — they should
+      // surface sooner next time", two clauses that contradict each other.
+      ["a string", { updated_count: "0" }],
+      ["a float", { updated_count: 1.5 }],
+      // Nothing rejects a negative either: "reports -2 memories updated".
+      ["a negative", { updated_count: -2 }],
+    ] as Array<[string, Route]>) {
+      mcp.reset().on(FEEDBACK, reply);
+      const text = await mcp.callText("memory_feedback", {
+        atom_ids: ["a"],
+        outcome: 1,
+      });
+
+      expect(text, label).toContain("Rating sent: +1 (helpful).");
+      expect(text, label).toContain("did not report how many memories it updated");
+      // No absence claim, and none of the zero branch's diagnosis: the body
+      // said nothing, so the causes of a nothing it never reported are not
+      // ours to list.
+      expect(text, label).not.toContain("No feedback was recorded");
+      expect(text, label).not.toContain("shared room");
+      expect(text, label).not.toContain("deleted");
+      // And no number invented out of the unusable value.
+      expect(text, label).not.toMatch(/-?[\d.]+ memor/);
+    }
+  });
+
+  it("a count SHORT of the ids sent says which ids missed", async () => {
+    // The defect: `atom_ids.length` was never compared with the count, so
+    // five ids and `updated_count: 2` printed the unqualified success line and
+    // three silent misses. It is the typical shape of the room case — half the
+    // ids off a room read, which this tool cannot reach — and the caller has
+    // no way to see it. A shortfall can only come from core's SYNC path (the
+    // async ack is exactly `len(atom_ids)`), where the number is the
+    // authoritative count of atoms that existed, so the diagnosis is sound.
+    mcp.on(FEEDBACK, { updated_count: 2 });
+
+    const text = await mcp.callText("memory_feedback", {
+      atom_ids: ["a", "b", "c", "d", "e"],
+      outcome: 1,
+    });
+
+    expect(text).toContain("The service reports 2 memories updated");
+    expect(text).toContain("fewer than the 5 ids you sent");
+    expect(text).toContain("3 of them matched nothing in your own domains");
+    // Same causes, same order as the zero branch — one story, two scales.
+    expect(text).toContain("cannot reach room atoms");
+  });
+
+  it("a count LARGER than the ids sent is not passed off as a per-id result", async () => {
+    mcp.on(FEEDBACK, { updated_count: 9 });
+
+    const text = await mcp.callText("memory_feedback", {
+      atom_ids: ["a"],
+      outcome: -1,
+    });
+
+    expect(text).toContain("more than the 1 id you sent");
+    expect(text).toContain("cannot be a per-id result");
+  });
+
+  it("negative feedback promises no fade: out-ranked, not erased (#95)", async () => {
+    // 0.9.1 retired this claim from the README as false — nothing time-decays
+    // and nothing is auto-deleted — and it survived here, in the sentence a
+    // model actually reads after every downvote.
+    mcp.on(FEEDBACK, { updated_count: 1 });
+
+    const text = await mcp.callText("memory_feedback", {
+      atom_ids: ["a"],
+      outcome: -1,
+    });
+
+    expect(text).not.toContain("fade");
+    expect(text).toContain("Out-ranked, not erased");
+    expect(text).toContain("nothing is deleted and nothing decays with time");
   });
 
   it("memory_stats distinguishes unknown from zero", async () => {
@@ -1044,6 +1143,86 @@ describe("naming a store the reader has to reproduce", () => {
     );
     expect(legends(text)).toBe(1);
     expect(text).toContain('pass domain="xroom:room_01ABC"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The room usage line matches what the membership scope actually allows (bug
+ * hunt, pre-0.9.2, P2). memory_join_room's usage sentence and memory_list_rooms'
+ * per-row tail both used to print the same "use domain=... [on memory_write /
+ * memory_read] to read and write" claim no matter what scope the invite
+ * granted — false for a "read" member: core answers that member's memory_write
+ * with a 403 "Read-only membership cannot write to this room" (src/errors.ts,
+ * confirmed against rooms_routes.py `_VALID_SCOPES = ("read", "read_write")`).
+ * A scope this response did not report at all gets the same treatment as
+ * "read" — no promise about write, because the server never said.
+ */
+describe("the room usage line names what the scope actually allows", () => {
+  it("memory_join_room: a read-only invite is told memory_write will be refused, not offered it", async () => {
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC", scope: "read" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain('Joined "team" (read).');
+    expect(text).toContain('pass domain="xroom:room_01ABC"');
+    expect(text).toContain("memory_read");
+    expect(text).toMatch(/read-only/);
+    expect(text).toContain("memory_write");
+    expect(text).toMatch(/refused/);
+    // Never claims this membership can write.
+    expect(text).not.toMatch(/to read and write the shared room/);
+  });
+
+  it("memory_join_room: a scope the server did not report makes no write promise either", async () => {
+    // No `scope` field at all — the Copilot-shaped partial body this file's
+    // other tests already treat as a real possibility (see the missing-address
+    // branch above).
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain('Joined "team" (member).');
+    expect(text).toContain('pass domain="xroom:room_01ABC"');
+    expect(text).toContain("memory_read");
+    // Not a claim of read-only (that would assert something the server did
+    // not say either) — but also no promise that memory_write will work.
+    expect(text).not.toMatch(/to read and write the shared room/);
+    expect(text).not.toMatch(/will be refused/);
+  });
+
+  it("memory_join_room: a read_write invite keeps the unconditional read-and-write promise", async () => {
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC", scope: "read_write" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain(
+      'Use it: pass domain="xroom:room_01ABC" on memory_write / memory_read to read and write the shared room.',
+    );
+  });
+
+  it("memory_list_rooms: a read-only member row is not told it can write", async () => {
+    mcp.on(ROOMS, [
+      { room_id: "room_01R", name: "read-only-room", address: "xroom:room_01R", role: "member", scope: "read" },
+    ]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain('use domain="xroom:room_01R"');
+    expect(text).toMatch(/read-only/);
+    expect(text).toMatch(/memory_write.*refused|refused.*memory_write/s);
+  });
+
+  it("memory_list_rooms: an owned (read_write) room row keeps the unqualified usage line", async () => {
+    mcp.on(ROOMS, [
+      { room_id: "room_01O", name: "my-room", address: "xroom:room_01O", role: "owner", scope: "read_write" },
+    ]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain('use domain="xroom:room_01O"');
+    expect(text).not.toMatch(/read-only/);
   });
 });
 

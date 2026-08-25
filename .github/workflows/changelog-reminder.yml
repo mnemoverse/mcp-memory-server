@@ -1,0 +1,151 @@
+name: changelog reminder
+
+# The PR-time half of the CHANGELOG discipline. release.yml already REFUSES to
+# publish a tag whose version has no dated `## [X.Y.Z] — YYYY-MM-DD` section —
+# but that gate fires at release time, when the omission is expensive to fix and
+# the person who made the behaviour change is long gone. This check fires at PR
+# time, when a one-line CHANGELOG edit is cheap and the author still has the
+# change in their head.
+#
+# The rule it enforces, straight from CHANGELOG.md's own preamble: a change to
+# the TOOL SURFACE — what a tool does, returns, or says about itself — earns an
+# entry under `## [Unreleased]`. That preamble is deliberately broad: even a
+# pure text change (a tool or parameter description) is a release-worthy patch,
+# because that text lands in a model's context and nowhere else. So the trigger
+# is any change to `src/**/*.ts`, which is where every tool, handler, schema and
+# description lives. `src/configs/source.json` is a DISTRIBUTION manifest, not
+# tool behaviour, and verify-configs already guards it — so it is out of scope
+# here, which is why the trigger is `*.ts` and not all of `src/**`.
+#
+# The escape hatch is deliberate and matches the preamble's other half: an
+# internal refactor with identical observable behaviour gets NO entry. Declare
+# that a PR is such a refactor (or otherwise legitimately needs no entry) by
+# putting `[skip changelog]` in the PR description. It turns this check green —
+# the point is a reminder with a conscious override, not a wall.
+#
+# Why it runs on EVERY PR with the file-set logic INSIDE the job (no `paths:`
+# filter): this is designed to be safe as a required status check. A path-
+# filtered required check never reports on a PR that touches none of those
+# paths, and GitHub treats a missing required check as "not satisfied" rather
+# than "not applicable" — blocking the PR forever with no way to fix it from the
+# PR itself (verify-configs.yml documents that exact scar, #93). So the job runs
+# on every PR and passes trivially when no tool-surface source changed.
+#
+# Markdown-only and language-agnostic on purpose: it reads CHANGELOG.md and a
+# git diff, nothing Node-specific, so the same shape ports to a Python service.
+
+on:
+  pull_request:
+    # `edited` so adding `[skip changelog]` to the description re-evaluates
+    # without a new push.
+    types: [opened, synchronize, reopened, edited]
+
+# Read-only: this check inspects the diff and the file, it never writes.
+permissions:
+  contents: read
+
+jobs:
+  changelog-reminder:
+    name: changelog reminder
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base branch and the merge base to diff the PR's real
+          # changes; a shallow checkout has neither.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: A tool-surface change must add a CHANGELOG [Unreleased] entry
+        # The PR body arrives through env as DATA, never interpolated into the
+        # shell source — same rule release.yml follows for the dispatch tag (#81).
+        #
+        # The base/head SHAs come from the event payload, and `fetch-depth: 0`
+        # above already has both locally — so this needs NO `git fetch`. A
+        # post-checkout fetch would rely on ambient credentials (fine here while
+        # the repo is public, a credential prompt the day it isn't); diffing the
+        # event SHAs is credential-free and portable.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          CHANGED="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          echo "--- files changed in this PR ---"
+          echo "$CHANGED"
+          echo "--------------------------------"
+
+          # Tool-surface = TypeScript under src/. Excludes src/configs/* (a
+          # distribution manifest guarded by verify-configs) and test/ (tests
+          # are not the published surface).
+          if ! echo "$CHANGED" | grep -qE '^src/.*\.ts$'; then
+            echo "✓ no tool-surface source (src/**/*.ts) changed — no CHANGELOG entry required."
+            exit 0
+          fi
+          echo "• tool-surface source changed — a CHANGELOG [Unreleased] entry is expected."
+
+          # Escape hatch: a PR-body marker declares "no entry needed" — for an
+          # internal refactor with identical observable behaviour. (A label was
+          # considered and dropped: none exists in the repo, and it would be
+          # maintainer-only; the body marker is available to any author.)
+          case "$PR_BODY" in
+            *"[skip changelog]"*)
+              echo "✓ '[skip changelog]' found in the PR description — override accepted."
+              exit 0 ;;
+          esac
+
+          # A release PR flips '## [Unreleased]' to a dated
+          # '## [X.Y.Z] — YYYY-MM-DD' section and correctly leaves [Unreleased]
+          # empty — that is the entry promoted, not a missing one. Accept it when
+          # head carries a dated section header that base did not. Mirrors
+          # release.yml's dated-section shape; the separator is left loose so an
+          # em-dash or a hyphen both match.
+          DATED_RE='^## \[[^]]+\] .*20[0-9]{2}-[0-9]{2}-[0-9]{2}'
+          git show "$BASE_SHA:CHANGELOG.md" > "$RUNNER_TEMP/base-cl.md" 2>/dev/null || : > "$RUNNER_TEMP/base-cl.md"
+          grep -E "$DATED_RE" "$RUNNER_TEMP/base-cl.md" 2>/dev/null | sort > "$RUNNER_TEMP/base-dated.txt" || true
+          grep -E "$DATED_RE" CHANGELOG.md              2>/dev/null | sort > "$RUNNER_TEMP/head-dated.txt" || true
+          NEW_DATED="$(comm -13 "$RUNNER_TEMP/base-dated.txt" "$RUNNER_TEMP/head-dated.txt")"
+          if [ -n "$NEW_DATED" ]; then
+            echo "✓ this PR adds a dated release section — accepted:"
+            echo "$NEW_DATED" | sed 's/^/    /'
+            exit 0
+          fi
+
+          # Did this PR actually add to the [Unreleased] section? Compare the
+          # section body between base and head: if it grew, the PR updated it.
+          # Comparing the SECTION (not just "was CHANGELOG.md touched") means you
+          # cannot satisfy the check by editing an older, already-released entry,
+          # and each concurrent PR must add its own line rather than coasting on
+          # a section a sibling PR already filled.
+          extract_unreleased() {
+            awk '
+              /^## \[Unreleased\]/ { found = 1; next }
+              found && /^## \[/     { exit }
+              found                 { print }
+            ' "$1"
+          }
+
+          git show "$BASE_SHA:CHANGELOG.md" > "$RUNNER_TEMP/base-changelog.md" 2>/dev/null || : > "$RUNNER_TEMP/base-changelog.md"
+          extract_unreleased "$RUNNER_TEMP/base-changelog.md" > "$RUNNER_TEMP/base-unreleased.txt"
+          extract_unreleased CHANGELOG.md                     > "$RUNNER_TEMP/head-unreleased.txt"
+
+          # Head's [Unreleased] must (a) carry real content and (b) contain a
+          # nonblank line that base did NOT — a genuine addition. Requiring a NEW
+          # line (not merely "differs") means deleting or rewriting an existing
+          # entry cannot pass; only adding one does. comm on the nonblank line
+          # sets — not a line count — so a simultaneous add+remove is not a false
+          # failure.
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/head-unreleased.txt"; then
+            echo "::error::src/**/*.ts changed but CHANGELOG.md '## [Unreleased]' is empty. Add an entry describing the change (or add '[skip changelog]' to the PR description if this is an internal refactor with identical observable behaviour). See CONTRIBUTING.md → Changelog."
+            exit 1
+          fi
+          grep -v '^[[:space:]]*$' "$RUNNER_TEMP/base-unreleased.txt" | sort -u > "$RUNNER_TEMP/base-nb.txt" || true
+          grep -v '^[[:space:]]*$' "$RUNNER_TEMP/head-unreleased.txt" | sort -u > "$RUNNER_TEMP/head-nb.txt" || true
+          if [ -z "$(comm -13 "$RUNNER_TEMP/base-nb.txt" "$RUNNER_TEMP/head-nb.txt")" ]; then
+            echo "::error::src/**/*.ts changed but this PR added no NEW line under CHANGELOG.md '## [Unreleased]' (deleting or rewriting an existing entry does not count). Add an entry describing the change (or add '[skip changelog]' to the PR description if this is an internal refactor with identical observable behaviour). See CONTRIBUTING.md → Changelog."
+            exit 1
+          fi
+
+          echo "✓ CHANGELOG.md '## [Unreleased]' was updated in this PR."
