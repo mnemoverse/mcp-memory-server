@@ -19,6 +19,9 @@
  * 6. The renderers return the page BODY with no escape legend — the caller
  *    (src/index.ts) appends the legend AFTER capResult, so truncation cannot
  *    eat it (truth F6; behavioural pins in test/handlers.test.ts).
+ * 7. A value that arrives with the wrong WIRE TYPE degrades the part of the
+ *    line it belongs to, and nothing else: it neither throws nor moves a
+ *    timestamp into another day (the two cases below).
  *
  * 7. `formatRecentPage`'s end-of-feed tail is a real three-way branch (#67):
  *    no cursor, a cursor that fails the opaque-shape check, and a cursor that
@@ -174,6 +177,110 @@ describe("author/date/sanitizer edges", () => {
   it("safeInline keeps the CN-032 charset/cap contract", () => {
     expect(safeInline("  a   b  ", 200)).toBe("a b");
     expect(safeInline("x".repeat(300), 200)).toHaveLength(200);
+  });
+});
+
+/**
+ * WHAT THE WIRE ACTUALLY SENDS, versus what the response types say it sends.
+ *
+ * `ReadItem`, `RecentItem` and every `apiFetch<{…}>` shape in src/index.ts are
+ * aspirational: they describe the payload core is supposed to produce, and
+ * nothing narrows the payload that arrives. `asRoom` (src/scope.ts) already
+ * closed this class for the room list, where the same defect was recorded as
+ * "a latent crash fixed" — these are the renderer-side call sites that fix did
+ * not reach.
+ *
+ * The blast radius is the whole tool call, not the field: the MCP SDK turns a
+ * thrown Error into the ENTIRE result, so one numeric `agent_name` on one item
+ * of fifty replaced the page with `(s ?? "").replace is not a function` — a
+ * message with no `Mnemoverse: ` prefix (the property every error owes the
+ * reader, test/errors.test.ts) and nothing an agent can act on.
+ */
+describe("a non-string where the type promised a string", () => {
+  /** A value as the WIRE sends it, cast into the slot the types describe. */
+  const wire = <T,>(v: unknown): T => v as T;
+
+  it("safeInline renders nothing rather than throwing", () => {
+    for (const v of [123, 0, true, false, {}, [], { toString: () => "x" }]) {
+      expect(safeInline(v)).toBe("");
+    }
+    // The two it always handled stay handled.
+    expect(safeInline(null)).toBe("");
+    expect(safeInline(undefined)).toBe("");
+  });
+
+  it("formatAuthorTag drops the tag instead of killing the line", () => {
+    expect(formatAuthorTag(wire({ agent_name: 12345 }))).toBe("");
+    expect(formatAuthorTag(wire({ agent: { id: 7 } }))).toBe("");
+    // The preference order is NOT re-ordered around an unrenderable value: if
+    // the server said the agent's name is `12345`, this line has no name to
+    // print and says nothing, rather than quietly promoting a different field
+    // to "the author".
+    expect(formatAuthorTag(wire({ agent_name: 12345, agent: "codex" }))).toBe("");
+    // A field that is absent rather than broken still falls through, as before.
+    expect(formatAuthorTag({ agent_name: null, agent: "codex" })).toBe(" [by codex]");
+  });
+
+  it("a broken item renders as a line, not as an exception", () => {
+    expect(formatReadItem(wire({ content: "x", provenance: { agent_name: 5 } }), 0)).toBe(
+      "1. x",
+    );
+  });
+
+  it("formatDateTag refuses a non-string timestamp instead of guessing", () => {
+    // `new Date(1754082281605)` is a perfectly good date, so the old code
+    // printed one — for a field whose contract is an ISO-8601 string. A value
+    // that cannot be read as the contract says degrades to no tag, exactly like
+    // a legacy atom with no timestamp at all.
+    expect(formatDateTag(wire(1754082281605))).toBe("");
+    expect(formatDateTag(wire({}))).toBe("");
+  });
+});
+
+/**
+ * THE ZONE BUG: `new Date("2026-08-01T21:04:41").toISOString()` reads an
+ * offset-less timestamp as LOCAL time and then prints it with a `Z`, so the
+ * same atom rendered a different clock time in every timezone — and, west of
+ * UTC, a different DAY.
+ *
+ * The convention is written down twice and was implemented once: the `since`
+ * parameter descriptions say naive means UTC, and `parseAsUtc` (src/time.ts,
+ * extracted from src/scope.ts where the same fix landed for the future-
+ * watermark note in 0.8.1) implements it. This renderer read the same wire
+ * value the other way.
+ *
+ * These cases are invisible under TZ=UTC — with the bug in place they pass —
+ * which is why the CI matrix pins a zone east of UTC and one west of it.
+ */
+describe("formatDateTag reads a naive timestamp as UTC, as the engine does", () => {
+  it("does not restamp a local reading as Z", () => {
+    expect(formatDateTag("2026-08-01T21:04:41")).toBe(" · 2026-08-01 21:04Z");
+    // Core's `created_at` is also seen with a space separator.
+    expect(formatDateTag("2026-08-01 21:04:41")).toBe(" · 2026-08-01 21:04Z");
+  });
+
+  it("does not move a late-evening memory into another day", () => {
+    // The case a reader would actually notice: in America/Los_Angeles this
+    // printed `2026-08-02 06:30Z`, dating a memory to a day it was not written.
+    expect(formatDateTag("2026-08-01T23:30:00")).toBe(" · 2026-08-01 23:30Z");
+    expect(formatDateTag("2026-08-01T00:30:00")).toBe(" · 2026-08-01 00:30Z");
+  });
+
+  it("still honours an explicit offset, and a date-only value", () => {
+    expect(formatDateTag("2026-08-01T21:04:41Z")).toBe(" · 2026-08-01 21:04Z");
+    expect(formatDateTag("2026-08-01T23:04:41+02:00")).toBe(" · 2026-08-01 21:04Z");
+    expect(formatDateTag("2026-08-01T17:04:41-04:00")).toBe(" · 2026-08-01 21:04Z");
+    // Date-only is already UTC by spec — unchanged.
+    expect(formatDateTag("2026-08-01")).toBe(" · 2026-08-01 00:00Z");
+  });
+
+  it("carries into both item lines", () => {
+    expect(formatReadItem({ content: "x", created_at: "2026-08-01T23:30:00" }, 0)).toBe(
+      "1. x · 2026-08-01 23:30Z",
+    );
+    expect(formatRecentItem({ content: "x", created_at: "2026-08-01T23:30:00" }, 0)).toBe(
+      "1. [2026-08-01 23:30Z] x",
+    );
   });
 });
 

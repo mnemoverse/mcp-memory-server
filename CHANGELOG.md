@@ -134,6 +134,49 @@ change even though every touched line is prose.
 
   Text-only, and one internal branch — a PATCH by this file's own rule.
 
+- **A value with the wrong wire type can no longer kill the tool call it
+  appears in.** `safeInline` was `(s ?? "").replace(…)`, which throws on
+  anything that is not a string — and the MCP SDK turns a thrown Error into the
+  ENTIRE result. So one numeric `agent_name` on one item of fifty replaced a
+  page of memories with `(s ?? "").replace is not a function`: no `Mnemoverse: `
+  prefix, no diagnosis, nothing to act on — the one shape every other failure in
+  0.9.1 was rewritten to avoid. Five call sites took a wire value unnarrowed
+  (the author tag on every read and feed line; `address` and `room_id` on
+  memory_create_room; `scope` and `address` on memory_join_room; `alias` and
+  `context` on vault_list). `asRoom` had already closed this class for the room
+  list and recorded it as "a latent crash fixed"; this is the same fix, applied
+  where that one did not reach. A field that cannot be read now costs the reader
+  that field — an absent author tag, `(no alias)`, "the server did not return a
+  room address" — and nothing else.
+
+- **A timestamp without an offset is read as UTC, which is what the engine
+  means by it.** `new Date("2026-08-01T23:30:00")` reads the value as LOCAL
+  time, and `toISOString()` then printed the local reading with a `Z` — so the
+  same stored atom carried a different clock time in every timezone a client sat
+  in, and west of UTC a different DAY: `2026-08-01 23:30Z` in UTC, `14:30Z` in
+  Asia/Tokyo, `2026-08-02 06:30Z` in America/Los_Angeles. The convention was
+  already written down twice (both `since` descriptions, core's schema) and
+  implemented once, in the future-watermark note; the renderer read the same
+  wire value the other way. `parseAsUtc` now lives in `src/time.ts` and both
+  modules use it — one convention, one implementation. A `created_at` that
+  arrives as a number is no longer rendered as a date the contract does not
+  promise.
+
+- **memory_stats can no longer exceed the 25K-token result cap.** It was the
+  one surface that never went through `capResult`, and its `Domains:` line is
+  linear in the number of stores — 4,000 domains rendered 100,391 characters
+  against a 96,000 cap, deterministically, with no hostile input involved. The
+  fix bounds the LIST rather than the message, because a blind cap truncates
+  from the end and would have taken the average-quality line and the reminder
+  that rooms are separate stores down with the wall of names. What is cut is
+  counted and says why, in its own clause: `(+400 more names not shown — the
+  list is longer than one tool result can carry, so a name you do not see here
+  may still exist)` — kept separate from the existing "cannot be printed
+  exactly" count, because those are different facts about different names. This
+  tool's own description sends readers here to confirm a store's exact name, so
+  a silently shortened list would have answered that question with a false
+  negative. `capResult` is now wired here too, as a second belt.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,

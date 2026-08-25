@@ -1724,3 +1724,155 @@ describe("the room lifecycle tools, invoked", () => {
     expect(res.text).not.toContain("Invite ready");
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A FIELD with the wrong wire type must cost the reader that field, not the
+ * whole answer.
+ *
+ * `safeInline` was `(s ?? "").replace(…)`, which throws on anything that is not
+ * a string, and the MCP SDK turns a thrown Error into the entire tool result.
+ * So a single numeric `agent_name` — or an `address` that arrived as a number —
+ * replaced a page of memories with `(s ?? "").replace is not a function`: no
+ * `Mnemoverse: ` prefix (the property `what every error message owes the reader`
+ * pins in test/errors.test.ts), no diagnosis, nothing to retry. `asRoom`
+ * (src/scope.ts) had closed this class for the room list only.
+ *
+ * These are behavioural on purpose: the unit cases in test/render.test.ts prove
+ * the helper no longer throws, and these prove that the four handlers holding
+ * the other call sites answer with something a reader can use.
+ */
+describe("a field with the wrong wire type costs that field, not the tool call", () => {
+  it("memory_read: one broken item does not take the other forty-nine with it", async () => {
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: `note ${i}`,
+      // Item 7 is the hostile/buggy connector: `agent_name` typed as a string,
+      // sent as a number.
+      ...(i === 7 ? { provenance: { agent_name: 12345, is_external: true } } : {}),
+    }));
+    mcp.on(READ, { items, search_time_ms: 3 });
+
+    const res = await mcp.call("memory_read", { query: "everything" });
+
+    expect(res.isError).toBeFalsy();
+    expect(res.text).toContain("1. note 0");
+    expect(res.text).toContain("8. note 7");
+    expect(res.text).toContain("50. note 49");
+    expect(res.text).not.toContain("is not a function");
+  });
+
+  it("memory_join_room: an unusable address is said to be missing, not thrown", async () => {
+    mcp.on(JOIN, { address: 123, name: "me-and-olya", scope: { level: "read" } });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    // The name is printed exactly (it is a string), the scope falls back to the
+    // neutral word, and the address takes the branch that already existed for a
+    // server that returned none — instead of the whole call dying.
+    expect(text).toContain('Joined "me-and-olya" (member).');
+    expect(text).toContain("The server did not return a room address");
+    expect(text).not.toContain('domain="123"');
+  });
+
+  it("memory_create_room: same, on the surface that hands back an address", async () => {
+    mcp.on(CREATE_ROOM, { room_id: { id: 7 }, address: 123, name: "me-and-olya" });
+
+    const text = await mcp.callText("memory_create_room", { name: "me-and-olya" });
+
+    expect(text).toContain(
+      'Room "me-and-olya" was created but the server did not return a usable address',
+    );
+    expect(text).not.toContain("is not a function");
+  });
+
+  it("vault_list: a broken alias is one anonymous row, not a dead tool", async () => {
+    mcp.on(VAULT, {
+      secrets: [{ alias: 7, context: "CI deploys" }, { alias: "openai-key", context: 42 }],
+    });
+
+    const text = await mcp.callText("vault_list");
+
+    expect(text).toContain("Your Vault secrets (2) — alias and purpose only, never the value:");
+    expect(text).toContain("- (no alias) — CI deploys");
+    expect(text).toContain("- openai-key");
+    expect(text).not.toContain("is not a function");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ONE SURFACE WITH NO SIZE CAP.
+ *
+ * Every other tool result goes through `capResult` — the 25K-token bound the
+ * Claude Connectors Directory requires. `memory_stats` did not, and its
+ * `Domains:` line is linear in the number of stores: `formatDomainList`
+ * deliberately drops nothing, so an account with a few thousand domains
+ * produced a result past the cap every single time. Not a hostile-input edge —
+ * arithmetic.
+ *
+ * The fix truncates the LIST rather than the message, because a plain cap would
+ * cut from the end and take the two lines a reader needs most with it: the
+ * average-quality line and the reminder that rooms are separate stores. The cap
+ * stays on as a second belt.
+ */
+describe("memory_stats fits the result cap without losing its tail", () => {
+  // 4000 stores × a 21-character name renders past 100K characters — the
+  // MAX_RESULT_CHARS bound in src/index.ts is 24,000 tokens × 4 = 96,000.
+  const MAX_RESULT_CHARS = 24_000 * 4;
+  const many = Array.from(
+    { length: 4000 },
+    (_, i) => `team-${String(i).padStart(4, "0")}-engineering`,
+  );
+
+  it("stays inside the cap and keeps every line after the domain list", async () => {
+    mcp.on(STATS, {
+      total_atoms: 91_000,
+      episodes: 90_000,
+      prototypes: 1_000,
+      hebbian_edges: 250_000,
+      domains: many,
+      avg_valence: 0.42,
+      avg_importance: 0.61,
+    });
+
+    const text = await mcp.callText("memory_stats");
+
+    expect(text.length).toBeLessThan(MAX_RESULT_CHARS);
+    // The list is cut from its own end, so the head of the answer is intact…
+    expect(text).toContain("Memories: 91000 (90000 episodes, 1000 prototypes)");
+    expect(text).toContain('Domains: "team-0000-engineering", "team-0001-engineering"');
+    // …and so is everything after it, which is what a blind cap would have eaten.
+    expect(text).toContain("Avg quality: valence 0.42");
+    expect(text).toContain("importance 0.61");
+    expect(text).toContain(
+      "Counts cover your own domains. Shared rooms are separate stores and are not included",
+    );
+  });
+
+  it("says how many names it did not print, so a missing one is not an absence", async () => {
+    mcp.on(STATS, { total_atoms: 1, domains: many });
+
+    const text = await mcp.callText("memory_stats");
+
+    // This tool's own description sends a reader here to confirm a store's exact
+    // name before writing to it. A silently shortened list would answer that
+    // question with a false negative, on the one surface built to prevent it.
+    expect(text).toMatch(
+      /\(\+\d+ more names not shown — the list is longer than one tool result can carry, so a name you do not see here may still exist\)/,
+    );
+    expect(text).not.toContain('"team-3999-engineering"');
+  });
+
+  it("an ordinary account is untouched — no truncation clause, no notice", async () => {
+    mcp.on(STATS, { total_atoms: 12, domains: ["general", "engineering", "проект:acme"] });
+
+    const text = await mcp.callText("memory_stats");
+
+    expect(text).toContain('Domains: "general", "engineering", "проект:acme"');
+    expect(text).not.toContain("not shown");
+    expect(text).not.toContain("truncated");
+  });
+});

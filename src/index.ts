@@ -1247,6 +1247,15 @@ server.registerTool(
     // zero-width character are all visible, Cyrillic stays Cyrillic, and two
     // different names can no longer print as one. Assembly lives in
     // src/names.ts, where it is unit-tested against those exact inputs.
+    //
+    // The assembly also BOUNDS the list (MAX_DOMAIN_LIST_CHARS), which is what
+    // makes this handler respect the 25K-token cap every other surface already
+    // respected. The line is linear in the number of stores and nothing bounded
+    // it: 4,000 domains rendered past 100,000 characters — deterministically,
+    // with no hostile input involved. Bounding the LIST rather than leaning on
+    // capResult alone is the point: capResult truncates from the END, so the
+    // wall of names would have taken the average-quality line and the rooms
+    // reminder down with it, leaving the answer nothing but names.
     const domains = formatDomainList(r?.domains);
 
     const text = [
@@ -1275,8 +1284,22 @@ server.registerTool(
           // arrives over the wire, and spreading a non-iterable object would
           // throw here — turning a malformed payload into a dead tool instead
           // of the "none reported" it degrades to two lines up.
+          //
+          // capResult is the second belt, not the mechanism: the domain list is
+          // already bounded above, so this only fires if some future line grows
+          // unboundedly. It stays because this was the ONE tool result with no
+          // cap at all, and "every surface is capped" is worth being an
+          // invariant rather than an argument about which surfaces can grow.
+          // Its hint names a control this no-input tool actually has — none —
+          // rather than the read tool's "use a more specific query".
+          //
+          // Legend AFTER the cap, as everywhere else: it must describe the names
+          // that SURVIVED, and it is appended at the end, where the cap cuts.
           text: withDomainEscapeLegend(
-            text,
+            capResult(
+              text,
+              "The domain list was truncated — some domain names are not shown.",
+            ),
             ...(Array.isArray(r?.domains) ? r.domains : []),
           ),
         },
