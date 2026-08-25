@@ -100,9 +100,20 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 
 ## Versioning and releases
 
-`package.json#version` → `src/index.ts#version` (server name reported to MCP clients) → `server.json#version` (Official MCP Registry).
+`package.json#version` is the single source of truth. `src/index.ts` **reads** it at runtime (it becomes the server name reported to MCP clients — there is nothing to edit there), and `server.json#version` (Official MCP Registry) is **generated** from it.
 
-These are bumped manually in the first two files and propagated by the generator to the third. If they drift, the drift check on `server.json` catches it on every PR.
+So you bump the version in `package.json` only; the generator propagates it to `server.json`. If `server.json` drifts, the drift check catches it on every PR.
+
+### Changelog
+
+Every change to the **tool surface** — what a tool does, returns, or says about itself — gets an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), in the same PR that makes the change. Read that file's preamble for exactly where the patch/minor line falls: even a pure text change (a tool or parameter description) is a release-worthy patch, because that text is all a model ever sees.
+
+An **internal refactor with identical observable behaviour** gets no entry. Declare it by putting `[skip changelog]` in the PR description.
+
+Two gates keep this honest, and they are two halves of one rule:
+
+- [`changelog-reminder.yml`](.github/workflows/changelog-reminder.yml) — **PR time.** A PR that touches `src/**/*.ts` without adding to `## [Unreleased]` (and without the override) fails with a reminder, while the fix is still a one-liner and the change is fresh in your head.
+- [`release.yml`](.github/workflows/release.yml) — **release time.** A `vX.Y.Z` tag will not publish unless CHANGELOG.md has a dated `## [X.Y.Z] — YYYY-MM-DD` section; that hand-written section becomes the release notes.
 
 ### Automated release pipeline
 
@@ -111,14 +122,16 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
 The workflow is triggered by any tag matching `v*` pushed to the repo. To release:
 
 ```bash
-# 1. Bump version in package.json
+# 1. Bump version in package.json (src/index.ts reads it from here — no edit)
 $EDITOR package.json
 
-# 2. Match it in src/index.ts (search for version: "...")
-$EDITOR src/index.ts
-
-# 3. Regenerate (this updates server.json to match)
+# 2. Regenerate (this updates server.json to match)
 npm run generate:configs
+
+# 3. Flip CHANGELOG.md: rename `## [Unreleased]` to `## [X.Y.Z] — YYYY-MM-DD`
+#    and leave a fresh empty `## [Unreleased]` above it. release.yml REFUSES to
+#    publish without this dated section, and it becomes the release notes.
+$EDITOR CHANGELOG.md
 
 # 4. Build and run any local checks you want before tagging
 npm run build

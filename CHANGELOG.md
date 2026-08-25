@@ -37,7 +37,57 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+A MINOR change under this file's own rule: a new branch, not just reworded
+text — see "A patch may NOT change SHAPE or ROUTING" above. `formatRecentPage`
+now decides its tail on three states instead of two, so this is a behaviour
+change even though every touched line is prose.
+
 ### Fixed
+
+- **The recent-feed's end-of-feed line no longer conflates "nothing older"
+  with "cursor could not be printed"** (#67). `formatRecentPage`
+  (`src/render.ts`) used to decide the tail with one boolean: cursor absent,
+  and cursor present-but-failing-the-opaque-shape-check, both printed
+  `(end of feed — nothing older)`. That is could-not-render spelled exactly
+  like does-not-exist — the collision 0.8.1 fixed everywhere else, recorded
+  there as "Known and NOT fixed here" (see the 0.8.1 entry below). The
+  shape check itself is unchanged (CN-032 defense-in-depth stays as strict as
+  it was); only what gets said when a cursor fails it does. There are now
+  three branches: no cursor still says `(end of feed — nothing older)`; a
+  cursor that fails the shape check now says "More entries exist but the
+  continuation token could not be displayed — narrow the window with
+  since/until instead" (`since`/`until` are already parameters on
+  `memory_list_recent`, so the advice is actionable today); a cursor that
+  passes still says "More older entries exist — pass cursor: …".
+- **The room usage line names what the membership scope actually allows.**
+  `memory_join_room`'s description and its usage sentence, and
+  `memory_list_rooms`'s per-room tail, all used to say "use domain=... [on
+  memory_write / memory_read] to read and write the shared room" — true for a
+  `read_write` membership, false for a `read` one: core refuses that member's
+  `memory_write` with a 403 "Read-only membership cannot write to this room".
+  All three surfaces now name `memory_read` unconditionally and only promise
+  `memory_write` where the scope is `read_write`; a `read` membership is told
+  the write will be refused, and a scope the response did not report at all
+  gets no promise about write either way. Text-only.
+- **`memory_write.domain` now says names are matched byte-for-byte.** The
+  handler has long refused to trim or normalise a domain — a leading space
+  opens a separate, permanent store beside the intended one — and
+  `memory_read.domain` already explained its half of the same rule. This is
+  the one place the fork actually gets CREATED, and it was the only silent
+  one; the description now says so and points at `memory_stats` for the exact
+  name, and names the room-address escape hatch. Text-only.
+- **The npm package keyword list no longer claims "forgetting".** 0.9.1
+  retracted "learns and forgets" from the README as false — unhelpful
+  memories are out-ranked, not erased, and deletion is administrative-only
+  since 0.9.0 — but the same claim survived as an npm keyword. Removed as
+  part of the same retraction.
+- **`llms.txt`'s install command now pins `@latest`,** matching every other
+  install snippet in this repo. The bare form npm caches indefinitely and
+  stops re-checking the registry (README, "Why `@latest`?") — an agent
+  following `llms.txt` verbatim would have installed once and silently
+  stopped receiving updates. `llms.txt` is hand-maintained (confirmed against
+  `scripts/generate-configs.mjs`'s `OUTPUTS` list, which does not include it),
+  so the fix is direct.
 
 - **`memory_feedback` reads its own count honestly.** `r?.updated_count ?? 0`
   folded three different failures onto the same number:
