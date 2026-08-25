@@ -137,6 +137,42 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     // survives in any rewrite, so on its own it asserts nothing about this one.
     expect(d).toContain("no tool on this server returns it");
   });
+
+  it("memory_join_room does not unconditionally promise write on the room it describes", () => {
+    // Bug hunt (pre-0.9.2): the OLD description said "use ... on
+    // memory_write/memory_read to read and write the shared room" —
+    // unconditionally, even though invite scope can be "read" (core refuses
+    // that member's memory_write with a 403, src/errors.ts). The static
+    // description cannot know the scope at advertise time, so it must not
+    // promise write at all — it can only say the runtime answer will.
+    const d = description("memory_join_room");
+    expect(d).toContain("memory_read");
+    expect(d).toMatch(/read.?only/);
+    expect(d).not.toMatch(/to read and write the shared room/);
+  });
+
+  it("memory_list_rooms does not promise write for every listed room regardless of scope", () => {
+    // Same defect, mirrored: the OLD description said every room comes "with
+    // the address to pass as `domain` on memory_write / memory_read" — a
+    // blanket claim false for any room where the caller's membership is
+    // "read" only.
+    const d = description("memory_list_rooms");
+    expect(d).toMatch(/read.?only/);
+    expect(d).not.toMatch(/each with the address to pass as `domain` on memory_write \/ memory_read\./);
+  });
+
+  it("memory_write.domain warns names are matched byte-for-byte and names the room-address escape hatch", () => {
+    // Bug hunt (pre-0.9.2): this is the ONE place a fork gets CREATED — the
+    // write handler explains at length, 30 lines below, why it deliberately
+    // does not normalise " engineering" into "engineering" (a second,
+    // permanent store), and memory_read.domain explains its half of the same
+    // rule — but this field, where the fork is actually opened, said nothing.
+    const d = paramDescription("memory_write", "domain");
+    expect(d).toContain("byte-for-byte");
+    expect(d).toContain("memory_stats");
+    expect(d).toContain("xroom:");
+    expect(d).toContain("memory_list_rooms");
+  });
 });
 
 // ---------------------------------------------------------------------------

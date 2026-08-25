@@ -1050,6 +1050,86 @@ describe("naming a store the reader has to reproduce", () => {
 // ---------------------------------------------------------------------------
 
 /**
+ * The room usage line matches what the membership scope actually allows (bug
+ * hunt, pre-0.9.2, P2). memory_join_room's usage sentence and memory_list_rooms'
+ * per-row tail both used to print the same "use domain=... [on memory_write /
+ * memory_read] to read and write" claim no matter what scope the invite
+ * granted — false for a "read" member: core answers that member's memory_write
+ * with a 403 "Read-only membership cannot write to this room" (src/errors.ts,
+ * confirmed against rooms_routes.py `_VALID_SCOPES = ("read", "read_write")`).
+ * A scope this response did not report at all gets the same treatment as
+ * "read" — no promise about write, because the server never said.
+ */
+describe("the room usage line names what the scope actually allows", () => {
+  it("memory_join_room: a read-only invite is told memory_write will be refused, not offered it", async () => {
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC", scope: "read" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain('Joined "team" (read).');
+    expect(text).toContain('pass domain="xroom:room_01ABC"');
+    expect(text).toContain("memory_read");
+    expect(text).toMatch(/read-only/);
+    expect(text).toContain("memory_write");
+    expect(text).toMatch(/refused/);
+    // Never claims this membership can write.
+    expect(text).not.toMatch(/to read and write the shared room/);
+  });
+
+  it("memory_join_room: a scope the server did not report makes no write promise either", async () => {
+    // No `scope` field at all — the Copilot-shaped partial body this file's
+    // other tests already treat as a real possibility (see the missing-address
+    // branch above).
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain('Joined "team" (member).');
+    expect(text).toContain('pass domain="xroom:room_01ABC"');
+    expect(text).toContain("memory_read");
+    // Not a claim of read-only (that would assert something the server did
+    // not say either) — but also no promise that memory_write will work.
+    expect(text).not.toMatch(/to read and write the shared room/);
+    expect(text).not.toMatch(/will be refused/);
+  });
+
+  it("memory_join_room: a read_write invite keeps the unconditional read-and-write promise", async () => {
+    mcp.on(JOIN, { name: "team", address: "xroom:room_01ABC", scope: "read_write" });
+
+    const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
+
+    expect(text).toContain(
+      'Use it: pass domain="xroom:room_01ABC" on memory_write / memory_read to read and write the shared room.',
+    );
+  });
+
+  it("memory_list_rooms: a read-only member row is not told it can write", async () => {
+    mcp.on(ROOMS, [
+      { room_id: "room_01R", name: "read-only-room", address: "xroom:room_01R", role: "member", scope: "read" },
+    ]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain('use domain="xroom:room_01R"');
+    expect(text).toMatch(/read-only/);
+    expect(text).toMatch(/memory_write.*refused|refused.*memory_write/s);
+  });
+
+  it("memory_list_rooms: an owned (read_write) room row keeps the unqualified usage line", async () => {
+    mcp.on(ROOMS, [
+      { room_id: "room_01O", name: "my-room", address: "xroom:room_01O", role: "owner", scope: "read_write" },
+    ]);
+
+    const text = await mcp.callText("memory_list_rooms");
+
+    expect(text).toContain('use domain="xroom:room_01O"');
+    expect(text).not.toMatch(/read-only/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
  * The escape legend and the size cap, in the only order that keeps both
  * (truth F6, 2026-08-08).
  *
