@@ -176,6 +176,18 @@ export function roomNamePhrase(name: unknown): string {
 }
 
 /**
+ * How many characters of NAMES the `Domains:` line may spend.
+ *
+ * Sized against the tool-result cap it exists to respect: `MAX_RESULT_CHARS` in
+ * src/index.ts is 96,000, and the reserve covers the four other stats lines, the
+ * escape legend, and the truncation notice `capResult` appends if it ever fires.
+ * The relationship is pinned behaviourally — "memory_stats fits the result cap
+ * without losing its tail", test/handlers.test.ts — so this number cannot drift
+ * away from that one in silence.
+ */
+export const MAX_DOMAIN_LIST_CHARS = 90_000;
+
+/**
  * The `Domains:` line of memory_stats — the surface this tool's own
  * description sends the reader to "to confirm the exact domain name before
  * writing to it", which it could not do while the names went through
@@ -188,23 +200,64 @@ export function roomNamePhrase(name: unknown): string {
  * one surface whose job is the opposite. An absent or empty list keeps the
  * existing "none reported", which is honest about both of the states core can
  * produce (no key on a non-core 200, or a genuinely empty bucket).
+ *
+ * `maxChars` bounds the NAMES, and it is the reason memory_stats is no longer
+ * the one tool result that could exceed the 25K-token Connectors Directory cap.
+ * This line is linear in the number of stores and nothing bounded it: 4,000
+ * domains rendered past 100,000 characters, every time, with no hostile input
+ * involved. Cutting the list here rather than capping the whole message is
+ * deliberate — `capResult` truncates from the END, so a blind cap would have
+ * eaten the average-quality line and the reminder that rooms are separate
+ * stores, i.e. the parts of the answer that are not the wall of names.
+ *
+ * What is cut is COUNTED and its cause is NAMED, in a clause kept separate from
+ * the unprintable one: "the list is too long" and "this name cannot be
+ * reproduced" are different facts about different names, and merging them would
+ * put the wrong cause on both.
  */
 export function formatDomainList(
   domains: unknown,
   emptyLabel = "none reported",
+  maxChars = MAX_DOMAIN_LIST_CHARS,
 ): string {
   if (!Array.isArray(domains) || domains.length === 0) return emptyLabel;
   const rendered = domains.map((d) => exactLiteral(d as string));
   const named = rendered.filter((x): x is ExactLiteral => x !== null);
   const unnamed = rendered.length - named.length;
+
+  // First N that fit, in order — not "every one that fits", which would print a
+  // list whose gaps follow no rule a reader could describe.
+  const shown: string[] = [];
+  let used = 0;
+  for (const x of named) {
+    const cost = (shown.length > 0 ? 2 : 0) + x.literal.length;
+    if (used + cost > maxChars) break;
+    used += cost;
+    shown.push(x.literal);
+  }
+  const overflow = named.length - shown.length;
+
   // "cannot be printed exactly", not "too long": length is the reachable cause,
   // but a value that is not a string at all lands here too, and naming the wrong
   // cause is the habit this release exists to break.
-  const tail =
-    unnamed > 0
-      ? `${named.length > 0 ? " " : ""}(+${unnamed} name${unnamed === 1 ? "" : "s"} not shown — cannot be printed exactly)`
-      : "";
-  return named.map((x) => x.literal).join(", ") + tail;
+  const clauses: string[] = [];
+  if (unnamed > 0) {
+    clauses.push(
+      `(+${unnamed} name${unnamed === 1 ? "" : "s"} not shown — cannot be printed exactly)`,
+    );
+  }
+  // Says outright what a shortened list would otherwise imply. This tool's own
+  // description sends a reader here to confirm a store's exact name before
+  // writing to it, so a name that is merely absent from the line must not read
+  // as a store that is absent from the account.
+  if (overflow > 0) {
+    clauses.push(
+      `(+${overflow} more name${overflow === 1 ? "" : "s"} not shown — the list is ` +
+        `longer than one tool result can carry, so a name you do not see here may ` +
+        `still exist)`,
+    );
+  }
+  return [shown.join(", "), ...clauses].filter((s) => s !== "").join(" ");
 }
 
 /**

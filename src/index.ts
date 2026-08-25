@@ -40,8 +40,9 @@ import {
 } from "./names.js";
 // Every non-2xx becomes an instruction to the calling model instead of a raw
 // wire echo — see the header of src/errors.ts for why, and for what each status
-// actually means in this engine.
-import { ApiError, NetworkError } from "./errors.js";
+// actually means in this engine. So does a 2xx whose body this client cannot
+// parse, which is a third case and not a variant of either of the other two.
+import { ApiError, NetworkError, UnreadableBodyError } from "./errors.js";
 
 /**
  * What we know about the scope this read actually covered — a VALUE rather
@@ -170,12 +171,18 @@ async function apiFetch<T = unknown>(
   if (!res.ok) {
     // `fetch()` resolves once HEADERS arrive; a connection reset during the
     // body read rejects HERE, not in the catch above, and used to surface as
-    // a raw undici TypeError (Copilot, #93). Same failure, same wrapper.
+    // a raw undici TypeError (Copilot, #93).
+    //
+    // It is NOT the same failure as the catch above, and calling it one threw
+    // the status away: a 502 whose body died mid-stream was reported as "the
+    // memory service could not be reached at all… before any HTTP response
+    // came back", about a response whose status we are holding. The status is
+    // the most actionable thing this failure has, so it goes in the sentence.
     let text: string;
     try {
       text = await res.text();
     } catch (cause) {
-      throw new NetworkError(method, path, cause);
+      throw new UnreadableBodyError({ status: res.status, method, path, cause });
     }
     throw new ApiError({
       status: res.status,
@@ -194,13 +201,36 @@ async function apiFetch<T = unknown>(
     return {} as T;
   }
 
-  // Same mid-body exposure as the error path above: headers said 2xx, then
-  // the stream died or the JSON arrived truncated. Without the wrapper this
-  // surfaces as a raw SyntaxError/TypeError nobody explains.
+  // A 2xx WHOSE BODY THIS CLIENT CANNOT READ. Read the text first and parse it
+  // second, rather than `res.json()`, for one reason: `res.json()` consumes the
+  // stream, so when it throws there is nothing left to quote — and the bytes
+  // are the evidence. A captive portal's sign-in page, an SPA shell served with
+  // 200 text/html, a MITM proxy's notice, or a JSON body that stopped mid-write
+  // all land here, and the first line of any of them identifies the culprit.
+  //
+  // Both throws used to be NetworkError, which asserts that NOTHING answered —
+  // "could not be reached at all… before any HTTP response came back… a
+  // connectivity or DNS problem" — while a 200 sat in this very function's
+  // hand, and the Raw detail below it quoted a SyntaxError out of the body it
+  // had just called nonexistent. Sending a user to debug wifi while a portal
+  // answers every request is the confident wrong cause src/errors.ts exists to
+  // remove. A real `fetch()` rejection above keeps that wording; this does not.
+  let body: string;
   try {
-    return (await res.json()) as T;
+    body = await res.text();
   } catch (cause) {
-    throw new NetworkError(method, path, cause);
+    throw new UnreadableBodyError({ status: res.status, method, path, cause });
+  }
+  try {
+    return JSON.parse(body) as T;
+  } catch (cause) {
+    throw new UnreadableBodyError({
+      status: res.status,
+      method,
+      path,
+      bodyPreview: body,
+      cause,
+    });
   }
 }
 
@@ -235,7 +265,7 @@ function capResult(
 }
 
 /**
- * A 200 whose body does not carry the array core always sends for a listing.
+ * A 2xx whose body does not carry what core always sends for this operation.
  *
  * Reading such a body as an EMPTY list is the substitution this release exists
  * to remove: `Array.isArray(x) ? x : []` turned "this client could not read
@@ -247,8 +277,24 @@ function capResult(
  * is NOT ("a list of your rooms"), and the absence it is NOT evidence of
  * ("you have none") — so every consumer states its own boundary while the
  * sentence stays one sentence everywhere (truth F13, 2026-08-08).
+ *
+ * NOT ONLY LISTS any more: memory_write was the last surface still reading
+ * a missing field as a stated one — `if (r?.stored)`, whose else-branch was an
+ * unconditional "NOT STORED — nothing was saved" plus a mechanism nobody sent.
+ * It is the same class of claim about a different shape, so it gets the same
+ * sentence, and the name no longer says "List".
+ *
+ * `extra` exists for the write surface alone: a list that could not be read
+ * leaves the caller merely uninformed, whereas a WRITE that could not be read
+ * leaves an operation whose outcome is unknown, and the caller must be told not
+ * to report either outcome to the user.
  */
-function unreadableListReply(subject: string, notA: string, absence: string) {
+function unreadableAnswerReply(
+  subject: string,
+  notA: string,
+  absence: string,
+  extra = "",
+) {
   return {
     content: [
       {
@@ -261,7 +307,7 @@ function unreadableListReply(subject: string, notA: string, absence: string) {
         // test/handlers.test.ts.
         text:
           `${subject} came back in a shape this client does not recognise — so this ` +
-          `is not ${notA}, and it is not evidence that ${absence}. Retry; ` +
+          `is not ${notA}, and it is not evidence that ${absence}.${extra} Retry; ` +
           `if it persists, whatever answered this call — the memory service, a ` +
           `gateway or proxy in front of it, or the endpoint a mis-set ` +
           `MNEMOVERSE_API_URL points at — is answering in a shape this client ` +
@@ -328,6 +374,28 @@ function isRoomDomain(domain: string | undefined): boolean {
   return typeof domain === "string" && domain.startsWith("xroom:");
 }
 
+/**
+ * The three outcomes this client will ever print a WRITE promise about for a
+ * room membership. Core grants exactly two scopes — "read" and "read_write"
+ * (rooms_routes.py `_VALID_SCOPES`) — and refuses a read-only member's
+ * memory_write with a 403 "Read-only membership cannot write to this room"
+ * (src/errors.ts). Anything else on the wire (missing field, a Copilot-shaped
+ * partial body) is UNSPECIFIED: the server did not say what memory_write would
+ * do for this membership, so this client does not guess either — it is treated
+ * like "read" for the purpose of NOT promising write, but is not told it is
+ * read-only, because that is also a claim the response did not make.
+ *
+ * Bug hunt (pre-0.9.2, P2): memory_join_room's usage sentence and
+ * memory_list_rooms's per-row tail both used to print "use domain=... [on
+ * memory_write / memory_read] to read and write" unconditionally — true for a
+ * read_write membership, false for a read-only one.
+ */
+function roomScopeVerdict(scope: string | undefined): "read_write" | "read" | "unspecified" {
+  if (scope === "read_write") return "read_write";
+  if (scope === "read") return "read";
+  return "unspecified";
+}
+
 // --- Tool: memory_write ---
 
 server.registerTool(
@@ -353,7 +421,12 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')",
+          "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')." +
+            " Matched byte-for-byte — a leading space, a different case, or an invisible" +
+            " character opens a SEPARATE, permanent store, so reuse an exact name from" +
+            " memory_stats rather than retyping one. To write into a shared room, pass its" +
+            " address here instead (e.g. 'xroom:room_01ABC'). Find room addresses with" +
+            " memory_list_rooms.",
         ),
     },
     annotations: {
@@ -400,6 +473,35 @@ server.registerTool(
       body: JSON.stringify(writeRequestBody({ content, concepts, domain })),
     });
 
+    // `stored` MUST BE A BOOLEAN before either verdict below may be printed.
+    //
+    // This was the last surface reading a MISSING field as a field that said
+    // false. `if (r?.stored)` sent every body that did not say `true` to the
+    // else-branch, whose first four words are "NOT STORED — nothing was saved"
+    // and whose last sentence explains WHY: "Writes are gated on how much a
+    // memory adds… so a near-duplicate is refused." So a 204, an empty `{}`, a
+    // proxy or gateway answering `{"ok":true}`, and a mis-set
+    // MNEMOVERSE_API_URL all produced an absence claim about the user's memory
+    // AND a fabricated mechanism for it — two statements, neither with any
+    // evidence behind it. The write is also the surface where being wrong costs
+    // most: a caller told "nothing was saved" re-words and retries, or drops
+    // the fact, and the atom that may in fact be sitting in the store is not
+    // what the user is told about.
+    //
+    // The four LIST surfaces have had this guard since 0.8.1 (truth F13); the
+    // write did not. The test for `boolean` and not for presence is deliberate:
+    // `{"stored":"yes"}` is not core speaking either.
+    if (typeof r?.stored !== "boolean") {
+      return unreadableAnswerReply(
+        "The write result",
+        "confirmation that the memory was stored",
+        "it was refused",
+        " Whether the content reached memory is unknown from here — report the" +
+          " outcome of the RETRY, not of this call, and do not tell the user it" +
+          " was saved or that it was rejected.",
+      );
+    }
+
     // "unknown", not 0.00, when the server didn't send a score — the same rule
     // memory_stats got in this release. A live surface exists that answers
     // {"stored":false} with no reason and no score; printing "0.00" there
@@ -419,7 +521,9 @@ server.registerTool(
       ? (exactLiteral(r.reason, 400)?.literal ?? "(too long to quote exactly)")
       : "";
 
-    if (r?.stored) {
+    // Narrowed to `true` by the guard above, so this is now the server's stated
+    // verdict rather than "the body was not falsy".
+    if (r.stored) {
       return {
         content: [
           {
@@ -621,7 +725,7 @@ server.registerTool(
     // rooms, one level up from the probes (truth F13, 2026-08-08).
     const items = r?.items;
     if (!Array.isArray(items)) {
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The search result",
         "a list of matches",
         "nothing matched",
@@ -970,7 +1074,7 @@ server.registerTool(
           stoppedEarly = true;
           break;
         }
-        return unreadableListReply(
+        return unreadableAnswerReply(
           "The recent-entries feed",
           "an empty feed",
           "there is nothing to list",
@@ -1128,11 +1232,34 @@ server.registerTool(
 
 // --- Tool: memory_feedback ---
 
+/**
+ * Why ids can miss, listed once and used by both branches that need it — the
+ * total miss (`updated_count: 0`) and the partial one (a count short of the
+ * ids sent). They are the same event at two scales, and when the sentence
+ * lived inline in the zero branch only, the partial case got no explanation at
+ * all.
+ *
+ * No frequency claim. "Most often that means…" was a statistic we do not have
+ * (review, 2026-08-08); the causes are listed as possibilities, with the one
+ * the caller cannot otherwise guess first because it is invisible from the
+ * tool surface — this tool takes no `domain`, so a room atom is unreachable
+ * from it by construction.
+ */
+const FEEDBACK_MISS_CAUSES =
+  "Possible causes: the ids came from a shared room (this tool takes no domain " +
+  "argument and cannot reach room atoms, so rating them is a no-op); the memory " +
+  "was deleted; or the id came from somewhere other than a memory_read result.";
+
 server.registerTool(
   "memory_feedback",
   {
     description:
-      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lets it fade. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
+      // "negative feedback lets it fade" was withdrawn as false by 0.9.1
+      // (#95) — and survived here, in the sentence every connected model
+      // reads. Nothing time-decays and nothing is auto-deleted: a downvoted
+      // memory is OUT-RANKED, and deletion has been administrative-only since
+      // 0.9.0. The replacement is the wording that release put on the README.
+      "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
     inputSchema: {
       atom_ids: z
         .array(z.string())
@@ -1166,7 +1293,73 @@ server.registerTool(
       body: JSON.stringify({ atom_ids, outcome }),
     });
 
-    const count = r?.updated_count ?? 0;
+    // A FIELD THE SERVER DID NOT SEND IS UNKNOWN, NOT ZERO — the rule
+    // memory_stats already applies with `num()`, broken here by
+    // `r?.updated_count ?? 0` in three directions at once:
+    //
+    //   1. A 200 with the field absent, an explicit null, and a 204 (which
+    //      apiFetch turns into `{}`) all became 0, and 0 prints "No feedback
+    //      was recorded" plus three causes for it — an absence claim read out
+    //      of a body that carried no claim. Under core's async path the
+    //      rating may well have been applied while the ack said nothing.
+    //   2. A string "0" is not 0, so `??` passed it straight through and the
+    //      ±1 branches printed "The service reports 0 memories updated — they
+    //      should surface sooner next time": two clauses contradicting each
+    //      other in one sentence.
+    //   3. Nothing rejected a negative: "reports -2 memories updated".
+    //
+    // So: usable means a non-negative integer. Anything else is UNKNOWN and
+    // gets its own sentence, which diagnoses nothing — the causes of a miss
+    // belong to a reported zero, not to a number we never received.
+    const reported: unknown = r?.updated_count;
+    const count =
+      typeof reported === "number" && Number.isInteger(reported) && reported >= 0
+        ? reported
+        : undefined;
+
+    // Direction is echoed for every outcome, including the ones with no count
+    // to report: the same four words for +1 and -1 gave a caller no evidence
+    // the loop did anything, which is why nobody calls it twice.
+    const sent =
+      outcome > 0
+        ? `Rating sent: +${outcome} (helpful).`
+        : outcome < 0
+          ? `Rating sent: ${outcome} (unhelpful).`
+          : "Rating sent: 0.";
+    // Zero has no effect clause to offer — promising "this shifts how they
+    // rank" for outcome 0 would be a claim we cannot make (dogfooding saw a
+    // neutral rating move a score UP by about five points, CodeRabbit #65) —
+    // so it offers the one thing that is actionable instead.
+    //
+    // WHAT 0 ACTUALLY DOES, restated against core#493 (merged 2026-08-13). The
+    // valence step used to be `sign(outcome) * |prediction error|`, so outcome
+    // 0 took the POSITIVE branch and pushed valence UP — which is what
+    // dogfooding saw, and what the previous version of this comment recorded.
+    // That is no longer true: core now uses the SIGNED error,
+    // `pe = outcome - valence` (memory_engine.py:5167-5169), so a 0 against a
+    // positive valence moves it DOWN, toward neutral. Either way 0 is not a
+    // no-op and the line must not imply one — but the old explanation is now
+    // backwards, and it ships verbatim inside dist/index.js, so it cannot be
+    // left to rot in a comment.
+    const pickADirection =
+      outcome === 0
+        ? " Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction."
+        : "";
+
+    if (count === undefined) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `${sent} The service accepted the call but did not report how many ` +
+              `memories it updated, so whether any changed is unknown from here. ` +
+              `That is not evidence of a failure — do not re-send the same rating ` +
+              `on the strength of it.` + pickADirection,
+          },
+        ],
+      };
+    }
 
     // "Feedback recorded for 0 memories." is one character away from the
     // success line and reads like one. But the DIAGNOSIS matters as much as
@@ -1185,32 +1378,17 @@ server.registerTool(
           {
             type: "text" as const,
             text:
-              // No frequency claim. "Most often that means…" was a statistic
-              // we do not have (review, 2026-08-08); the causes are listed as
-              // possibilities, with the one the caller cannot otherwise guess
-              // first because it is invisible from the tool surface.
               "No feedback was recorded — none of those ids matched a memory in your own " +
-              "domains. Possible causes: the ids came from a shared room (this tool takes " +
-              "no domain argument and cannot reach room atoms, so rating them is a no-op); " +
-              "the memory was deleted; or the id came from somewhere other than a " +
-              "memory_read result.",
+              `domains. ${FEEDBACK_MISS_CAUSES}`,
           },
         ],
       };
     }
 
-    // Echo the DIRECTION, not just the count: the same four words for +1 and
-    // -1 gave a caller no evidence the loop did anything, which is why nobody
-    // calls it twice.
-    //
-    // The effect clause is per-direction. Promising "this shifts how they
-    // rank" for outcome 0 would be a claim we cannot make — dogfooding saw a
-    // neutral rating move a score UP by about five points, so neither "no
-    // change" nor "ranks higher" is safe to assert (CodeRabbit, #65).
     // WHOSE NUMBER THIS IS (#68). `updated_count` is the count of memories the
     // service says it touched — and that is true only while core runs
     // `feedback_async = False`. Under async it returns the number of ids
-    // SUBMITTED, not applied (core schemas.py:689-695, memory_engine.py:4490),
+    // SUBMITTED, not applied (core schemas.py:826-838, memory_engine.py:4898-4902),
     // and nothing in the response says which mode ran. A server-side config
     // flip would therefore turn a confident sentence here false on every
     // installed client, silently. So the number is reported as the SERVICE'S
@@ -1219,28 +1397,54 @@ server.registerTool(
     // (mnemoverse-mcp-remote#38); one number, one degree of confidence,
     // whichever surface a model reaches it through.
     const noun = `${count} memor${count === 1 ? "y" : "ies"}`;
-    const text =
+    const effect =
       outcome > 0
-        ? `Rating sent: +${outcome} (helpful). The service reports ${noun} updated — they should surface sooner next time.`
+        ? " — they should surface sooner next time."
         : outcome < 0
-          ? `Rating sent: ${outcome} (unhelpful). The service reports ${noun} updated — they should fade.`
-          // Zero claims only what is knowable from here: the rating was sent,
-          // the service reported a count, and ±1 send a clear signal.
-          //
-          // WHAT 0 ACTUALLY DOES, restated against core#493 (merged
-          // 2026-08-13). The valence step used to be
-          // `sign(outcome) * |prediction error|`, so outcome 0 took the
-          // POSITIVE branch and pushed valence UP — which is what dogfooding
-          // saw, and what the previous version of this comment recorded. That
-          // is no longer true: core now uses the SIGNED error,
-          // `pe = outcome - valence` (memory_engine.py:4986-4988), so a 0
-          // against a positive valence moves it DOWN, toward neutral. Either
-          // way 0 is not a no-op and the line must not imply one — but the old
-          // explanation is now backwards, and it ships verbatim inside
-          // dist/index.js, so it cannot be left to rot in a comment.
-          : `Rating sent: 0. The service reports ${noun} updated. Use +1 (helpful) or -1 (harmful/wrong) to express a clear direction.`;
+          // No fade. 0.9.1 (#95) withdrew "lets it fade" as false — nothing
+          // time-decays, nothing is auto-deleted, and deletion has been
+          // administrative-only since 0.9.0 — and this line kept promising it
+          // after the release that deleted the claim from the README.
+          ? " — they should rank lower next time. Out-ranked, not erased: nothing is deleted and nothing decays with time."
+          : ".";
+
+    // WHAT THE COUNT IS NOT: a guarantee that every id landed. `atom_ids.length`
+    // was never compared with it, so five ids and `updated_count: 2` printed
+    // the unqualified success line and three silent misses — the typical shape
+    // of the room case, where half the ids came off a room read this tool
+    // cannot reach. A SHORTFALL can only come from core's sync path (the async
+    // ack is exactly `len(atom_ids)`, memory_engine.py:4898-4902), where the
+    // number is the authoritative count of atoms that existed — so the same
+    // causes as the zero branch apply, at a smaller scale, and the string is
+    // shared so the two cannot drift apart.
+    //
+    // An EXCESS is not a shape core produces at all (sync counts one per id
+    // that resolved, async counts the ids). But MNEMOVERSE_API_URL points
+    // wherever it is pointed, and "reports 9 memories updated" for one id
+    // would otherwise read as nine of the caller's memories rated. Say what it
+    // cannot be rather than pass it off as a per-id result.
+    const idsSent = `${atom_ids.length} id${atom_ids.length === 1 ? "" : "s"} you sent`;
+    const mismatch =
+      count < atom_ids.length
+        ? ` That is fewer than the ${idsSent}: ${atom_ids.length - count} of them ` +
+          `matched nothing in your own domains. ${FEEDBACK_MISS_CAUSES}`
+        : count > atom_ids.length
+          ? ` That is more than the ${idsSent}, so it cannot be a per-id result — ` +
+            `read it as the service's own tally, not as how many of your memories ` +
+            `were rated.`
+          : "";
+
     return {
-      content: [{ type: "text" as const, text }],
+      content: [
+        {
+          type: "text" as const,
+          // Order: what was sent, what the service reported, what that means
+          // for the ids — then the advice. Putting `pickADirection` before the
+          // mismatch clause interrupted the report with a suggestion and
+          // resumed it afterwards.
+          text: `${sent} The service reports ${noun} updated${effect}${mismatch}${pickADirection}`,
+        },
+      ],
     };
   },
 );
@@ -1294,6 +1498,15 @@ server.registerTool(
     // zero-width character are all visible, Cyrillic stays Cyrillic, and two
     // different names can no longer print as one. Assembly lives in
     // src/names.ts, where it is unit-tested against those exact inputs.
+    //
+    // The assembly also BOUNDS the list (MAX_DOMAIN_LIST_CHARS), which is what
+    // makes this handler respect the 25K-token cap every other surface already
+    // respected. The line is linear in the number of stores and nothing bounded
+    // it: 4,000 domains rendered past 100,000 characters — deterministically,
+    // with no hostile input involved. Bounding the LIST rather than leaning on
+    // capResult alone is the point: capResult truncates from the END, so the
+    // wall of names would have taken the average-quality line and the rooms
+    // reminder down with it, leaving the answer nothing but names.
     const domains = formatDomainList(r?.domains);
 
     const text = [
@@ -1322,8 +1535,22 @@ server.registerTool(
           // arrives over the wire, and spreading a non-iterable object would
           // throw here — turning a malformed payload into a dead tool instead
           // of the "none reported" it degrades to two lines up.
+          //
+          // capResult is the second belt, not the mechanism: the domain list is
+          // already bounded above, so this only fires if some future line grows
+          // unboundedly. It stays because this was the ONE tool result with no
+          // cap at all, and "every surface is capped" is worth being an
+          // invariant rather than an argument about which surfaces can grow.
+          // Its hint names a control this no-input tool actually has — none —
+          // rather than the read tool's "use a more specific query".
+          //
+          // Legend AFTER the cap, as everywhere else: it must describe the names
+          // that SURVIVED, and it is appended at the end, where the cap cuts.
           text: withDomainEscapeLegend(
-            text,
+            capResult(
+              text,
+              "The domain list was truncated — some domain names are not shown.",
+            ),
             ...(Array.isArray(r?.domains) ? r.domains : []),
           ),
         },
@@ -1470,7 +1697,7 @@ server.registerTool(
   "memory_join_room",
   {
     description:
-      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_write/memory_read to read and write the shared room.",
+      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result names your membership scope, and memory_write to that address is only allowed when it is read_write; a read-only membership has that write refused.",
     inputSchema: {
       code: z.string().min(1).max(200).describe("The invite code (mnvr_...)."),
     },
@@ -1505,9 +1732,18 @@ server.registerTool(
       ? `You're already a member of ${roomName}.`
       : `Joined ${roomName} (${scope}).`;
     // Don't print broken `domain=""` guidance if no address came back (Copilot).
-    const usage = address
-      ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
-      : `The server did not return a room address — retry, or check that your API key is set.`;
+    // The write half of this sentence is scope-gated (roomScopeVerdict, above
+    // isRoomDomain): a "read" invite gets told memory_write will be refused
+    // rather than offered it, and a scope the response did not report at all
+    // gets no promise about write either way.
+    const verdict = roomScopeVerdict(r?.scope);
+    const usage = !address
+      ? `The server did not return a room address — retry, or check that your API key is set.`
+      : verdict === "read_write"
+        ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
+        : verdict === "read"
+          ? `Use it: pass domain="${address}" on memory_read to read it; this membership is read-only, so memory_write to that address will be refused.`
+          : `Use it: pass domain="${address}" on memory_read to read it — the server did not report this membership's write access, so whether memory_write to that address would succeed is unknown.`;
     return {
       content: [
         {
@@ -1526,7 +1762,7 @@ server.registerTool(
   "memory_list_rooms",
   {
     description:
-      "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_write / memory_read. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
+      "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
     inputSchema: {},
     annotations: {
       title: "List rooms",
@@ -1548,7 +1784,7 @@ server.registerTool(
       // Byte-identical to the inline wording this replaces — the builder is
       // shared so the four list surfaces answer the unreadable case with one
       // sentence, not four drifting ones.
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The room list",
         "a list of your rooms",
         "you have none",
@@ -1586,13 +1822,24 @@ server.registerTool(
       // src/scope.ts), so that clause was an instruction to make a call that
       // cannot succeed. The address stays visible — it is the room's identity —
       // but the line says what a read against it will do.
+      //
+      // For a live room, the write half is scope-gated the same way
+      // memory_join_room's usage sentence is (roomScopeVerdict, near
+      // isRoomDomain): this used to say "use domain=..." with no operation
+      // named, which read as an unqualified read+write invitation even for a
+      // "read" member — false, since core refuses that member's memory_write.
+      const verdict = roomScopeVerdict(scope);
       const tail = r?.archived
         ? address
           ? ` [archived] — address ${address}, but every read is refused while it is archived`
           : ` [archived] — every read is refused while it is archived`
-        : address
-          ? ` — use domain="${address}"`
-          : "";
+        : !address
+          ? ""
+          : verdict === "read_write"
+            ? ` — use domain="${address}" to read and write it`
+            : verdict === "read"
+              ? ` — use domain="${address}" on memory_read only; this membership is read-only, so memory_write to it will be refused`
+              : ` — use domain="${address}" on memory_read; this membership's write access was not reported`;
       return `- ${name} (${role}${scope ? `, ${scope}` : ""})${tail}`;
     });
     const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
@@ -1648,7 +1895,7 @@ server.registerTool(
     // 2026-08-08). A genuinely empty array keeps the absence claim below.
     const list = r?.secrets;
     if (!Array.isArray(list)) {
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The secret list",
         "a list of your Vault secrets",
         "none are stored",
