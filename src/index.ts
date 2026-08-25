@@ -40,8 +40,9 @@ import {
 } from "./names.js";
 // Every non-2xx becomes an instruction to the calling model instead of a raw
 // wire echo — see the header of src/errors.ts for why, and for what each status
-// actually means in this engine.
-import { ApiError, NetworkError } from "./errors.js";
+// actually means in this engine. So does a 2xx whose body this client cannot
+// parse, which is a third case and not a variant of either of the other two.
+import { ApiError, NetworkError, UnreadableBodyError } from "./errors.js";
 
 /**
  * What we know about the scope this read actually covered — a VALUE rather
@@ -170,12 +171,18 @@ async function apiFetch<T = unknown>(
   if (!res.ok) {
     // `fetch()` resolves once HEADERS arrive; a connection reset during the
     // body read rejects HERE, not in the catch above, and used to surface as
-    // a raw undici TypeError (Copilot, #93). Same failure, same wrapper.
+    // a raw undici TypeError (Copilot, #93).
+    //
+    // It is NOT the same failure as the catch above, and calling it one threw
+    // the status away: a 502 whose body died mid-stream was reported as "the
+    // memory service could not be reached at all… before any HTTP response
+    // came back", about a response whose status we are holding. The status is
+    // the most actionable thing this failure has, so it goes in the sentence.
     let text: string;
     try {
       text = await res.text();
     } catch (cause) {
-      throw new NetworkError(method, path, cause);
+      throw new UnreadableBodyError({ status: res.status, method, path, cause });
     }
     throw new ApiError({
       status: res.status,
@@ -194,13 +201,36 @@ async function apiFetch<T = unknown>(
     return {} as T;
   }
 
-  // Same mid-body exposure as the error path above: headers said 2xx, then
-  // the stream died or the JSON arrived truncated. Without the wrapper this
-  // surfaces as a raw SyntaxError/TypeError nobody explains.
+  // A 2xx WHOSE BODY THIS CLIENT CANNOT READ. Read the text first and parse it
+  // second, rather than `res.json()`, for one reason: `res.json()` consumes the
+  // stream, so when it throws there is nothing left to quote — and the bytes
+  // are the evidence. A captive portal's sign-in page, an SPA shell served with
+  // 200 text/html, a MITM proxy's notice, or a JSON body that stopped mid-write
+  // all land here, and the first line of any of them identifies the culprit.
+  //
+  // Both throws used to be NetworkError, which asserts that NOTHING answered —
+  // "could not be reached at all… before any HTTP response came back… a
+  // connectivity or DNS problem" — while a 200 sat in this very function's
+  // hand, and the Raw detail below it quoted a SyntaxError out of the body it
+  // had just called nonexistent. Sending a user to debug wifi while a portal
+  // answers every request is the confident wrong cause src/errors.ts exists to
+  // remove. A real `fetch()` rejection above keeps that wording; this does not.
+  let body: string;
   try {
-    return (await res.json()) as T;
+    body = await res.text();
   } catch (cause) {
-    throw new NetworkError(method, path, cause);
+    throw new UnreadableBodyError({ status: res.status, method, path, cause });
+  }
+  try {
+    return JSON.parse(body) as T;
+  } catch (cause) {
+    throw new UnreadableBodyError({
+      status: res.status,
+      method,
+      path,
+      bodyPreview: body,
+      cause,
+    });
   }
 }
 
@@ -235,7 +265,7 @@ function capResult(
 }
 
 /**
- * A 200 whose body does not carry the array core always sends for a listing.
+ * A 2xx whose body does not carry what core always sends for this operation.
  *
  * Reading such a body as an EMPTY list is the substitution this release exists
  * to remove: `Array.isArray(x) ? x : []` turned "this client could not read
@@ -247,8 +277,24 @@ function capResult(
  * is NOT ("a list of your rooms"), and the absence it is NOT evidence of
  * ("you have none") — so every consumer states its own boundary while the
  * sentence stays one sentence everywhere (truth F13, 2026-08-08).
+ *
+ * NOT ONLY LISTS any more: memory_write was the last surface still reading
+ * a missing field as a stated one — `if (r?.stored)`, whose else-branch was an
+ * unconditional "NOT STORED — nothing was saved" plus a mechanism nobody sent.
+ * It is the same class of claim about a different shape, so it gets the same
+ * sentence, and the name no longer says "List".
+ *
+ * `extra` exists for the write surface alone: a list that could not be read
+ * leaves the caller merely uninformed, whereas a WRITE that could not be read
+ * leaves an operation whose outcome is unknown, and the caller must be told not
+ * to report either outcome to the user.
  */
-function unreadableListReply(subject: string, notA: string, absence: string) {
+function unreadableAnswerReply(
+  subject: string,
+  notA: string,
+  absence: string,
+  extra = "",
+) {
   return {
     content: [
       {
@@ -261,7 +307,7 @@ function unreadableListReply(subject: string, notA: string, absence: string) {
         // test/handlers.test.ts.
         text:
           `${subject} came back in a shape this client does not recognise — so this ` +
-          `is not ${notA}, and it is not evidence that ${absence}. Retry; ` +
+          `is not ${notA}, and it is not evidence that ${absence}.${extra} Retry; ` +
           `if it persists, whatever answered this call — the memory service, a ` +
           `gateway or proxy in front of it, or the endpoint a mis-set ` +
           `MNEMOVERSE_API_URL points at — is answering in a shape this client ` +
@@ -427,6 +473,35 @@ server.registerTool(
       body: JSON.stringify(writeRequestBody({ content, concepts, domain })),
     });
 
+    // `stored` MUST BE A BOOLEAN before either verdict below may be printed.
+    //
+    // This was the last surface reading a MISSING field as a field that said
+    // false. `if (r?.stored)` sent every body that did not say `true` to the
+    // else-branch, whose first four words are "NOT STORED — nothing was saved"
+    // and whose last sentence explains WHY: "Writes are gated on how much a
+    // memory adds… so a near-duplicate is refused." So a 204, an empty `{}`, a
+    // proxy or gateway answering `{"ok":true}`, and a mis-set
+    // MNEMOVERSE_API_URL all produced an absence claim about the user's memory
+    // AND a fabricated mechanism for it — two statements, neither with any
+    // evidence behind it. The write is also the surface where being wrong costs
+    // most: a caller told "nothing was saved" re-words and retries, or drops
+    // the fact, and the atom that may in fact be sitting in the store is not
+    // what the user is told about.
+    //
+    // The four LIST surfaces have had this guard since 0.8.1 (truth F13); the
+    // write did not. The test for `boolean` and not for presence is deliberate:
+    // `{"stored":"yes"}` is not core speaking either.
+    if (typeof r?.stored !== "boolean") {
+      return unreadableAnswerReply(
+        "The write result",
+        "confirmation that the memory was stored",
+        "it was refused",
+        " Whether the content reached memory is unknown from here — report the" +
+          " outcome of the RETRY, not of this call, and do not tell the user it" +
+          " was saved or that it was rejected.",
+      );
+    }
+
     // "unknown", not 0.00, when the server didn't send a score — the same rule
     // memory_stats got in this release. A live surface exists that answers
     // {"stored":false} with no reason and no score; printing "0.00" there
@@ -446,7 +521,9 @@ server.registerTool(
       ? (exactLiteral(r.reason, 400)?.literal ?? "(too long to quote exactly)")
       : "";
 
-    if (r?.stored) {
+    // Narrowed to `true` by the guard above, so this is now the server's stated
+    // verdict rather than "the body was not falsy".
+    if (r.stored) {
       return {
         content: [
           {
@@ -648,7 +725,7 @@ server.registerTool(
     // rooms, one level up from the probes (truth F13, 2026-08-08).
     const items = r?.items;
     if (!Array.isArray(items)) {
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The search result",
         "a list of matches",
         "nothing matched",
@@ -890,7 +967,7 @@ server.registerTool(
     // claims that must not be derived from it (truth F13, 2026-08-08).
     const items = r?.items;
     if (!Array.isArray(items)) {
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The recent-entries feed",
         "an empty feed",
         "there is nothing to list",
@@ -1533,7 +1610,7 @@ server.registerTool(
       // Byte-identical to the inline wording this replaces — the builder is
       // shared so the four list surfaces answer the unreadable case with one
       // sentence, not four drifting ones.
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The room list",
         "a list of your rooms",
         "you have none",
@@ -1644,7 +1721,7 @@ server.registerTool(
     // 2026-08-08). A genuinely empty array keeps the absence claim below.
     const list = r?.secrets;
     if (!Array.isArray(list)) {
-      return unreadableListReply(
+      return unreadableAnswerReply(
         "The secret list",
         "a list of your Vault secrets",
         "none are stored",

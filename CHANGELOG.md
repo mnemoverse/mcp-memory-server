@@ -177,6 +177,38 @@ change even though every touched line is prose.
   a silently shortened list would have answered that question with a false
   negative. `capResult` is now wired here too, as a second belt.
 
+- **A write result this client cannot read is no longer reported as a refusal
+  with a reason nobody gave.** `memory_write` branched on `if (r?.stored)`, so
+  every 2xx that did not say `true` — a 204, an empty `{}`, a gateway's
+  `{"ok":true}`, a `MNEMOVERSE_API_URL` aimed at something else — fell into the
+  else-branch and printed `NOT STORED — nothing was saved.` followed by the
+  mechanism: *"Writes are gated on how much a memory adds over what is already
+  in the same domain, so a near-duplicate is refused."* Two claims, neither
+  with evidence: that the memory is not in the store, and why. The four LIST
+  surfaces have refused to make that substitution since 0.8.1 (truth F13);
+  the write was the one left out. It now requires `stored` to be a real
+  boolean, and answers an unreadable body with the same sentence the lists use
+  — plus the clause a write needs: the outcome is unknown, so report the retry
+  rather than this call, and tell the user neither that it saved nor that it
+  was refused. A genuine `{"stored":false}` keeps the refusal and the
+  mechanism unchanged.
+- **A reply that arrived and could not be read is no longer diagnosed as "the
+  network is down".** `JSON.parse` failing on a 200 was wrapped in the same
+  error as `fetch()` rejecting, so a captive portal, a MITM proxy, an SPA
+  shell served as `200 text/html`, or a body that stopped mid-stream all
+  printed *"the memory service could not be reached at all — POST /memory/read
+  failed before any HTTP response came back… That is a connectivity or DNS
+  problem"* — while the Raw detail underneath quoted a `SyntaxError` out of the
+  body it had just called nonexistent. Every clause was false, and the
+  instruction it implies sends the user to debug working wifi. Such a response
+  now gets its own explanation, naming the status that DID arrive, quoting the
+  first 200 bytes of what could not be parsed (through the same inert filter as
+  every other quoted body), pointing at `MNEMOVERSE_API_URL` and whatever sits
+  in front of the API — and blaming neither the network nor the key. A real
+  transport failure keeps the wording written for it, and the same treatment
+  covers a body that dies mid-read on a non-2xx, which used to discard its
+  status entirely.
+
 ## [0.9.1] — 2026-08-24
 
 Text under this file's own rules: what a tool returns when it fails. No tool,
