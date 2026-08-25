@@ -236,6 +236,51 @@ describe("formatDomainList — the memory_stats line", () => {
     expect(formatDomainList([])).toBe("none reported");
     expect(formatDomainList({ nope: true })).toBe("none reported");
   });
+
+  /**
+   * The line is linear in the number of stores and nothing bounded it, so
+   * memory_stats was the one tool result that could exceed the 25K-token cap
+   * the Connectors Directory requires — deterministically, on any account with
+   * a few thousand domains. Truncating the LIST (rather than capping the whole
+   * message, which cuts from the end) is what keeps the lines BELOW it —
+   * average quality, and the reminder that rooms are separate stores.
+   */
+  it("stops at the character budget and counts what it did not print", () => {
+    // `"alpha"` is 7 characters, `, "beta"` another 8 — 15 of the 16 allowed.
+    // `gamma` would need 9 more, so it and everything after it are counted.
+    expect(formatDomainList(["alpha", "beta", "gamma"], "none reported", 16)).toBe(
+      '"alpha", "beta" (+1 more name not shown — the list is longer than one ' +
+        "tool result can carry, so a name you do not see here may still exist)",
+    );
+  });
+
+  it("keeps the two reasons apart — cut for space is not cannot-be-printed", () => {
+    const long = "x".repeat(500);
+    expect(formatDomainList(["alpha", long, "beta", "gamma"], "none reported", 16)).toBe(
+      '"alpha", "beta" (+1 name not shown — cannot be printed exactly) ' +
+        "(+1 more name not shown — the list is longer than one tool result can " +
+        "carry, so a name you do not see here may still exist)",
+    );
+  });
+
+  it("never claims a store does not exist, even when nothing fit", () => {
+    // A budget too small for the first name still leaves a true sentence:
+    // "there are names here that I did not print", never an empty list.
+    const line = formatDomainList(["engineering", "design"], "none reported", 1);
+    expect(line).toBe(
+      "(+2 more names not shown — the list is longer than one tool result can " +
+        "carry, so a name you do not see here may still exist)",
+    );
+    expect(line).not.toBe("none reported");
+  });
+
+  it("bounds the default budget below the tool-result cap", () => {
+    // MAX_RESULT_CHARS in src/index.ts is 24,000 tokens × 4 = 96,000, and the
+    // stats message carries four more lines plus, sometimes, the escape legend.
+    // The behavioural pin is in test/handlers.test.ts; this is the arithmetic.
+    const many = Array.from({ length: 4000 }, (_, i) => `team-${i}-engineering`);
+    expect(formatDomainList(many).length).toBeLessThan(24_000 * 4 - 2_000);
+  });
 });
 
 describe("withDomainEscapeLegend", () => {

@@ -27,6 +27,7 @@
  * without booting a stdio server.
  */
 
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SERVER_INSTRUCTIONS } from "../src/teaching.js";
@@ -115,6 +116,31 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain("Omit only when you mean your own domains");
   });
 
+  it("memory_list_recent says a page is bounded by SIZE too, and that the cursor holds the rest", () => {
+    // #104: the caller cannot know how long the entries are before asking, so
+    // a short page must not read as the end of the feed. Both halves are
+    // pinned — that the page can come back short, and that nothing was lost.
+    const d = description("memory_list_recent");
+    expect(d).toContain("bounded by SIZE");
+    expect(d).toContain("shorter than `limit`");
+    expect(d).toContain("nothing is dropped");
+  });
+
+  it("memory_list_recent.limit says it is a CEILING, and what to ask for in long-entry rooms", () => {
+    // Suggestion 3 of #104, which asked for the guidance even if nothing else
+    // changed: an agent discovering the cliff in production is the failure.
+    const d = paramDescription("memory_list_recent", "limit");
+    expect(d).toContain("A CEILING, not a promise");
+    expect(d).toContain("bounded by size");
+    expect(d).toContain("ask for 5–10");
+  });
+
+  it("memory_list_recent.domain warns that room entries are long enough to page", () => {
+    const d = paramDescription("memory_list_recent", "domain");
+    expect(d).toContain("Room entries are often long");
+    expect(d).toContain("expect to page");
+  });
+
   it("memory_list_recent.exclude_author carries the same not-usable warning", () => {
     const d = paramDescription("memory_list_recent", "exclude_author");
     expect(d).toContain("NOT USABLE FROM HERE YET");
@@ -129,6 +155,14 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     );
   });
 
+  it("memory_feedback states what a downvote does: out-ranks, never erases (#95)", () => {
+    // The claim 0.9.1 put in its place, pinned so the true half cannot be
+    // deleted along with the false one. The ban on the false half is in the
+    // withdrawn-claims block below.
+    const d = description("memory_feedback");
+    expect(d).toContain("other memories out-rank it — nothing is erased");
+  });
+
   it("vault_list promises aliases only — the value is never returned", () => {
     const d = description("vault_list");
     expect(d).toContain("the secret VALUE is never returned");
@@ -136,6 +170,42 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     // sentence was withdrawn. Pinned separately because the clause above
     // survives in any rewrite, so on its own it asserts nothing about this one.
     expect(d).toContain("no tool on this server returns it");
+  });
+
+  it("memory_join_room does not unconditionally promise write on the room it describes", () => {
+    // Bug hunt (pre-0.9.2): the OLD description said "use ... on
+    // memory_write/memory_read to read and write the shared room" —
+    // unconditionally, even though invite scope can be "read" (core refuses
+    // that member's memory_write with a 403, src/errors.ts). The static
+    // description cannot know the scope at advertise time, so it must not
+    // promise write at all — it can only say the runtime answer will.
+    const d = description("memory_join_room");
+    expect(d).toContain("memory_read");
+    expect(d).toMatch(/read.?only/);
+    expect(d).not.toMatch(/to read and write the shared room/);
+  });
+
+  it("memory_list_rooms does not promise write for every listed room regardless of scope", () => {
+    // Same defect, mirrored: the OLD description said every room comes "with
+    // the address to pass as `domain` on memory_write / memory_read" — a
+    // blanket claim false for any room where the caller's membership is
+    // "read" only.
+    const d = description("memory_list_rooms");
+    expect(d).toMatch(/read.?only/);
+    expect(d).not.toMatch(/each with the address to pass as `domain` on memory_write \/ memory_read\./);
+  });
+
+  it("memory_write.domain warns names are matched byte-for-byte and names the room-address escape hatch", () => {
+    // Bug hunt (pre-0.9.2): this is the ONE place a fork gets CREATED — the
+    // write handler explains at length, 30 lines below, why it deliberately
+    // does not normalise " engineering" into "engineering" (a second,
+    // permanent store), and memory_read.domain explains its half of the same
+    // rule — but this field, where the fork is actually opened, said nothing.
+    const d = paramDescription("memory_write", "domain");
+    expect(d).toContain("byte-for-byte");
+    expect(d).toContain("memory_stats");
+    expect(d).toContain("xroom:");
+    expect(d).toContain("memory_list_rooms");
   });
 });
 
@@ -179,6 +249,13 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     // exist, which is the kind of mismatch Anthropic's directory policy fails
     // a submission for.
     [/a tool that consumes it/i, "the phantom secret-consumer claim"],
+    // "negative feedback lets it fade" — withdrawn from the README by 0.9.1
+    // (#95) as false for a reason that has nothing to do with the re-ranking
+    // fix: nothing time-decays and nothing is auto-deleted, so a downvoted
+    // memory is out-ranked, not erased. It nevertheless survived the release
+    // on three surfaces a model reads, this one included. The whole word is
+    // banned because no true sentence about this engine needs it.
+    [/\bfades?\b/i, "the 'lets it fade' time-decay claim"],
   ];
 
   it("no tool or parameter description carries one", () => {
@@ -213,6 +290,19 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
         SERVER_INSTRUCTIONS,
         `SERVER_INSTRUCTIONS restores ${why}`,
       ).not.toMatch(banned);
+    }
+  });
+
+  // llms.txt is hand-written — it is NOT one of the 19 artifacts
+  // scripts/generate-configs.mjs emits, so `npm run verify:configs` never
+  // looks at it and no other test did either. That is exactly how it kept
+  // describing feedback as "Negative lets memories fade" through a release
+  // whose own CHANGELOG deletes the claim. It is a surface a model reads;
+  // it gets the same ban as the wire.
+  it("the hand-written llms.txt carries none either", () => {
+    const llms = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
+    for (const [banned, why] of WITHDRAWN) {
+      expect(llms, `llms.txt restores ${why}`).not.toMatch(banned);
     }
   });
 });

@@ -37,12 +37,251 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+A MINOR change under this file's own rule: a new branch, not just reworded
+text — see "A patch may NOT change SHAPE or ROUTING" above. `formatRecentPage`
+now decides its tail on three states instead of two, so this is a behaviour
+change even though every touched line is prose.
+
+MINOR by this file's own rules, and stated up front: `memory_list_recent`
+changes what goes on the wire. One request for the caller's `limit` becomes a
+short series of small ones, and `limit` — which the schema already described as
+a page size — is now a ceiling the page may legitimately come in under. No
+tool, parameter, annotation or route changes; nothing moves data.
+
 A BEHAVIOUR change, and therefore MINOR rather than a patch under this file's
 own rules: there are two things `apiFetch` used to do with the API key that it
 no longer does. Both were CodeRabbit findings on #93, both were pre-existing,
 and both were deliberately kept OUT of that release — its entry declares itself
 text-only ("no new request is made"), and a transport change riding inside a
 wording release is exactly what that declaration exists to prevent (#99).
+
+### Fixed
+
+- **The recent-feed's end-of-feed line no longer conflates "nothing older"
+  with "cursor could not be printed"** (#67). `formatRecentPage`
+  (`src/render.ts`) used to decide the tail with one boolean: cursor absent,
+  and cursor present-but-failing-the-opaque-shape-check, both printed
+  `(end of feed — nothing older)`. That is could-not-render spelled exactly
+  like does-not-exist — the collision 0.8.1 fixed everywhere else, recorded
+  there as "Known and NOT fixed here" (see the 0.8.1 entry below). The
+  shape check itself is unchanged (CN-032 defense-in-depth stays as strict as
+  it was); only what gets said when a cursor fails it does. There are now
+  three branches: no cursor still says `(end of feed — nothing older)`; a
+  cursor that fails the shape check now says "More entries exist but the
+  continuation token could not be displayed — narrow the window with
+  since/until instead" (`since`/`until` are already parameters on
+  `memory_list_recent`, so the advice is actionable today); a cursor that
+  passes still says "More older entries exist — pass cursor: …".
+- **The room usage line names what the membership scope actually allows.**
+  `memory_join_room`'s description and its usage sentence, and
+  `memory_list_rooms`'s per-room tail, all used to say "use domain=... [on
+  memory_write / memory_read] to read and write the shared room" — true for a
+  `read_write` membership, false for a `read` one: core refuses that member's
+  `memory_write` with a 403 "Read-only membership cannot write to this room".
+  All three surfaces now name `memory_read` unconditionally and only promise
+  `memory_write` where the scope is `read_write`; a `read` membership is told
+  the write will be refused, and a scope the response did not report at all
+  gets no promise about write either way. Text-only.
+- **`memory_write.domain` now says names are matched byte-for-byte.** The
+  handler has long refused to trim or normalise a domain — a leading space
+  opens a separate, permanent store beside the intended one — and
+  `memory_read.domain` already explained its half of the same rule. This is
+  the one place the fork actually gets CREATED, and it was the only silent
+  one; the description now says so and points at `memory_stats` for the exact
+  name, and names the room-address escape hatch. Text-only.
+- **The npm package keyword list no longer claims "forgetting".** 0.9.1
+  retracted "learns and forgets" from the README as false — unhelpful
+  memories are out-ranked, not erased, and deletion is administrative-only
+  since 0.9.0 — but the same claim survived as an npm keyword. Removed as
+  part of the same retraction.
+- **`llms.txt`'s install command now pins `@latest`,** matching every other
+  install snippet in this repo. The bare form npm caches indefinitely and
+  stops re-checking the registry (README, "Why `@latest`?") — an agent
+  following `llms.txt` verbatim would have installed once and silently
+  stopped receiving updates. `llms.txt` is hand-maintained (confirmed against
+  `scripts/generate-configs.mjs`'s `OUTPUTS` list, which does not include it),
+  so the fix is direct.
+
+- **`memory_feedback` reads its own count honestly.** `r?.updated_count ?? 0`
+  folded three different failures onto the same number:
+
+  - **A count the service did not send was reported as zero.** A 200 without
+    the field, an explicit `null`, and a 204 (which `apiFetch` turns into `{}`)
+    all became `0` — and `0` prints *"No feedback was recorded — none of those
+    ids matched a memory in your own domains"* followed by three causes for it.
+    That is an absence claim read out of a body that carried no claim, and
+    against core's async path — which acks before the worker runs — it can be
+    a flat lie about a rating that was applied. The rule `memory_stats` already
+    states in its own source now holds here too: a field the server did not
+    send is UNKNOWN, not zero, and unknown gets its own sentence that diagnoses
+    nothing.
+  - **A string `"0"` is not `0`,** so `??` passed it through and the ±1
+    branches printed *"The service reports 0 memories updated — they should
+    surface sooner next time"*: two clauses contradicting each other inside one
+    sentence. A negative passed through the same way (*"reports -2 memories
+    updated"*). Only a non-negative integer is now treated as a count.
+  - **A partial application was reported as an unqualified success.**
+    `atom_ids.length` was never compared with the count, so five ids and
+    `updated_count: 2` printed the success line and three silent misses — the
+    typical shape of the room case, where half the ids came off a room read
+    this tool cannot reach. The answer now says how many missed and why, reusing
+    the zero branch's causes verbatim so the two cannot drift. A shortfall can
+    only come from core's SYNC path (the async ack is exactly
+    `len(atom_ids)`), where the number is the authoritative count of atoms that
+    existed — so the diagnosis is sound, not a guess. A count LARGER than the
+    ids sent is no shape core produces, but `MNEMOVERSE_API_URL` points
+    wherever it is pointed: it is now named as not-a-per-id-result rather than
+    printed as nine of the caller's memories rated.
+
+- **"Negative feedback lets it fade" is gone from the three surfaces that
+  outlived its own retraction (#95).** 0.9.1's own entry above records the
+  claim as withdrawn — nothing time-decays, nothing is auto-deleted, and
+  deletion has been administrative-only since 0.9.0 — and the README lost it.
+  The `memory_feedback` tool description, the sentence the handler prints after
+  every downvote (*"they should fade"*), and `llms.txt` all kept it. All three
+  now carry the wording that release put in its place: a downvoted memory is
+  **out-ranked, not erased**. `llms.txt` is hand-written — it is not one of the
+  19 artifacts `verify:configs` checks, which is exactly how it went unnoticed
+  — so it is now covered by the withdrawn-claims ban in
+  `test/descriptions.test.ts`, which bans the word corpus-wide.
+
+  Text-only, and one internal branch — a PATCH by this file's own rule.
+
+- **A value with the wrong wire type can no longer kill the tool call it
+  appears in.** `safeInline` was `(s ?? "").replace(…)`, which throws on
+  anything that is not a string — and the MCP SDK turns a thrown Error into the
+  ENTIRE result. So one numeric `agent_name` on one item of fifty replaced a
+  page of memories with `(s ?? "").replace is not a function`: no `Mnemoverse: `
+  prefix, no diagnosis, nothing to act on — the one shape every other failure in
+  0.9.1 was rewritten to avoid. Five call sites took a wire value unnarrowed
+  (the author tag on every read and feed line; `address` and `room_id` on
+  memory_create_room; `scope` and `address` on memory_join_room; `alias` and
+  `context` on vault_list). `asRoom` had already closed this class for the room
+  list and recorded it as "a latent crash fixed"; this is the same fix, applied
+  where that one did not reach. A field that cannot be read now costs the reader
+  that field — an absent author tag, `(no alias)`, "the server did not return a
+  room address" — and nothing else.
+
+- **A timestamp without an offset is read as UTC, which is what the engine
+  means by it.** `new Date("2026-08-01T23:30:00")` reads the value as LOCAL
+  time, and `toISOString()` then printed the local reading with a `Z` — so the
+  same stored atom carried a different clock time in every timezone a client sat
+  in, and west of UTC a different DAY: `2026-08-01 23:30Z` in UTC, `14:30Z` in
+  Asia/Tokyo, `2026-08-02 06:30Z` in America/Los_Angeles. The convention was
+  already written down twice (both `since` descriptions, core's schema) and
+  implemented once, in the future-watermark note; the renderer read the same
+  wire value the other way. `parseAsUtc` now lives in `src/time.ts` and both
+  modules use it — one convention, one implementation. A `created_at` that
+  arrives as a number is no longer rendered as a date the contract does not
+  promise.
+
+- **memory_stats can no longer exceed the 25K-token result cap.** It was the
+  one surface that never went through `capResult`, and its `Domains:` line is
+  linear in the number of stores — 4,000 domains rendered 100,391 characters
+  against a 96,000 cap, deterministically, with no hostile input involved. The
+  fix bounds the LIST rather than the message, because a blind cap truncates
+  from the end and would have taken the average-quality line and the reminder
+  that rooms are separate stores down with the wall of names. What is cut is
+  counted and says why, in its own clause: `(+400 more names not shown — the
+  list is longer than one tool result can carry, so a name you do not see here
+  may still exist)` — kept separate from the existing "cannot be printed
+  exactly" count, because those are different facts about different names. This
+  tool's own description sends readers here to confirm a store's exact name, so
+  a silently shortened list would have answered that question with a false
+  negative. `capResult` is now wired here too, as a second belt.
+
+- **A write result this client cannot read is no longer reported as a refusal
+  with a reason nobody gave.** `memory_write` branched on `if (r?.stored)`, so
+  every 2xx that did not say `true` — a 204, an empty `{}`, a gateway's
+  `{"ok":true}`, a `MNEMOVERSE_API_URL` aimed at something else — fell into the
+  else-branch and printed `NOT STORED — nothing was saved.` followed by the
+  mechanism: *"Writes are gated on how much a memory adds over what is already
+  in the same domain, so a near-duplicate is refused."* Two claims, neither
+  with evidence: that the memory is not in the store, and why. The four LIST
+  surfaces have refused to make that substitution since 0.8.1 (truth F13);
+  the write was the one left out. It now requires `stored` to be a real
+  boolean, and answers an unreadable body with the same sentence the lists use
+  — plus the clause a write needs: the outcome is unknown, so report the retry
+  rather than this call, and tell the user neither that it saved nor that it
+  was refused. A genuine `{"stored":false}` keeps the refusal and the
+  mechanism unchanged.
+- **A reply that arrived and could not be read is no longer diagnosed as "the
+  network is down".** `JSON.parse` failing on a 200 was wrapped in the same
+  error as `fetch()` rejecting, so a captive portal, a MITM proxy, an SPA
+  shell served as `200 text/html`, or a body that stopped mid-stream all
+  printed *"the memory service could not be reached at all — POST /memory/read
+  failed before any HTTP response came back… That is a connectivity or DNS
+  problem"* — while the Raw detail underneath quoted a `SyntaxError` out of the
+  body it had just called nonexistent. Every clause was false, and the
+  instruction it implies sends the user to debug working wifi. Such a response
+  now gets its own explanation, naming the status that DID arrive, quoting the
+  first 200 bytes of what could not be parsed (through the same inert filter as
+  every other quoted body), pointing at `MNEMOVERSE_API_URL` and whatever sits
+  in front of the API — and blaming neither the network nor the key. A real
+  transport failure keeps the wording written for it, and the same treatment
+  covers a body that dies mid-read on a non-2xx, which used to discard its
+  status entirely.
+
+- **A feed page is bounded by SIZE, not only by item count (#104).** Catching
+  up on a shared room of long archival entries with
+  `memory_list_recent(domain: "xroom:…", limit: 40, cursor: …)` returned ONE
+  tool result of 72,648 characters. Claude Code refused to inline it and
+  spilled it to a local file, which the agent then had to re-read in chunks; a
+  client without that fallback loses the page entirely. This is the read-side
+  half of a failure already recorded on the write side — the ten-agent dogfood
+  of 2026-08-07 (#64) lost an agent to "died on the output limit".
+
+  The global cap did not fire, and could not have. `MAX_RESULT_CHARS` is
+  96,000, i.e. `24,000 tokens × 4 chars/token`, and 4 chars per token is an
+  average over ordinary prose. Archival room entries carry ids, code,
+  punctuation and non-ASCII and tokenize far worse, so a page that is 25%
+  under the cap by that arithmetic was already past what the client would take.
+  A cap derived from an optimistic ratio is not a promise about anyone's real
+  limit.
+
+  `limit` could not solve this from the caller's side either. It bounds the
+  COUNT, and whether a count is safe depends on how long the entries happen to
+  be — 1,500–4,000+ characters each in coordination rooms, against a 10,000
+  write cap — which the caller cannot know before asking. Too high explodes;
+  too low costs dozens of round trips for the same catch-up.
+
+  The handler now assembles a page from sub-requests of at most ten entries and
+  stops BEFORE a character budget (40,000) is exceeded, returning the server
+  cursor of the last FULLY accepted sub-batch. The batch is small because a
+  cursor names a batch boundary and nothing finer: that boundary is the
+  granularity at which a page can end without skipping or repeating an entry.
+  The returned cursor therefore continues exactly where the page stopped, and
+  the tail already says so. A short-entry feed is unaffected — the budget never
+  binds, the same entries come back with the same cursor.
+
+  Two deliberate limits of the fix. The budget YIELDS to a single entry larger
+  than itself: that entry is returned whole, as a page of one, because dropping
+  it is silent data loss and truncating it needs a fetch-one-entry-by-id verb
+  this server does not have (suggestion 2 of #104, not attempted here).
+  And 40,000 is a conservative guess, not a measurement — roughly half of what
+  already failed — because no client's true boundary has been measured.
+  `MAX_RESULT_CHARS` is untouched: it is shared with `memory_read` and every
+  other surface, and stays the final backstop after this budget has done its
+  work.
+
+- **A sub-request that fails mid-page no longer costs the whole page.**
+  Chunking multiplies requests per call and so multiplies the chance one of
+  them fails; throwing away the entries already fetched would make this change
+  a regression for exactly the rooms it is for. The page is returned with its
+  honest cursor and one sentence saying it stopped early because the next
+  request "did not come back usable" — a short page with a valid cursor is
+  otherwise indistinguishable from a page the budget ended, which is the
+  could-not-fetch/does-not-exist collision this project keeps closing. A
+  failure on the FIRST sub-request still surfaces as the error it is, including
+  the endpoint-absent degrade.
+
+- **The tool now says all of this to the model reading it.**
+  `memory_list_recent` states that a page is bounded by size and that the
+  cursor holds the rest; `limit` is described as a ceiling rather than a page
+  size, with the practical guidance suggestion 3 of #104 asked for (in
+  long-entry rooms, ask for 5–10 — a large `limit` there buys nothing the
+  budget will not take back and costs round trips); `domain` warns that room
+  entries are long enough that paging is the normal case.
 
 ### Security
 
@@ -120,6 +359,19 @@ why the break is the fix — but it is a break, and that is what makes this
 release MINOR.
 
 ### Known and NOT fixed here
+
+- **No per-entry truncation, and no way to fetch one entry by id.** An entry
+  larger than the whole budget still ships whole. `body_max_chars` /
+  `summary: true` (suggestion 2 of #104) would strand the reader without a
+  companion fetch-by-id verb, since ids are usable only for feedback today.
+- **The budget is not calibrated.** 40,000 is chosen to be safely under a
+  known failure at 72,648, not measured against any client's actual
+  tool-result limit.
+- **A large `limit` now costs round trips.** `limit: 100` over a short-entry
+  feed is ten sub-requests where it used to be one, and those are sequential.
+  The engine rate-limits per minute, so a caller who pages aggressively is
+  closer to a 429 than before. Sizing later chunks from the average entry
+  length already measured would remove most of this, and is not attempted here.
 
 - **`::1` is not in the loopback exemption.** IPv6 loopback is a legitimate
   self-host address and `http://[::1]:8100` is refused today; a user on it can
