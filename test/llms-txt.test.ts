@@ -2,8 +2,9 @@
  * llms.txt — the machine-readable install summary AI crawlers and agent
  * frameworks read to learn how to set this server up (a GEO surface, read by
  * agents rather than humans). It is hand-maintained: confirmed by grepping
- * `OUTPUTS` in scripts/generate-configs.mjs, which lists 14 artifacts under
- * docs/configs/, docs/snippets/ and server.json — no llms.txt entry — and by
+ * `OUTPUTS` in scripts/generate-configs.mjs, which lists 18 artifacts under
+ * docs/configs/, docs/snippets/, server.json and manifest.json — no llms.txt
+ * entry — and by
  * `git log --oneline -- llms.txt`, which shows only manual feature-commit
  * edits, never a generator run. So a defect here is fixed at the source
  * (this file), not chased through generate-configs.mjs.

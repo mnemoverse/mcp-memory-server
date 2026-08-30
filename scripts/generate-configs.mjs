@@ -5,7 +5,8 @@
  * Single source of truth → all distribution channel configs.
  *
  * Reads: src/configs/source.json
- * Writes: docs/configs/*, docs/snippets/*, server.json, README.md install block
+ * Writes: docs/configs/*, docs/snippets/*, server.json, manifest.json,
+ *         README.md install block
  *
  * Usage:
  *   node scripts/generate-configs.mjs            # generate
