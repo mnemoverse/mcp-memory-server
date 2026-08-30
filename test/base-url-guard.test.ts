@@ -19,12 +19,18 @@
  * calling fetch would still have leaked the key, and would still pass a test
  * that only read the sentence.
  *
- * WHY THE LOOPBACK EXCEPTION IS SPELLED OUT HOST BY HOST. `http://localhost` and
- * `http://127.0.0.1` are legitimate (a self-hosted engine, this repo's own test
- * harness), so the guard cannot simply demand https. The cheap way to write that
- * exception is a prefix test on the string — and `http://localhost.evil.example`
- * passes a prefix test while resolving to somebody else's server. The hostname
- * cases below exist to pin the literal-host comparison that closes it.
+ * WHY THE LOOPBACK EXCEPTION IS SPELLED OUT HOST BY HOST. `http://localhost`,
+ * `http://127.0.0.1` and `http://[::1]` are legitimate (a self-hosted engine,
+ * this repo's own test harness), so the guard cannot simply demand https. The
+ * cheap way to write that exception is a prefix test on the string — and
+ * `http://localhost.evil.example` passes a prefix test while resolving to
+ * somebody else's server. The hostname cases below exist to pin the
+ * literal-host comparison that closes it.
+ *
+ * THE IPv6 LITERAL IS COMPARED WITH ITS BRACKETS ON. `new URL("http://[::1]")`
+ * reports `hostname` as `"[::1]"`, brackets included — not `"::1"` — so the
+ * comparison in src/index.ts must carry them, and the rows below are what says
+ * so if anyone "tidies" them away.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -133,6 +139,30 @@ const REFUSED: ReadonlyArray<readonly [label: string, url: string]> = [
   // Not a URL at all: the client cannot tell whether this would be safe, and
   // "cannot tell" is not permission.
   ["something that is not a URL", "core.mnemoverse.com/api/v1"],
+  // IPv6 loopback is exempt (see ALLOWED below) — but only as the address.
+  // Here `[::1]` is USERINFO and the host is `evil.example`; a guard that
+  // matched on the raw string rather than `hostname` would send the key there.
+  ["a URL where [::1] is only the userinfo", "http://[::1]@evil.example/api/v1"],
+  // Any other IPv6 address is somebody else's machine, reachable or not.
+  ["an IPv6 address that is not loopback", "http://[::2]:8100/api/v1"],
+  // The exemption is scheme-bound for IPv6 exactly as it is for localhost.
+  ["a non-http scheme aimed at IPv6 loopback", "ftp://[::1]/api/v1"],
+  // The IPv6 twin of `localhost.evil.example`. WHATWG rejects a bracketed host
+  // with anything appended, so this lands in the cannot-parse branch instead of
+  // the scheme branch — a different sentence, the same refusal, and this row is
+  // here so a future parser change cannot turn it into an exemption unnoticed.
+  [
+    "a host that merely begins with the IPv6 loopback literal",
+    "http://[::1].evil.example/api/v1",
+  ],
+  // IPv4-mapped loopback does reach 127.0.0.1, and it is still refused: `URL`
+  // normalises it to `[::ffff:7f00:1]`, and the exemption is three literal
+  // spellings, not every address that happens to route home. Deliberate scope,
+  // not an oversight — widening it is a decision, and decisions get a row.
+  [
+    "IPv4-mapped loopback, which is not one of the three literals",
+    "http://[::ffff:127.0.0.1]:8100/api/v1",
+  ],
 ];
 
 describe("a base URL that would put the key in cleartext is refused before fetch", () => {
@@ -161,6 +191,12 @@ describe("a base URL that would put the key in cleartext is refused before fetch
     // reads this as "Mnemoverse refuses to talk to my server".
     expect(res.text).toContain("http://localhost");
     expect(res.text).toContain("http://127.0.0.1");
+    // Added with the IPv6 exemption: a self-hoster on `[::1]` who is not told
+    // their address is legal reads this as "Mnemoverse refuses my server".
+    expect(res.text).toContain("http://[::1]");
+    // The count in the sentence is part of the sentence. It said "two" while
+    // three hosts were accepted for exactly as long as nobody checked.
+    expect(res.text).toContain("the only three plain-http hosts");
     expect(res.text).toContain("Do not retry");
     // The wrong causes this must never suggest: nothing was rejected and
     // nothing was unreachable — no request was made at all.
@@ -217,6 +253,13 @@ const ALLOWED: ReadonlyArray<readonly [label: string, url: string]> = [
   ["https to any other host — the scheme is what is policed", "https://example.test/api/v1"],
   ["a local engine by name", "http://localhost:8100/api/v1"],
   ["a local engine by loopback IP", "http://127.0.0.1:8100/api/v1"],
+  // IPv6 loopback: `http://[::1]:8100` was refused until this change, and a
+  // self-hoster whose engine binds `::1` had to respell it as `localhost`.
+  ["a local engine on IPv6 loopback", "http://[::1]:8100/api/v1"],
+  // `URL` compresses the long form to `[::1]` before the guard sees the
+  // hostname, so one literal comparison covers both spellings — and the day it
+  // stops doing that, this row goes red rather than a self-hoster's setup.
+  ["the same engine spelled out in full", "http://[0:0:0:0:0:0:0:1]:8100/api/v1"],
   // Exactly what test/harness.ts pins. If this row goes red the whole suite is
   // about to, and this is the file that says why.
   ["the harness's own black-hole URL", "http://127.0.0.1:1/api/v1"],

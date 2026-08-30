@@ -177,9 +177,9 @@ describe("the startup key probe does not leak the key either", () => {
       "Mnemoverse: startup key check SKIPPED, and nothing was sent — " +
         "MNEMOVERSE_API_URL has the scheme http:// rather than https://, and " +
         "this server will not put your API key on the wire in cleartext. Set " +
-        "it to https://core.mnemoverse.com/api/v1, or to http://localhost or " +
-        "http://127.0.0.1 if you run the engine yourself. Every memory tool " +
-        "will fail until it is changed.",
+        "it to https://core.mnemoverse.com/api/v1, or to http://localhost, " +
+        "http://127.0.0.1 or http://[::1] if you run the engine yourself. " +
+        "Every memory tool will fail until it is changed.",
     );
   });
 
@@ -218,6 +218,19 @@ describe("the startup key probe does not leak the key either", () => {
     const { calls, stderr } = await startupWith("http://localhost:8100/api/v1");
 
     expect(calls).toHaveLength(1);
+    expect(calls[0]?.apiKey).toBe(PROBE_KEY);
+    expect(stderr).toEqual([]);
+  });
+
+  it("IPv6 loopback on plain http gets probed too — it is the same machine", async () => {
+    // The probe is the second credential-bearing call site, and it reads the
+    // same verdict as the tool path. If the exemption were added in only one
+    // of the two, a `[::1]` self-hoster would get a working server that
+    // complains on stderr at every start, or the reverse.
+    const { calls, stderr } = await startupWith("http://[::1]:8100/api/v1");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("http://[::1]:8100/api/v1/memory/stats");
     expect(calls[0]?.apiKey).toBe(PROBE_KEY);
     expect(stderr).toEqual([]);
   });

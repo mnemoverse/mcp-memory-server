@@ -307,6 +307,37 @@ wording release is exactly what that declaration exists to prevent (#99).
   server. The message names the scheme but never quotes the URL — the URL is
   where `http://user:pass@host` keeps its credentials.
 
+- **IPv6 loopback is exempt too — `http://[::1]` is accepted (#99 follow-up).**
+  The guard above shipped with two literal hosts, and this file's own "Known and
+  NOT fixed here" recorded the third as missing: an engine bound to `::1` was
+  refused outright, and its owner had to respell the same machine as
+  `localhost`. `http://[::1]:8100/api/v1` now passes, at both credential-bearing
+  call sites — the tool path and the startup probe, which reads the same
+  verdict. This is a BEHAVIOUR change and not a wording one: a base URL that was
+  refused yesterday is sent to today, which is why it is a MINOR line and not a
+  patch.
+
+  The comparison carries the brackets, because that is what the parser hands it:
+  `new URL("http://[::1]:8100").hostname` is `"[::1]"`, not `"::1"`. The long
+  form `[0:0:0:0:0:0:0:1]` is compressed to that same value before the guard
+  sees it, so one literal covers both spellings a user might type.
+
+  Two addresses stay refused, deliberately, and both are pinned as refused rows
+  rather than left to be rediscovered. **`host.docker.internal` is not
+  loopback**: it resolves through the container's resolver to an address on the
+  host network, so the key is on the wire before anything knows where it lands —
+  "aimed at my own machine" is a claim about intent, and this guard is about the
+  transport. **`[::ffff:127.0.0.1]` is not exempt** either: it does reach
+  127.0.0.1, but it is a fourth spelling of a machine that already has three
+  legal ones, and widening the exemption that stands between a live `mk_live_`
+  key and cleartext is a decision, not a convenience.
+
+  All three messages that name the legal hosts — the tool-call refusal, the
+  unparseable-URL refusal, and the startup skip line — now say three. The
+  tool-call one counted them out loud ("the only two plain-http hosts this
+  client accepts"), which is the shape of sentence that goes quietly false the
+  moment the list changes, so the test asserts the count as well as the hosts.
+
 - **A credential-bearing request no longer follows redirects (CWE-200).**
   `fetch` defaults to `redirect: "follow"` and Node re-sends request headers to
   the redirect target — the WHATWG rules strip `Authorization`, `Cookie` and
@@ -353,8 +384,8 @@ wording release is exactly what that declaration exists to prevent (#99).
 ### Who this breaks
 
 Anyone who deliberately pointed `MNEMOVERSE_API_URL` at a plain-`http://` host
-that is not `localhost` or `127.0.0.1`, and anyone whose endpoint answers a
-redirect. Both were sending the API key somewhere it should not go, which is
+that is not `localhost`, `127.0.0.1` or `[::1]`, and anyone whose endpoint
+answers a redirect. Both were sending the API key somewhere it should not go, which is
 why the break is the fix — but it is a break, and that is what makes this
 release MINOR.
 
@@ -373,12 +404,6 @@ release MINOR.
   closer to a 429 than before. Sizing later chunks from the average entry
   length already measured would remove most of this, and is not attempted here.
 
-- **`::1` is not in the loopback exemption.** IPv6 loopback is a legitimate
-  self-host address and `http://[::1]:8100` is refused today; a user on it can
-  spell the same engine `http://localhost`. Adding it (and deciding what to do
-  about container hostnames such as `host.docker.internal`) is a follow-up on
-  #99, not part of this change.
-
 ### Tests
 
 `test/base-url-guard.test.ts` boots the server once per base URL
@@ -393,6 +418,14 @@ asserts the redirect target is never contacted at all. With the fix reverted,
 that test does not merely fail — it records the attacker's server receiving
 `GET /steal` with the header `x-api-key: mk_live_…`, and the tool answering
 `Stored (importance: 0.90). ID: leaked`.
+
+The IPv6 exemption is pinned in that file from both sides: `http://[::1]:8100`
+and its long form must go out with the key, while `http://[::1]@evil.example`
+(where the literal is only userinfo and the host is the attacker's),
+`http://[::2]`, `ftp://[::1]`, `http://[::1].evil.example` and
+`http://[::ffff:127.0.0.1]` must not — and `test/startup.test.ts` asserts the
+probe reaches the same verdict, so the two credential-bearing call sites cannot
+drift apart.
 
 The startup probe had no tests at all before this change — `test/startup.test.ts`
 *ran* it (autostart calls it) while asserting nothing about it, which is how a
