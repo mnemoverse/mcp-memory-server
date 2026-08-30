@@ -435,8 +435,10 @@ The bots kept reviewing after these merges landed. Four findings across #106,
 - **`memory_join_room`'s description no longer promises a scope line in every
   answer** (CodeRabbit on #112). The handler has a third branch for a response
   that carried no `scope` at all, and that branch names the write access as
-  unknown rather than naming a scope; the description now says the scope is
-  named when the server reported one. Text-only.
+  unknown rather than naming a scope (and an `already_member` answer names no
+  scope at all) - so the description now describes the write guidance instead
+  of promising a scope line: read_write may write, read-only has the write
+  refused, and an unreported scope leaves write access unknown. Text-only.
 
 ## [0.9.1] — 2026-08-24
 

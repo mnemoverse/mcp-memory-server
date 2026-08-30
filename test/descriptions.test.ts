@@ -192,7 +192,11 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain("memory_read");
     expect(d).toMatch(/read.?only/);
     expect(d).not.toMatch(/to read and write the shared room/);
-    expect(d).toMatch(/did not report/);
+    // Pin the SEMANTIC, not a phrase: an unreported scope must specifically
+    // leave write access unknown. A loose /did not report/ would pass on any
+    // unrelated sentence even with the unconditional promise restored
+    // (Copilot, #116).
+    expect(d).toMatch(/does not report a scope[^.]*unknown/);
   });
 
   it("memory_list_rooms does not promise write for every listed room regardless of scope", () => {
