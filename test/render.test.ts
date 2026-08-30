@@ -142,17 +142,27 @@ describe("formatRecentItem / formatRecentPage", () => {
       "More entries exist but the continuation token could not be displayed — narrow the window with since/until instead",
     );
     expect(page).not.toContain("(end of feed — nothing older)");
+    // The half of CN-032 the sentence alone does not pin: a cursor that failed
+    // the shape check must not reach the page in ANY form. The three branches
+    // print different sentences, so a future edit could keep this one truthful
+    // and still interpolate the value it just refused to trust (Copilot, #106).
+    expect(page).not.toContain(oversized);
   });
 
   it("page with a cursor carrying disallowed characters does NOT claim the feed is empty (#67)", () => {
+    const rejectedCursor = "abc 123/../<script>";
     const page = formatRecentPage(
       [{ atom_id: ID, content: "a", created_at: "2026-08-02T10:00:00Z" }],
-      "abc 123/../<script>",
+      rejectedCursor,
     );
     expect(page).toContain(
       "More entries exist but the continuation token could not be displayed — narrow the window with since/until instead",
     );
     expect(page).not.toContain("(end of feed — nothing older)");
+    // Same guarantee as the oversized case above, against the payload shape
+    // that makes it matter: the rejected value carries markup and a traversal
+    // segment, and it stays off the page (Copilot, #106).
+    expect(page).not.toContain(rejectedCursor);
   });
 });
 

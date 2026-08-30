@@ -37,10 +37,15 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
-A MINOR change under this file's own rule: a new branch, not just reworded
-text — see "A patch may NOT change SHAPE or ROUTING" above. `formatRecentPage`
-now decides its tail on three states instead of two, so this is a behaviour
-change even though every touched line is prose.
+A PATCH under this file's own rule, corrected from the MINOR this paragraph
+first claimed (Copilot caught it post-merge on #106). `formatRecentPage` now
+picks its closing sentence from three states instead of two — but the states
+were always there: `next_cursor` present-and-well-shaped, present-and-not, and
+absent. What changed is WHICH SENTENCE an existing state gets, and a tool's
+output text is exactly what "A patch may change TEXT" above covers. No tool,
+parameter, annotation or route moves, and nothing moves data; the shape check
+itself is byte-identical. "A new branch" is not a criterion this file states —
+the criterion is SHAPE or ROUTING, and neither moved.
 
 MINOR by this file's own rules, and stated up front: `memory_list_recent`
 changes what goes on the wire. One request for the caller's `limit` becomes a
@@ -402,6 +407,36 @@ request against a refused URL, the skip line pinned verbatim, `redirect: "error"
 on the request it does make, and — as regression guards, so the fix cannot become
 a mute button — a healthy https URL and a plain-http `localhost` still probed,
 with the key, in silence.
+
+### Post-merge review follow-ups
+
+The bots kept reviewing after these merges landed. Four findings across #106,
+#108 and #112 are folded in here rather than left sitting in closed threads.
+
+- **The #67 paragraph at the top of this section said MINOR and meant PATCH**
+  (Copilot on #106). Rewritten against the rule it was citing: choosing which
+  sentence an already-existing state prints is TEXT, and "a new branch" is not
+  a criterion this file states. The two MINOR paragraphs beside it — #104's
+  wire change and #99's transport change — are untouched and still MINOR.
+- **The two rejected-cursor tests now assert the cursor is not echoed**
+  (Copilot on #106). They pinned the sentence only, so a build that printed the
+  right sentence AND interpolated the value it had just refused to trust passed
+  both. Checked by breaking it: with that value appended to the branch, both
+  tests fail.
+- **The early-stop budget test is now a boundary fixture** (CodeRabbit on
+  #108). Its entries sat far enough under the budget that deleting the note's
+  reservation from the fits check changed nothing it measured. Ten entries of
+  3,960 characters render to 39,907 — inside the 202-character window between
+  the reserved ceiling (39,798) and the budget (40,000) — and the sub-request
+  failure is now keyed to the CONTINUATION request rather than to a call
+  counter, so both arms reach the early-stop path instead of one of them
+  surfacing a raw error. With the reservation removed the page ships at 40,109
+  and the test fails on its own length assertion.
+- **`memory_join_room`'s description no longer promises a scope line in every
+  answer** (CodeRabbit on #112). The handler has a third branch for a response
+  that carried no `scope` at all, and that branch names the write access as
+  unknown rather than naming a scope; the description now says the scope is
+  named when the server reported one. Text-only.
 
 ## [0.9.1] — 2026-08-24
 

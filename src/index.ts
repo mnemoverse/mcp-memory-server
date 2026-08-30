@@ -1828,7 +1828,7 @@ server.registerTool(
   "memory_join_room",
   {
     description:
-      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result names your membership scope, and memory_write to that address is only allowed when it is read_write; a read-only membership has that write refused.",
+      "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result names your membership scope WHEN the server reported one, and memory_write to that address is only allowed when that scope is read_write; a read-only membership has that write refused, and a scope the server did not report is named as unknown rather than promised either way.",
     inputSchema: {
       code: z.string().min(1).max(200).describe("The invite code (mnvr_...)."),
     },

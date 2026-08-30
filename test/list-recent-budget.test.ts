@@ -294,20 +294,39 @@ describe("a sub-request that fails after entries were already accepted", () => {
 
   it("a page that stopped early still fits the budget, note included", async () => {
     // The note is appended AFTER the batches were sized, so its space is
-    // reserved during sizing (CodeRabbit, PR #108) — the invariant pinned
-    // here is end-to-end: accepted page PLUS the failure note never exceeds
-    // the budget, even when the accepted half filled most of it. The reserve
-    // itself is structural (the fits check subtracts the note's length), so
-    // this guards against gross regressions — the budget check disappearing,
-    // or the note outgrowing its reservation.
-    const feed = pagingFeed(entries(100, 3_800));
-    let n = 0;
+    // reserved during sizing (CodeRabbit, PR #108) — the invariant pinned here
+    // is end-to-end: accepted page PLUS the failure note never exceeds the
+    // budget.
+    //
+    // THE FIXTURE IS A BOUNDARY, and it has to be: with entries far from it
+    // this test passed with the reserve deleted, which is the whole thing it
+    // exists to catch (CodeRabbit, post-merge on #108). Ten entries of 3,960
+    // characters render to 39,907 — 109 over the reserved ceiling of 39,798
+    // (BUDGET minus the note), 93 under BUDGET itself. That window is the only
+    // place the reserve is observable at all:
+    //
+    //   WITH the reserve, the ten-entry batch does not fit, so the handler
+    //   narrows and accepts five (19,975); the failing continuation appends the
+    //   note, and the page ships at 20,177 — under budget.
+    //
+    //   WITHOUT it, the same batch fits, all ten ship, and the note pushes the
+    //   page to 40,109 — 109 over, and the length assertion below fails.
+    //
+    // The failure is keyed to the CONTINUATION request rather than to a call
+    // counter. The narrowing retry re-asks the same position and therefore
+    // carries no cursor, so a counter would fail the two arms at different
+    // points in the loop for a reason unrelated to the reserve — and, with
+    // nothing yet accepted, would surface a raw error instead of a page.
+    const feed = pagingFeed(entries(100, 3_960));
     mcp.on(RECENT, (req: StubbedRequest) =>
-      ++n === 1 ? feed(req) : httpError(503, "down"),
+      (req.body as { cursor?: string } | undefined)?.cursor
+        ? httpError(503, "down")
+        : feed(req),
     );
 
     const text = await mcp.callText("memory_list_recent", { limit: 100 });
 
+    expect(text).toContain("ITEM-0|");
     expect(text).toContain("stopped early");
     expect(text.length).toBeLessThanOrEqual(BUDGET);
   });
