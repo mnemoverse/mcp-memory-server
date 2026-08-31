@@ -179,10 +179,24 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     // that member's memory_write with a 403, src/errors.ts). The static
     // description cannot know the scope at advertise time, so it must not
     // promise write at all — it can only say the runtime answer will.
+    //
+    // POST-MERGE (CodeRabbit on #112): the same rule applies to the SCOPE
+    // itself. The description used to say the result "names your membership
+    // scope" flatly, but the handler has a third branch for a response that
+    // carried no scope at all, and that branch names the write access as
+    // unknown rather than naming a scope (handlers.test.ts, "a scope the
+    // server did not report makes no write promise either"). A description
+    // that promises a scope line the answer may not contain is the same
+    // over-promise one level up.
     const d = description("memory_join_room");
     expect(d).toContain("memory_read");
     expect(d).toMatch(/read.?only/);
     expect(d).not.toMatch(/to read and write the shared room/);
+    // Pin the SEMANTIC, not a phrase: an unreported scope must specifically
+    // leave write access unknown. A loose /did not report/ would pass on any
+    // unrelated sentence even with the unconditional promise restored
+    // (Copilot, #116).
+    expect(d).toMatch(/does not report a scope[^.]*unknown/);
   });
 
   it("memory_list_rooms does not promise write for every listed room regardless of scope", () => {
