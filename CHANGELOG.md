@@ -35,7 +35,7 @@ This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
 git history and the GitHub releases are the record.
 
-## [Unreleased]
+## [0.10.0] — 2026-08-31
 
 A PATCH under this file's own rule, corrected from the MINOR this paragraph
 first claimed (Copilot caught it post-merge on #106). `formatRecentPage` now
