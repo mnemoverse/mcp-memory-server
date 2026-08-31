@@ -144,16 +144,30 @@ interface BaseUrlRefusal {
  * every hop between the user and that host, with nothing anywhere saying so.
  * The key is the whole account: it reads and writes that user's memory.
  *
- * TWO HOSTS ARE EXEMPT, AND ONLY AS LITERAL HOSTNAMES. `http://localhost` and
- * `http://127.0.0.1` are legitimate — a self-hosted engine, this repo's own test
- * harness — and a guard that demanded https unconditionally would break them.
- * The comparison is against `URL.hostname`, NOT a prefix or suffix of the raw
- * string, because `http://localhost.evil.example` passes a prefix test and
- * `http://evil.localhost` passes a suffix test while both resolve to somebody
- * else's server. `::1` is deliberately NOT in the list: it is a follow-up (#99),
- * not an oversight, and a self-hoster on IPv6 loopback can spell it `localhost`
- * today. The exemption is also scheme-bound — `ftp://localhost` is refused —
- * since "aimed at loopback" is not by itself a reason to trust a transport.
+ * THREE HOSTS ARE EXEMPT, AND ONLY AS LITERAL HOSTNAMES. `http://localhost`,
+ * `http://127.0.0.1` and `http://[::1]` are legitimate — a self-hosted engine,
+ * this repo's own test harness — and a guard that demanded https unconditionally
+ * would break them. The comparison is against `URL.hostname`, NOT a prefix or
+ * suffix of the raw string, because `http://localhost.evil.example` passes a
+ * prefix test and `http://evil.localhost` passes a suffix test while both
+ * resolve to somebody else's server. The exemption is also scheme-bound —
+ * `ftp://localhost` is refused — since "aimed at loopback" is not by itself a
+ * reason to trust a transport.
+ *
+ * THE IPv6 LITERAL CARRIES ITS BRACKETS. `new URL("http://[::1]:8100")` reports
+ * `hostname` as `"[::1]"` — brackets included, not `"::1"` — so that is what the
+ * comparison holds, and test/base-url-guard.test.ts pins both spellings a user
+ * can type: the parser compresses `[0:0:0:0:0:0:0:1]` to `[::1]` before this
+ * function sees it, so one literal covers the long form too.
+ *
+ * WHAT IS STILL REFUSED, AND ON PURPOSE. `host.docker.internal` is NOT loopback
+ * and is not exempt: it resolves through the container's resolver to an address
+ * on the host network, so the packet — and the key — leaves the container before
+ * anything knows where it lands. "Aimed at my own machine" is a claim about
+ * intent; the exemption is about the wire. `[::ffff:127.0.0.1]` is refused for
+ * a smaller reason: it does reach 127.0.0.1, but it is a fourth spelling of an
+ * address that already has three legal ones, and widening an exemption that
+ * protects a live key is a decision, not a convenience.
  *
  * RETURNS A STRING RATHER THAN THROWING, and is called at import rather than
  * on each request, because a throw at import would take the server down before
@@ -185,8 +199,9 @@ function refuseInsecureBaseUrl(raw: string): BaseUrlRefusal | undefined {
         "a complete https:// URL including the scheme and the path — the " +
         `default is ${DEFAULT_API_URL} — or to unset it and use that default. ` +
         "A local engine is the one exception and must be addressed as " +
-        "http://localhost or http://127.0.0.1. Do not retry until it is " +
-        "changed; every memory tool will fail the same way until then.",
+        "http://localhost, http://127.0.0.1 or http://[::1]. Do not retry " +
+        "until it is changed; every memory tool will fail the same way " +
+        "until then.",
       startupLog:
         "Mnemoverse: startup key check SKIPPED, and nothing was sent — " +
         "MNEMOVERSE_API_URL is not a URL this server can parse, so it cannot " +
@@ -195,7 +210,11 @@ function refuseInsecureBaseUrl(raw: string): BaseUrlRefusal | undefined {
         "use that default. Every memory tool will fail until it is changed.",
     };
   }
-  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const loopback =
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    // Brackets included: that is what `URL.hostname` reports for an IPv6 host.
+    url.hostname === "[::1]";
   if (url.protocol === "https:" || (url.protocol === "http:" && loopback)) {
     return undefined;
   }
@@ -209,17 +228,17 @@ function refuseInsecureBaseUrl(raw: string): BaseUrlRefusal | undefined {
       "a fault of the key, the network or the service. Tell them to change " +
       "MNEMOVERSE_API_URL to the https:// form of the same host — the default " +
       `is ${DEFAULT_API_URL} — or, if they are deliberately running the ` +
-      "engine on their own machine, to address it as http://localhost or " +
-      "http://127.0.0.1, the only two plain-http hosts this client accepts. " +
-      "Do not retry until it is changed; every memory tool will fail the same " +
-      "way until then.",
+      "engine on their own machine, to address it as http://localhost, " +
+      "http://127.0.0.1 or http://[::1] — the only three plain-http hosts " +
+      "this client accepts. Do not retry until it is changed; every memory " +
+      "tool will fail the same way until then.",
     startupLog:
       "Mnemoverse: startup key check SKIPPED, and nothing was sent — " +
       `MNEMOVERSE_API_URL has the scheme ${url.protocol}// rather than ` +
       "https://, and this server will not put your API key on the wire in " +
-      `cleartext. Set it to ${DEFAULT_API_URL}, or to http://localhost or ` +
-      "http://127.0.0.1 if you run the engine yourself. Every memory tool " +
-      "will fail until it is changed.",
+      `cleartext. Set it to ${DEFAULT_API_URL}, or to http://localhost, ` +
+      "http://127.0.0.1 or http://[::1] if you run the engine yourself. " +
+      "Every memory tool will fail until it is changed.",
   };
 }
 

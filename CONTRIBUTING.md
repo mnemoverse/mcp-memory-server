@@ -22,12 +22,22 @@ Files that are **generated** (never edit by hand):
 | `docs/configs/vscode-deep-link.txt` | URL-encoded `vscode:mcp/install?...` URL |
 | `docs/configs/claude-code-cli.sh` | `claude mcp add ...` shell command |
 | `server.json` | Official MCP Registry manifest |
+| `manifest.json` | Claude Desktop Extension manifest (the `.mcpb` bundle) |
 | `docs/snippets/claude-code.md` | Markdown partial — Claude Code install (consumed by README + docs site) |
 | `docs/snippets/cursor.md` | Markdown partial — Cursor install |
 | `docs/snippets/claude-desktop.md` | Markdown partial — Claude Desktop install |
 | `docs/snippets/vscode.md` | Markdown partial — VS Code install |
 | `docs/snippets/windsurf.md` | Markdown partial — Windsurf install |
+| `docs/snippets/zed.md` | Markdown partial — Zed install |
+| `docs/snippets/jetbrains.md` | Markdown partial — JetBrains install |
+| `docs/snippets/cline.md` | Markdown partial — Cline install |
+| `docs/snippets/continue.md` | Markdown partial — Continue install |
 | `README.md` (only the section between `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->`) | Top-level install section, in-place rewritten by the generator |
+
+This table is checked mechanically by `test/generated-inventory.test.ts`, against
+the `OUTPUTS` array in `scripts/generate-configs.mjs`. Step 4 of "How to add a
+new distribution channel" below used to be a step you could skip for free — the
+table lost five rows that way — and now it is not.
 
 If your editor pops up a diff in any of these files and you didn't change `src/configs/source.json`, the diff is wrong. Discard it.
 
@@ -56,7 +66,7 @@ There are two layers of drift detection — they catch the same problem at diffe
 
 ### Layer 1: GitHub Actions (mandatory)
 
-Every PR runs [`.github/workflows/verify-configs.yml`](.github/workflows/verify-configs.yml), which executes `node scripts/generate-configs.mjs --check`. The job fails the build if any of the 15 generated artifacts (or the README install block) does not match what would be re-emitted from `src/configs/source.json`. **The job is required for merge into `main`.** This is the authoritative gate — it works for forks, blocks PRs, can't be bypassed by `--no-verify`, and protects you from your own typos.
+Every PR runs [`.github/workflows/verify-configs.yml`](.github/workflows/verify-configs.yml), which executes `node scripts/generate-configs.mjs --check`. The job fails the build if any of the 18 generated artifacts (or the README install block) does not match what would be re-emitted from `src/configs/source.json`. **The job is required for merge into `main`.** This is the authoritative gate — it works for forks, blocks PRs, can't be bypassed by `--no-verify`, and protects you from your own typos.
 
 ### Layer 2: Local pre-push hook (recommended, opt-in)
 
@@ -74,11 +84,15 @@ We deliberately avoid `husky` and `pre-commit` — those would add a dependency 
 
 ## How `npm run generate:configs` works
 
-`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 14 artifacts:
+`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 19 artifacts:
 
-1. **8 distribution configs** in `docs/configs/` (Cursor, Claude Desktop, Windsurf, VS Code JSON + 2 deep-link strings + Claude Code CLI shell script), plus `server.json` at the repo root for the Official MCP Registry. (Smithery's current publish model requires a framework rewrite or a hosted HTTPS endpoint — see the note in `scripts/generate-configs.mjs` where `genSmitheryYaml` used to live.)
-2. **5 Markdown partials** in `docs/snippets/` — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
+1. **9 machine-readable configs** — 7 in `docs/configs/` (Cursor, Claude Desktop, Windsurf, VS Code JSON + 2 deep-link strings + Claude Code CLI shell script), plus two at the repo root: `server.json` for the Official MCP Registry and `manifest.json` for the Claude Desktop Extension bundle. (Smithery's current publish model requires a framework rewrite or a hosted HTTPS endpoint — see the note in `scripts/generate-configs.mjs` where `genSmitheryYaml` used to live.)
+2. **9 Markdown partials** in `docs/snippets/` (Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline, Continue) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
 3. **1 in-place rewrite** of the install section in `README.md`, between the `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->` HTML comment markers. The rest of the README is human-prose and is left untouched.
+
+Every count on this page is asserted against `OUTPUTS` by
+`test/generated-inventory.test.ts`, so a channel added without updating this
+section fails `npm test` rather than aging into a wrong number.
 
 The generator is **idempotent**: running it twice in a row produces zero changes the second time. CI relies on this property — it runs the generator with `--check`, which verifies every output matches what is committed and fails the build otherwise.
 
@@ -87,7 +101,7 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 1. Add a new generator function in `scripts/generate-configs.mjs` that produces the channel's config from the data already in `source.json` (do NOT introduce a parallel data source — extend `source.json` instead if you need new fields).
 2. Add the new artifact to the `OUTPUTS` array.
 3. If the channel needs a Markdown install snippet, also add a `snippet*()` helper and a `docs/snippets/{channel}.md` entry. If the snippet should also appear in README, append it to `readmeInstallBlock()`.
-4. Update this `CONTRIBUTING.md` table above with the new file.
+4. Update this `CONTRIBUTING.md` table above with the new file, and the counts in the section above it. (`test/generated-inventory.test.ts` fails until you do; it also checks that `.github/workflows/verify-configs.yml`'s push-path filter covers the new file.)
 5. Run `npm run generate:configs && npm run verify:configs`. Both must succeed.
 6. Commit everything together — the source change, the new generator function, the new generated files, and the updated `CONTRIBUTING.md`.
 
