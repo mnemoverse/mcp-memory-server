@@ -310,3 +310,98 @@ jobs:
           else
             echo "::warning::dispatch failed (expired/revoked DOCS_DISPATCH_TOKEN?) — the docs cron will catch up within a day"
           fi
+
+  # ---------------------------------------------------------------------------
+  # A failed release used to reach nobody.
+  #
+  # 2026-08-31 21:27Z: v0.10.0 was tagged and merged, twelve of the thirteen
+  # steps above passed, and "Publish to npm" failed with `npm error code E404`
+  # on `PUT .../@mnemoverse%2fmcp-memory-server`. The tag then sat unpublished
+  # while npm kept serving 0.9.1. The release-sync check caught the drift the
+  # next morning at 07:07Z and went red — into the same empty room, because a
+  # scheduled workflow's red X is only visible to someone already looking at
+  # the Actions tab.
+  #
+  # This job is the missing half. It gates nothing and cannot fail the release
+  # (that already failed); it only gives the failure a destination. Deduped the
+  # way the docs repo's link-checker does it: comment on the open issue rather
+  # than opening a second one.
+  #
+  # The issue text lives in `env` as a block scalar, not inside the script, so
+  # the markdown can carry real backticks with no escaping.
+  # ---------------------------------------------------------------------------
+  notify-on-failure:
+    name: A failed release must reach a human
+    needs: [release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      TAG: ${{ github.ref_name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_BODY: |
+        The release workflow failed for **${{ github.ref_name }}**, so at least one public
+        surface is not serving this version.
+        [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+        **Read the failing step before assuming.** The one that has bitten us:
+
+        > `npm error code E404` — `PUT https://registry.npmjs.org/@mnemoverse%2fmcp-memory-server`
+
+        A 404 on `PUT` for a package that plainly exists is **not** "package not found".
+        npm answers 404 instead of 401 so that it does not disclose whether a private
+        package exists, so this is an authentication failure: `NPM_TOKEN` is expired or
+        revoked. Check the secret's age — a granular npm token expires, an Automation
+        token does not.
+
+        **After fixing the cause**, re-run this workflow from the tag. The publish legs
+        run in the order npm → Official MCP Registry → GitHub release, and each is
+        skipped once an earlier one fails, so a partial release means the later surfaces
+        were never attempted at all.
+
+        `release-sync check` (daily, 07:00 UTC) is what verifies the recovery: it compares
+        every first-party surface against `package.json#version` and stays red until they
+        agree.
+
+        ---
+        *Opened automatically by the release workflow.*
+    steps:
+      - name: Open or update the release-failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = 'Release did not complete';
+            const tag = process.env.TAG;
+            const runUrl = process.env.RUN_URL;
+
+            // Dedupe on the TITLE, never on labels. A label filter silently matches
+            // nothing when the label does not exist in this repo (only `bug` does
+            // today), which would make this open a fresh issue on every failure —
+            // the same class of quiet malfunction this job exists to end.
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.data.find((i) => i.title.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: 'Failed again for **' + tag + '** at ' + new Date().toISOString() + ' — [run](' + runUrl + ').',
+              });
+              core.notice('Updated existing issue #' + existing.number);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: MARKER + ': ' + tag,
+                body: process.env.ISSUE_BODY,
+                labels: ['bug'],
+              });
+              core.notice('Opened issue #' + created.data.number);
+            }
