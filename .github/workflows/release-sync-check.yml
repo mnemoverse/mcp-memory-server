@@ -8,6 +8,12 @@ name: release-sync check
 # Runs on a schedule (not on every push — a release needs a moment to propagate,
 # and we don't want a false red right after tagging) plus manual dispatch.
 # A red run = drift; open release.yml and re-run the missing leg.
+#
+# Until 2026-09-01 that sentence was the entire alerting story, and it assumed a
+# human watching the Actions tab. On 2026-08-31 the v0.10.0 release failed its npm
+# publish; this check went red on schedule the next morning and named all three
+# drifted surfaces correctly — and it was still unread two days later. The notify
+# job at the bottom is the missing half: red now opens an issue.
 
 on:
   schedule:
@@ -36,3 +42,150 @@ jobs:
         run: npm run check:release-sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The check above is correct, and it was correct on the morning it mattered.
+  # What was missing is that a scheduled workflow's failure is invisible unless
+  # somebody happens to be looking at the Actions tab. This job gives it a
+  # destination.
+  #
+  # Deliberately a separate job: the `issues: write` scope must never sit on the
+  # job that executes repository code (`npm run check:release-sync`).
+  #
+  # Two lifecycle properties are chosen, not overlooked:
+  #  * the search is scoped to OPEN issues, so closing the tracker while the
+  #    cause is still live does not silence the alarm — the next run files a
+  #    fresh one. An alarm you can switch off by closing a tab is not one.
+  #  * a persisting drift adds one comment per run and never a second issue.
+  #    On this daily cron that is one line a day: a heartbeat, deliberately
+  #    not throttled, because "still drifting on day nine" is the signal.
+  #
+  # Unlike release.yml's twin, this one does NOT fire on cancelled(): a check
+  # that was cancelled simply did not run, and tomorrow's cron runs it again.
+  # It leaves no half-landed state behind, which is the thing worth announcing.
+  #
+  # The issue text lives in `env` as a block scalar, not inside the script, so
+  # the markdown can carry real backticks with no escaping.
+  notify-on-failure:
+    name: Drift must reach a human
+    needs: [check]
+    if: failure()
+    runs-on: ubuntu-latest
+    # One alarm at a time. Two failures landing together would both miss the
+    # dedupe lookup and both take the create path — the exact duplication the
+    # lookup exists to prevent. Queue instead of cancelling: a dropped second
+    # run is a dropped alarm.
+    concurrency:
+      group: release-alarm-${{ github.workflow }}
+      cancel-in-progress: false
+    permissions:
+      issues: write
+    env:
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_BODY: |
+        `release-sync check` is red: at least one first-party surface — npm, the Official
+        MCP Registry, or the GitHub release — is not serving `package.json#version`.
+        **The run log names which ones.**
+        [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+        This means a release half-landed. The publish legs in `release.yml` run in the
+        order npm → Official MCP Registry → GitHub release, and each is skipped once an
+        earlier one fails, so the first drifted surface in the list is where to look.
+
+        If the failing leg is the npm publish, read its error before assuming a missing
+        package: `npm error code E404` on `PUT` for a package that exists points at
+        **authorization**, not absence — npm answers 404 rather than 401 so that it does
+        not disclose whether a private package exists. Check `NPM_TOKEN`: present,
+        unrevoked, granting publish on the `@mnemoverse` scope, and minted by an account
+        still in the org. Expiry is the least likely branch if the documented Automation
+        token was used, since those do not expire.
+
+        This issue is updated rather than duplicated while the drift persists, and stops
+        being updated once this check goes green.
+
+        ---
+        *Opened automatically by the release-sync check.*
+    steps:
+      - name: Open or update the drift issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = 'Public surfaces are not tracking the released version';
+            try {
+              const runUrl = process.env.RUN_URL;
+
+              // Dedupe on the TITLE, never on labels. A label filter silently matches
+              // nothing when the label does not exist in this repo (only `bug` does
+              // today), which would make this open a fresh issue on every failure —
+              // the same class of quiet malfunction this job exists to end.
+              // github.paginate, not a bare listForRepo: the REST endpoint caps a
+              // page at 100, so an older tracking issue past that boundary would be
+              // missed and this would open a duplicate.
+              const open = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                // This repository is PUBLIC with issues enabled, so anyone at all
+                // can open an issue whose title contains the marker below. Applying
+                // a LABEL, however, needs triage permission, so an outsider's issue
+                // can never carry `bug` and never enters this list. It also bounds
+                // the pagination that an issue flood could otherwise inflate.
+                labels: 'bug',
+              });
+              // Adopt ONLY an issue this workflow itself opened, and match on a PREFIX
+              // rather than a substring.
+              //
+              // listForRepo returns pull requests too — GitHub models every PR as an
+              // issue, and they carry a `pull_request` property. But the sharper
+              // problem is not accidental: `includes` over an unfiltered list is a
+              // capture primitive. listForRepo returns newest-first and `find` takes
+              // the first hit, so an issue planted by any passer-by would absorb the
+              // alarm for as long as its author kept re-planting, and the triage body
+              // below would never be posted at all. An alarm a stranger can switch
+              // off is not an alarm.
+              //
+              // `github-actions[bot]` is a reserved login that no human account can
+              // hold, so authorship is the guard that actually closes this. The label
+              // filter above is the cheap first cut, not the guarantee.
+              const existing = open.find(
+                (i) =>
+                  !i.pull_request &&
+                  i.user &&
+                  i.user.type === 'Bot' &&
+                  i.user.login === 'github-actions[bot]' &&
+                  i.title.startsWith(MARKER)
+              );
+
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body: 'Still drifting as of ' + new Date().toISOString() + ' — [run](' + runUrl + ').',
+                });
+                core.notice('Updated existing issue #' + existing.number);
+              } else {
+                const created = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: MARKER,
+                  body: process.env.ISSUE_BODY,
+                  labels: ['bug'],
+                });
+                core.notice('Opened issue #' + created.data.number);
+              }
+            } catch (err) {
+              // The one job whose purpose is "do not fail silently" must not fail
+              // silently either. If the Issues API rejects this (rate limit, 5xx),
+              // the report still has to reach a human, so it goes into the run log
+              // and the job summary before this goes red. The workflow has already
+              // failed by the time this job runs, so this cannot turn a green run red.
+              core.error('Could not file the tracking issue: ' + err.message);
+              await core.summary
+                .addHeading('Tracking issue could not be filed')
+                .addRaw('The GitHub Issues API rejected the write. The report follows so it is not lost.')
+                .addSeparator()
+                .addRaw(process.env.ISSUE_BODY)
+                .write();
+              core.setFailed(process.env.ISSUE_BODY);
+            }

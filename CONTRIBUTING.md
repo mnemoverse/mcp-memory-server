@@ -175,7 +175,15 @@ That push fires [`.github/workflows/release.yml`](.github/workflows/release.yml)
 8. Verifies the registry entry via a direct curl against the public API.
 9. Creates a GitHub release with auto-generated notes.
 
-If any step fails, the release is aborted — nothing partial gets published. You can re-push the same tag after fixing the issue.
+A failing step aborts the job, so every step after it is skipped. That is **not** the
+same as "nothing partial gets published": whatever already succeeded stays published.
+
+- Fail **at** the npm publish and nothing landed — fix the cause and re-run from the tag.
+- Fail **after** npm published and the package is live while the registry entry and the
+  release page lag. That is a half-landed release, and it is what the daily
+  `release-sync check` exists to catch. A plain re-run will **not** recover it: it dies
+  at the npm publish step, because that version already exists (`403`). Finish the
+  remaining legs by hand, or cut a new patch version.
 
 ### One-time setup for the workflow
 

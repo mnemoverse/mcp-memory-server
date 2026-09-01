@@ -310,3 +310,202 @@ jobs:
           else
             echo "::warning::dispatch failed (expired/revoked DOCS_DISPATCH_TOKEN?) — the docs cron will catch up within a day"
           fi
+
+  # ---------------------------------------------------------------------------
+  # A failed release used to reach nobody.
+  #
+  # 2026-08-31 21:27Z: v0.10.0 was tagged and merged. Every gate above the npm
+  # publish passed; "Publish to npm" then failed with `npm error code E404` on
+  # `PUT .../@mnemoverse%2fmcp-memory-server`, and the SIX steps after it — the
+  # registry publish, the GitHub release, the docs dispatch — never ran at all.
+  # Say it that way round: "twelve of thirteen passed" reads as "only the last
+  # one failed", and an on-call engineer would conclude the release page and the
+  # docs notification had happened. They had not. The tag then sat unpublished
+  # while npm kept serving 0.9.1. The release-sync check caught the drift the
+  # next morning at 07:07Z and went red — into the same empty room, because a
+  # scheduled workflow's red X is only visible to someone already looking at
+  # the Actions tab.
+  #
+  # This job is the missing half. It gates nothing and cannot fail the release
+  # (that already failed); it only gives the failure a destination. Deduped the
+  # way the docs repo's link-checker does it: comment on the open issue rather
+  # than opening a second one.
+  #
+  # Two lifecycle properties are chosen, not overlooked:
+  #  * the search is scoped to OPEN issues, so closing the tracker while the
+  #    cause is still live does not silence the alarm — the next failure files
+  #    a fresh one. An alarm you can switch off by closing a tab is not one.
+  #  * a persisting failure adds one comment per run and never a second issue.
+  #    On the daily cron that is one line a day: a heartbeat, deliberately not
+  #    throttled, because "still broken on day nine" is the signal.
+  #
+  # The issue text lives in `env` as a block scalar, not inside the script, so
+  # the markdown can carry real backticks with no escaping.
+  # ---------------------------------------------------------------------------
+  notify-on-failure:
+    name: A failed release must reach a human
+    needs: [release]
+    # failure() and cancelled() are DIFFERENT status functions, and an explicit
+    # `if:` replaces the implicit success(). failure() alone stays false when the
+    # release job is cancelled — including a rejected or abandoned approval on the
+    # `release` environment above, which this file itself recommends protecting
+    # with required reviewers. A cancelled release leaves exactly the state this
+    # job exists to announce: a tag that nothing published. So both count.
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    # One alarm at a time. Two failures landing together would both miss the
+    # dedupe lookup and both take the create path — the exact duplication the
+    # lookup exists to prevent. Queue instead of cancelling: a dropped second
+    # run is a dropped alarm.
+    concurrency:
+      group: release-alarm-${{ github.workflow }}
+      cancel-in-progress: false
+    permissions:
+      issues: write
+    env:
+      # Same resolution the seven gates above use. On a workflow_dispatch
+      # re-run — which is exactly the recovery path this job exists to serve —
+      # github.ref_name is the BRANCH, so a bare ref_name would title the issue
+      # after 'main' instead of the tag that failed.
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # __HEADING__ is substituted by the script with a heading built from a
+      # VALIDATED tag. The raw tag is deliberately not interpolated here: this
+      # block is rendered markdown, and `workflow_dispatch.inputs.tag` is an
+      # unvalidated free-form string.
+      ISSUE_BODY: |
+        __HEADING__
+
+        The release workflow did not complete — it failed or was cancelled — so at
+        least one public surface is not serving this version.
+        [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+        **Read the failing step before assuming.** The one that has bitten us:
+
+        > `npm error code E404` — `PUT https://registry.npmjs.org/@mnemoverse%2fmcp-memory-server`
+
+        A 404 on `PUT` for a package that plainly exists is **not** "package not found".
+        npm answers 404 rather than 401 so that it does not disclose whether a private
+        package exists. So read it as an **authorization** problem and check, cheapest
+        first: is `NPM_TOKEN` present and unrevoked; does it grant publish on the
+        `@mnemoverse` scope; is the account behind it still in the npm org; and was
+        publish-time 2FA turned on for the package.
+
+        One branch is worth ranking DOWN. This file's own setup section calls for a
+        classic **Automation** token, and those do not expire — so if setup was followed,
+        plain expiry is the least likely cause, and a revoked token or one minted by the
+        wrong account fits the same error more cheaply. Confirm which kind is actually in
+        the secret before spending time on the expiry theory.
+
+        **After fixing the cause**, re-run this workflow from the tag. The publish legs
+        run in the order npm → Official MCP Registry → GitHub release, and each is
+        skipped once an earlier one fails, so a partial release means the later surfaces
+        were never attempted at all.
+
+        `release-sync check` (daily, 07:00 UTC) is what verifies the recovery: it compares
+        every first-party surface against `package.json#version` and stays red until they
+        agree.
+
+        ---
+        *Opened automatically by the release workflow.*
+    steps:
+      - name: Open or update the release-failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = 'Release did not complete';
+            try {
+              // `workflow_dispatch.inputs.tag` is `type: string`, which GitHub does not
+              // validate at all, and the REST API will accept a multi-line value. It
+              // reaches two rendered sinks — the issue title and the body heading — so
+              // an unchecked value could forge markdown under this bot's name, hide the
+              // real advisory inside an unclosed HTML comment, or fire an @org/team
+              // mention. That needs write access, so it buys attribution rather than
+              // privilege; it is still not this job's to hand out.
+              //
+              // Refuse anything that is not a plausible tag rather than trying to escape
+              // it. A rejected value still produces a usable alarm — the run link and the
+              // triage body do not depend on it.
+              const rawTag = process.env.TAG || '';
+              const tag = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(rawTag)
+                ? rawTag
+                : '(tag name refused as unsafe)';
+              const heading = 'Release did not complete for **' + tag + '**.';
+              const runUrl = process.env.RUN_URL;
+
+              // Dedupe on the TITLE, never on labels. A label filter silently matches
+              // nothing when the label does not exist in this repo (only `bug` does
+              // today), which would make this open a fresh issue on every failure —
+              // the same class of quiet malfunction this job exists to end.
+              // github.paginate, not a bare listForRepo: the REST endpoint caps a
+              // page at 100, so an older tracking issue past that boundary would be
+              // missed and this would open a duplicate.
+              const open = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                // This repository is PUBLIC with issues enabled, so anyone at all
+                // can open an issue whose title contains the marker below. Applying
+                // a LABEL, however, needs triage permission, so an outsider's issue
+                // can never carry `bug` and never enters this list. It also bounds
+                // the pagination that an issue flood could otherwise inflate.
+                labels: 'bug',
+              });
+              // Adopt ONLY an issue this workflow itself opened, and match on a PREFIX
+              // rather than a substring.
+              //
+              // listForRepo returns pull requests too — GitHub models every PR as an
+              // issue, and they carry a `pull_request` property. But the sharper
+              // problem is not accidental: `includes` over an unfiltered list is a
+              // capture primitive. listForRepo returns newest-first and `find` takes
+              // the first hit, so an issue planted by any passer-by would absorb the
+              // alarm for as long as its author kept re-planting, and the triage body
+              // below would never be posted at all. An alarm a stranger can switch
+              // off is not an alarm.
+              //
+              // `github-actions[bot]` is a reserved login that no human account can
+              // hold, so authorship is the guard that actually closes this. The label
+              // filter above is the cheap first cut, not the guarantee.
+              const existing = open.find(
+                (i) =>
+                  !i.pull_request &&
+                  i.user &&
+                  i.user.type === 'Bot' &&
+                  i.user.login === 'github-actions[bot]' &&
+                  i.title.startsWith(MARKER)
+              );
+
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body: 'Failed again for **' + tag + '** at ' + new Date().toISOString() + ' — [run](' + runUrl + ').',
+                });
+                core.notice('Updated existing issue #' + existing.number);
+              } else {
+                const created = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: MARKER + ': ' + tag,
+                  body: process.env.ISSUE_BODY.replace('__HEADING__', heading),
+                  labels: ['bug'],
+                });
+                core.notice('Opened issue #' + created.data.number);
+              }
+            } catch (err) {
+              // The one job whose purpose is "do not fail silently" must not fail
+              // silently either. If the Issues API rejects this (rate limit, 5xx),
+              // the report still has to reach a human, so it goes into the run log
+              // and the job summary before this goes red. The workflow has already
+              // failed by the time this job runs, so this cannot turn a green run red.
+              core.error('Could not file the tracking issue: ' + err.message);
+              await core.summary
+                .addHeading('Tracking issue could not be filed')
+                .addRaw('The GitHub Issues API rejected the write. The report follows so it is not lost.')
+                .addSeparator()
+                .addRaw(process.env.ISSUE_BODY)
+                .write();
+              core.setFailed(process.env.ISSUE_BODY);
+            }
