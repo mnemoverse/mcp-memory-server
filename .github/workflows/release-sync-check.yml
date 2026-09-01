@@ -92,10 +92,12 @@ jobs:
         earlier one fails, so the first drifted surface in the list is where to look.
 
         If the failing leg is the npm publish, read its error before assuming a missing
-        package: `npm error code E404` on `PUT` for a package that exists is an
-        **authentication** failure, not a missing package — npm answers 404 rather than
-        401 so that it does not disclose whether a private package exists. Check
-        `NPM_TOKEN`.
+        package: `npm error code E404` on `PUT` for a package that exists points at
+        **authorization**, not absence — npm answers 404 rather than 401 so that it does
+        not disclose whether a private package exists. Check `NPM_TOKEN`: present,
+        unrevoked, granting publish on the `@mnemoverse` scope, and minted by an account
+        still in the org. Expiry is the least likely branch if the documented Automation
+        token was used, since those do not expire.
 
         This issue is updated rather than duplicated while the drift persists, and stops
         being updated once this check goes green.

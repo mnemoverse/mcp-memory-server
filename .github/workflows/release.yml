@@ -314,9 +314,13 @@ jobs:
   # ---------------------------------------------------------------------------
   # A failed release used to reach nobody.
   #
-  # 2026-08-31 21:27Z: v0.10.0 was tagged and merged, twelve of the thirteen
-  # steps above passed, and "Publish to npm" failed with `npm error code E404`
-  # on `PUT .../@mnemoverse%2fmcp-memory-server`. The tag then sat unpublished
+  # 2026-08-31 21:27Z: v0.10.0 was tagged and merged. Every gate above the npm
+  # publish passed; "Publish to npm" then failed with `npm error code E404` on
+  # `PUT .../@mnemoverse%2fmcp-memory-server`, and the SIX steps after it — the
+  # registry publish, the GitHub release, the docs dispatch — never ran at all.
+  # Say it that way round: "twelve of thirteen passed" reads as "only the last
+  # one failed", and an on-call engineer would conclude the release page and the
+  # docs notification had happened. They had not. The tag then sat unpublished
   # while npm kept serving 0.9.1. The release-sync check caught the drift the
   # next morning at 07:07Z and went red — into the same empty room, because a
   # scheduled workflow's red X is only visible to someone already looking at
@@ -381,10 +385,17 @@ jobs:
         > `npm error code E404` — `PUT https://registry.npmjs.org/@mnemoverse%2fmcp-memory-server`
 
         A 404 on `PUT` for a package that plainly exists is **not** "package not found".
-        npm answers 404 instead of 401 so that it does not disclose whether a private
-        package exists, so this is an authentication failure: `NPM_TOKEN` is expired or
-        revoked. Check the secret's age — a granular npm token expires, an Automation
-        token does not.
+        npm answers 404 rather than 401 so that it does not disclose whether a private
+        package exists. So read it as an **authorization** problem and check, cheapest
+        first: is `NPM_TOKEN` present and unrevoked; does it grant publish on the
+        `@mnemoverse` scope; is the account behind it still in the npm org; and was
+        publish-time 2FA turned on for the package.
+
+        One branch is worth ranking DOWN. This file's own setup section calls for a
+        classic **Automation** token, and those do not expire — so if setup was followed,
+        plain expiry is the least likely cause, and a revoked token or one minted by the
+        wrong account fits the same error more cheaply. Confirm which kind is actually in
+        the secret before spending time on the expiry theory.
 
         **After fixing the cause**, re-run this workflow from the tag. The publish legs
         run in the order npm → Official MCP Registry → GitHub release, and each is
