@@ -29,7 +29,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=np
 
 ### 2. Connect to your AI tool
 
-The canonical setup, both writing the key once for **every** project (a project-local config file gets committed with your repo — keep keys out of it):
+The canonical setup — both variants write the key **once, at user scope, covering every project**. Avoid per-project config files for this: they get committed with your repo, and keys must stay out of it:
 
 **Claude Code** — one CLI command, user scope:
 
@@ -52,7 +52,7 @@ claude mcp add mnemoverse -s user   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY   -- 
 ```
 
 <details>
-<summary><b>All other clients</b> — VS Code, Claude Desktop, Windsurf, Cline, Continue, Zed, JetBrains, ChatGPT</summary>
+<summary><b>All other clients</b> — VS Code, Windsurf, Zed, JetBrains, Cline, Continue</summary>
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
