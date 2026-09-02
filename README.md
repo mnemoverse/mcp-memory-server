@@ -1,4 +1,6 @@
-# @mnemoverse/mcp-memory-server
+# Mnemoverse Memory
+
+`@mnemoverse/mcp-memory-server` — the MCP server for the Mnemoverse memory engine.
 
 [![npm version](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
 [![npm downloads](https://img.shields.io/npm/dm/@mnemoverse/mcp-memory-server.svg?color=blue&label=downloads)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
@@ -7,9 +9,15 @@
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 [![Glama quality](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server/badges/score.svg)](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server)
 
-Hosted memory for AI agents that learns which facts matter. Feedback re-ranks recall — a Rescorla-Wagner update on the prediction error, not a similarity score — so what helped rises and what misled sinks, with a bounded recency tie-breaker for fresh memories. The engine also ships consolidation (HDBSCAN clustering, with Von Restorff protection so distinctive memories survive compression). One API key works across Claude, Cursor, VS Code, ChatGPT, and any MCP client.
+## What is Mnemoverse Memory?
 
-Memory that persists across sessions, projects, and tools — and improves with use. Hosted, so there's no infrastructure to run, and not locked to a single cloud.
+Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. Mnemoverse stores what your agents learn — decisions, preferences, lessons — and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with a single API key. Mnemoverse re-ranks recall from outcomes: report that a recalled memory helped and a Rescorla-Wagner update on the prediction error raises it, report that it misled and it sinks — a different mechanism from similarity scoring, usable alongside it.
+
+## How it compares
+
+Most agent memory today lives in one of three places. Per-tool instruction files — `CLAUDE.md`, `.cursorrules`, `AGENTS.md` — are versioned and readable, but each copy belongs to one repo and one tool, and nothing follows you to the next window. A vector store behind RAG retrieves by similarity, and similarity never changes because advice helped or misled. Local-first memory servers win on privacy and latency, and ask you to run and update the infrastructure yourself. Mnemoverse is the managed, cross-tool option in that landscape: nothing to deploy, one key everywhere, and ranking that moves with reported outcomes. If you need memory inside your own perimeter, a local-first server is the better choice — this one is hosted by design.
+
+The consolidation stage of the engine — HDBSCAN clustering with Von Restorff protection, so distinctive memories are not absorbed into the average — is designed in and currently switched off on the hosted service; our docs say so rather than hide it.
 
 > ⭐ If Mnemoverse saves you from re-explaining context to your agents, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
@@ -20,6 +28,31 @@ Memory that persists across sessions, projects, and tools — and improves with 
 Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
 ### 2. Connect to your AI tool
+
+The canonical setup — both variants write the key **once, at user scope, covering every project**. Avoid per-project config files for this: they get committed with your repo, and keys must stay out of it:
+
+**Claude Code** — one CLI command, user scope:
+
+```bash
+claude mcp add mnemoverse -s user   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY   -- npx -y @mnemoverse/mcp-memory-server@latest
+```
+
+**Cursor** — add to the global `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": ["-y", "@mnemoverse/mcp-memory-server@latest"],
+      "env": { "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY" }
+    }
+  }
+}
+```
+
+<details>
+<summary><b>All other clients</b> — VS Code, Windsurf, Zed, JetBrains, Cline, Continue</summary>
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -176,6 +209,8 @@ mcpServers:
 
 <!-- INSTALL_SNIPPETS_END -->
 
+</details>
+
 > ⚠️ **Restart your AI client** after editing the config. MCP servers are only picked up on client startup.
 
 ### 3. Try it — 30 seconds to verify it works
@@ -209,7 +244,11 @@ If it doesn't remember: check that the client was fully restarted and the config
 | `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
 | `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |
 
-## Ideas: What to Remember
+## Use cases
+
+The pattern that pays off first is cross-tool continuity: a decision made while pairing in Claude Code is there when you open Cursor an hour later, and the preference you stated in VS Code holds in a ChatGPT session that evening. Teams use shared rooms the same way — one place where an agent's lessons about a codebase accumulate instead of being re-taught per seat. And because recall re-ranks from feedback, the memories that keep proving useful surface first, which matters once a store grows past what anyone curates by hand.
+
+Concrete things worth writing:
 
 - **User preferences**: "I use dark mode", "I prefer Tailwind over CSS modules"
 - **Project context**: "This project uses PostgreSQL + Prisma", "Deploy to Railway"
@@ -237,6 +276,10 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 |-------------|----------|---------|
 | `MNEMOVERSE_API_KEY` | For every tool call — the server starts and lists its tools without one | — |
 | `MNEMOVERSE_API_URL` | No | `https://core.mnemoverse.com/api/v1` |
+
+## Research behind it
+
+The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.08965), accepted at the GRAAI workshop at IEEE WCCI 2026 — it establishes the abstraction-discovery method the memory model builds on. No benchmark figures appear in this README, ours or anyone's: numbers will come with a reproducible run to stand behind, not before.
 
 ## Links
 
