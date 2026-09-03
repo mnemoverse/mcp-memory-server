@@ -194,6 +194,16 @@ function genClaudeCodeCli() {
   return `claude mcp add ${source.name} -s user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
+function genClaudeCodeCliOneLine() {
+  // Same command, single line: PowerShell (the default shell on Windows)
+  // does not read the backslash line continuations of the bash form, so a
+  // Windows user pasting the multiline block gets a parse error.
+  const envFlags = Object.entries(ENV_VALUES)
+    .map(([k, v]) => `-e ${k}=${v}`)
+    .join(" ");
+  return `claude mcp add ${source.name} -s user ${envFlags} -- ${source.command} ${source.args.join(" ")}\n`;
+}
+
 // NOTE: genSmitheryYaml() was removed on 2026-04-12 after an empirical
 // check showed that Smithery's current CLI (@smithery/cli 4.7.4) entirely
 // ignores the legacy `startCommand` / `configSchema` / `commandFunction`
@@ -223,11 +233,17 @@ const PARTIAL_HEADER =
   "<!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->\n\n";
 
 function snippetClaudeCodeCli() {
-  // shell command, multiline with backslash continuations
+  // shell command, multiline with backslash continuations, plus a one-line
+  // variant for Windows: PowerShell rejects the `\` continuations, and the
+  // multiline block pasted there fails with a parse error.
   return (
     "**Claude Code** — add via CLI:\n\n" +
     "```bash\n" +
     genClaudeCodeCli().trim() +
+    "\n```\n\n" +
+    "On Windows (PowerShell), paste the same command as one line — PowerShell does not read the `\\` line continuations:\n\n" +
+    "```powershell\n" +
+    genClaudeCodeCliOneLine().trim() +
     "\n```\n"
   );
 }
