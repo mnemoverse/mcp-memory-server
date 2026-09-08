@@ -29,30 +29,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=np
 
 ### 2. Connect to your AI tool
 
-The canonical setup — both variants write the key **once, at user scope, covering every project**. Avoid per-project config files for this: they get committed with your repo, and keys must stay out of it:
-
-**Claude Code** — one CLI command, user scope:
-
-```bash
-claude mcp add mnemoverse -s user   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY   -- npx -y @mnemoverse/mcp-memory-server@latest
-```
-
-**Cursor** — add to the global `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "mnemoverse": {
-      "command": "npx",
-      "args": ["-y", "@mnemoverse/mcp-memory-server@latest"],
-      "env": { "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY" }
-    }
-  }
-}
-```
-
-<details>
-<summary><b>All other clients</b> — VS Code, Windsurf, Zed, JetBrains, Cline, Continue</summary>
+The canonical setup. Both write the key **once, at user scope, covering every project**. Avoid per-project config files for this: they get committed with your repo, and keys must stay out of it:
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -94,6 +71,14 @@ The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so
   }
 }
 ```
+
+
+<!-- INSTALL_SNIPPETS_END -->
+
+<details>
+<summary><b>All other clients</b> — VS Code, Windsurf, Zed, JetBrains, Cline, Continue</summary>
+
+<!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
 **VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`). That file is meant to be committed and shared with your team, so the key in it is too — if you'd rather keep it out of the repo, run **MCP: Open User Configuration** from the Command Palette and add the same JSON to your user profile's `mcp.json` instead:
 
@@ -215,7 +200,7 @@ mcpServers:
 
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.
 
-<!-- INSTALL_SNIPPETS_END -->
+<!-- MORE_CLIENTS_END -->
 
 </details>
 

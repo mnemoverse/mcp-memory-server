@@ -374,13 +374,25 @@ const WHY_LATEST_NOTE =
   "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
 
 /**
- * Build the README install block contents (without the START/END markers).
- * The order here matches the README — change here, README rewrites itself.
+ * The FEATURED clients: the two this README leads with, above any fold.
+ *
+ * They are generated rather than hand-written for one reason. The Cursor entry
+ * carries the install button AND the paragraph explaining that the button
+ * writes the placeholder key `mk_live_YOUR_KEY` rather than yours. A README
+ * that hand-copies the JSON above the fold and leaves the generated entry
+ * below it puts the warning further from the button it warns about, and the
+ * copy drifts from source.json the first time either changes.
  */
-function readmeInstallBlock() {
+function readmeFeaturedBlock() {
+  return [snippetClaudeCodeCli(), snippetCursor({ utm: true })].join("\n");
+}
+
+/**
+ * Every other client, plus the @latest note. A README may fold this region
+ * behind a <details> — see rewriteReadme.
+ */
+function readmeMoreClientsBlock() {
   return [
-    snippetClaudeCodeCli(),
-    snippetCursor({ utm: true }),
     snippetVscode(),
     snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
     "**More MCP clients** — same server, different config file:\n",
@@ -392,11 +404,31 @@ function readmeInstallBlock() {
   ].join("\n");
 }
 
+/**
+ * Build the README install block contents (without the START/END markers).
+ * The order here matches the README — change here, README rewrites itself.
+ *
+ * A README with only the INSTALL_SNIPPETS markers gets everything in one
+ * region, byte-identical to what this function emitted before the featured
+ * split existed. A README that also carries the MORE_CLIENTS markers gets the
+ * two featured clients here and the rest there.
+ */
+function readmeInstallBlock() {
+  return [readmeFeaturedBlock(), readmeMoreClientsBlock()].join("\n");
+}
+
 // ─── README in-place rewriter ─────────────────────────────────────────────────
 
 const README_START =
   "<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->";
 const README_END = "<!-- INSTALL_SNIPPETS_END -->";
+
+// Optional second region. A README that carries these markers folds every
+// non-featured client behind them (typically inside a <details>); one that
+// does not keeps the single-region layout and this pair is simply absent.
+const MORE_START =
+  "<!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->";
+const MORE_END = "<!-- MORE_CLIENTS_END -->";
 
 /**
  * Take current README content + the freshly assembled install block and return
@@ -406,27 +438,55 @@ const README_END = "<!-- INSTALL_SNIPPETS_END -->";
  * out and we don't know where to inject the snippets, so we fail loudly
  * instead of silently doing the wrong thing.
  */
-function rewriteReadme(currentReadme, freshBlock) {
-  const startIdx = currentReadme.indexOf("<!-- INSTALL_SNIPPETS_START");
-  const endIdx = currentReadme.indexOf("<!-- INSTALL_SNIPPETS_END -->");
+function replaceRegion(text, openPrefix, openMarker, closeMarker, fresh) {
+  const startIdx = text.indexOf(openPrefix);
+  const endIdx = text.indexOf(closeMarker);
 
   if (startIdx === -1 || endIdx === -1) {
     throw new Error(
-      "README.md is missing the INSTALL_SNIPPETS_START / INSTALL_SNIPPETS_END markers.\n" +
+      `README.md is missing the ${openPrefix.replace("<!-- ", "")} / ` +
+        `${closeMarker.replace("<!-- ", "").replace(" -->", "")} markers.\n` +
         "These markers tell the generator where to inject the install snippets.\n" +
         "Restore them around the install section and re-run `npm run generate:configs`.",
     );
   }
   if (startIdx >= endIdx) {
     throw new Error(
-      "README.md INSTALL_SNIPPETS_END marker appears before INSTALL_SNIPPETS_START.",
+      `README.md ${closeMarker} appears before ${openPrefix.replace("<!-- ", "")}.`,
     );
   }
 
-  const before = currentReadme.slice(0, startIdx);
-  const after = currentReadme.slice(endIdx + README_END.length);
+  const before = text.slice(0, startIdx);
+  const after = text.slice(endIdx + closeMarker.length);
 
-  return `${before}${README_START}\n\n${freshBlock}\n\n${README_END}${after}`;
+  return `${before}${openMarker}\n\n${fresh}\n\n${closeMarker}${after}`;
+}
+
+function rewriteReadme(currentReadme) {
+  // A README that folds the long tail declares a second region. Without it,
+  // everything goes in the first region and the output is unchanged from
+  // before the featured/more split existed.
+  const folded = currentReadme.includes("<!-- MORE_CLIENTS_START");
+
+  let out = replaceRegion(
+    currentReadme,
+    "<!-- INSTALL_SNIPPETS_START",
+    README_START,
+    README_END,
+    folded ? readmeFeaturedBlock() : readmeInstallBlock(),
+  );
+
+  if (folded) {
+    out = replaceRegion(
+      out,
+      "<!-- MORE_CLIENTS_START",
+      MORE_START,
+      MORE_END,
+      readmeMoreClientsBlock(),
+    );
+  }
+
+  return out;
 }
 
 /**
@@ -706,7 +766,7 @@ if (!existsSync(README_PATH)) {
 const currentReadme = readFileSync(README_PATH, "utf8");
 let freshReadme;
 try {
-  freshReadme = rewriteReadme(currentReadme, readmeInstallBlock());
+  freshReadme = rewriteReadme(currentReadme);
 } catch (err) {
   console.error("✗ Cannot rewrite README.md install block:");
   console.error("  " + (err.message || err).split("\n").join("\n  "));
@@ -718,7 +778,10 @@ if (currentReadme === freshReadme) {
 } else if (checkMode) {
   console.error("✗ Drift detected: README.md install block is stale");
   console.error(
-    "  The INSTALL_SNIPPETS_START/END region in README.md does not match",
+    "  A generated region in README.md (INSTALL_SNIPPETS, and MORE_CLIENTS",
+  );
+  console.error(
+    "  if present) does not match",
   );
   console.error(
     "  what the generator would emit from src/configs/source.json.",
