@@ -8,3 +8,9 @@ claude mcp add mnemoverse -s user \
   -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 \
   -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
+
+On Windows (PowerShell), paste the same command as one line — PowerShell does not read the `\` line continuations:
+
+```powershell
+claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
+```

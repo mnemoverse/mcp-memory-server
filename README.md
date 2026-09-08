@@ -65,9 +65,17 @@ claude mcp add mnemoverse -s user \
   -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
-**Cursor** — click to install, or add to `.cursor/mcp.json`:
+On Windows (PowerShell), paste the same command as one line — PowerShell does not read the `\` line continuations:
+
+```powershell
+claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
+```
+
+**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
+
+The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
 
 ```json
 {
@@ -87,7 +95,7 @@ claude mcp add mnemoverse -s user \
 }
 ```
 
-**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`):
+**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`). That file is meant to be committed and shared with your team, so the key in it is too — if you'd rather keep it out of the repo, run **MCP: Open User Configuration** from the Command Palette and add the same JSON to your user profile's `mcp.json` instead:
 
 ```json
 {
