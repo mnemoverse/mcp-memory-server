@@ -1,10 +1,10 @@
 <!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->
 
-**Cursor** — click to install, or add to the global `~/.cursor/mcp.json` (recommended — one config for every project); a project-level `.cursor/mcp.json` also works, but it ships with the repository, so keep API keys out of it:
+**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
 
-The button pre-fills the placeholder mk_live_YOUR_KEY; after installing, open Cursor Settings, MCP, mnemoverse, and replace it with your key from console.mnemoverse.com — otherwise every tool call is refused.
+The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: paste the JSON below into `~/.cursor/mcp.json` with your own key already in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
 
 ```json
 {

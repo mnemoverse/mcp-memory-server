@@ -281,14 +281,18 @@ function snippetVscode() {
 function snippetCursor() {
   // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
   // manual JSON fallback. The button and the JSON encode the same config.
-  // The button pre-fills the source.json placeholder key, so the sentence
+  // The button carries the source.json placeholder key, so the paragraph
   // below it must keep saying so — don't drop it if this function changes.
+  // The placeholder text is interpolated from ENV_VALUES, not hardcoded:
+  // if source.json's MNEMOVERSE_API_KEY value ever changes, this sentence
+  // must not silently drift out of sync with it.
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  const placeholderKey = ENV_VALUES.MNEMOVERSE_API_KEY;
   return (
-    "**Cursor** — click to install, or add to the global `~/.cursor/mcp.json` (recommended — one config for every project); a project-level `.cursor/mcp.json` also works, but it ships with the repository, so keep API keys out of it:\n\n" +
+    "**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n" +
     genCursorInstallButton() +
     "\n\n" +
-    "The button pre-fills the placeholder mk_live_YOUR_KEY; after installing, open Cursor Settings, MCP, mnemoverse, and replace it with your key from console.mnemoverse.com — otherwise every tool call is refused.\n\n" +
+    `The install button carries the placeholder key \`${placeholderKey}\`, not yours, so the shortest path is to skip the button: paste the JSON below into \`~/.cursor/mcp.json\` with your own key already in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the \`mcp.json\` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.\n\n` +
     "```json\n" +
     json +
     "\n```\n"
