@@ -466,7 +466,22 @@ function rewriteReadme(currentReadme) {
   // A README that folds the long tail declares a second region. Without it,
   // everything goes in the first region and the output is unchanged from
   // before the featured/more split existed.
-  const folded = currentReadme.includes("<!-- MORE_CLIENTS_START");
+  //
+  // Half a pair is always a mistake, and a silent one: with only the END
+  // marker left behind, `folded` would be false, the second region would never
+  // be rewritten, and a stale block of client snippets would sail through the
+  // --check drift gate because nothing compares it to anything. Fail loudly.
+  const hasMoreStart = currentReadme.includes("<!-- MORE_CLIENTS_START");
+  const hasMoreEnd = currentReadme.includes(MORE_END);
+  if (hasMoreStart !== hasMoreEnd) {
+    throw new Error(
+      "README.md carries only one of the MORE_CLIENTS_START / MORE_CLIENTS_END markers.\n" +
+        `Found START: ${hasMoreStart}, END: ${hasMoreEnd}.\n` +
+        "Either both are present, and the non-featured clients are generated between them,\n" +
+        "or neither is, and every client is generated in the INSTALL_SNIPPETS region.",
+    );
+  }
+  const folded = hasMoreStart;
 
   let out = replaceRegion(
     currentReadme,

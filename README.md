@@ -29,7 +29,7 @@ Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=np
 
 ### 2. Connect to your AI tool
 
-The canonical setup. Both write the key **once, at user scope, covering every project**. Avoid per-project config files for this: they get committed with your repo, and keys must stay out of it:
+The two canonical setups, Claude Code and Cursor. Each writes the key **once, at user scope, covering every project**. Avoid a per-project config file for this: it lives inside the repository and can be committed with it, and a key belongs outside:
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
