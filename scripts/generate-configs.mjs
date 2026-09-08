@@ -268,17 +268,22 @@ function snippetMcpServersJson(label, configPath) {
 }
 
 function snippetVscode() {
-  // VS Code uses `servers` (not `mcpServers`) and requires `type: "stdio"`
+  // VS Code uses `servers` (not `mcpServers`) and requires `type: "stdio"`.
+  // `.vscode/mcp.json` is meant to be committed and shared with the team —
+  // which means the key in it is too, the same repo-config risk the Cursor
+  // snippet above warns against. Point at VS Code's user-profile config
+  // (via the Command Palette, since it has no fixed cross-platform path
+  // the way ~/.cursor/mcp.json does) as the way to keep the key out of git.
   const json = JSON.stringify(genVscodeFormat(), null, 2);
   return (
-    "**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`):\n\n" +
+    "**VS Code** — add to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`). That file is meant to be committed and shared with your team, so the key in it is too — if you'd rather keep it out of the repo, run **MCP: Open User Configuration** from the Command Palette and add the same JSON to your user profile's `mcp.json` instead:\n\n" +
     "```json\n" +
     json +
     "\n```\n"
   );
 }
 
-function snippetCursor() {
+function snippetCursor({ utm = false } = {}) {
   // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
   // manual JSON fallback. The button and the JSON encode the same config.
   // The button carries the source.json placeholder key, so the paragraph
@@ -286,13 +291,23 @@ function snippetCursor() {
   // The placeholder text is interpolated from ENV_VALUES, not hardcoded:
   // if source.json's MNEMOVERSE_API_KEY value ever changes, this sentence
   // must not silently drift out of sync with it.
+  //
+  // `utm`: this function backs both the README block (npm's install page,
+  // where the CHANGELOG's "two console links carry UTM tags" policy applies
+  // because npm strips referrers) and docs/snippets/cursor.md, a partial
+  // mirrored as-is into mnemoverse-docs — a surface that already links
+  // console.mnemoverse.com cleanly elsewhere. Keep the tag npm-only: pass
+  // `utm: true` only from the README assembly below.
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = ENV_VALUES.MNEMOVERSE_API_KEY;
+  const consoleUrl = utm
+    ? "https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
+    : "https://console.mnemoverse.com";
   return (
     "**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n" +
     genCursorInstallButton() +
     "\n\n" +
-    `The install button carries the placeholder key \`${placeholderKey}\`, not yours, so the shortest path is to skip the button: paste the JSON below into \`~/.cursor/mcp.json\` with your own key already in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the \`mcp.json\` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.\n\n` +
+    `The install button carries the placeholder key \`${placeholderKey}\`, not yours, so the shortest path is to skip the button: add the JSON below to \`~/.cursor/mcp.json\`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](${consoleUrl}). If you did click the button, edit the same key in the \`mcp.json\` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.\n\n` +
     "```json\n" +
     json +
     "\n```\n"
@@ -348,7 +363,7 @@ const WHY_LATEST_NOTE =
 function readmeInstallBlock() {
   return [
     snippetClaudeCodeCli(),
-    snippetCursor(),
+    snippetCursor({ utm: true }),
     snippetVscode(),
     snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
     "**More MCP clients** — same server, different config file:\n",
