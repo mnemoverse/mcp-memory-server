@@ -194,10 +194,18 @@ function genClaudeCodeCli() {
   return `claude mcp add ${source.name} -s user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
+/**
+ * Claude Code CLI command — single-line PowerShell variant.
+ *
+ * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args... (one line, no `\` continuations)
+ *
+ * Same command as genClaudeCodeCli(), reflowed onto one line: PowerShell
+ * (the default shell on Windows) does not read the bash-style `\` line
+ * continuations, so a Windows user pasting the multiline block gets a
+ * parse error instead of the intended command. `-s user` remains
+ * LOAD-BEARING here for the same reason as in genClaudeCodeCli() above.
+ */
 function genClaudeCodeCliOneLine() {
-  // Same command, single line: PowerShell (the default shell on Windows)
-  // does not read the backslash line continuations of the bash form, so a
-  // Windows user pasting the multiline block gets a parse error.
   const envFlags = Object.entries(ENV_VALUES)
     .map(([k, v]) => `-e ${k}=${v}`)
     .join(" ");
@@ -273,11 +281,15 @@ function snippetVscode() {
 function snippetCursor() {
   // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
   // manual JSON fallback. The button and the JSON encode the same config.
+  // The button pre-fills the source.json placeholder key, so the sentence
+  // below it must keep saying so — don't drop it if this function changes.
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   return (
-    "**Cursor** — click to install, or add to `.cursor/mcp.json`:\n\n" +
+    "**Cursor** — click to install, or add to the global `~/.cursor/mcp.json` (recommended — one config for every project); a project-level `.cursor/mcp.json` also works, but it ships with the repository, so keep API keys out of it:\n\n" +
     genCursorInstallButton() +
-    "\n\n```json\n" +
+    "\n\n" +
+    "The button pre-fills the placeholder mk_live_YOUR_KEY; after installing, open Cursor Settings, MCP, mnemoverse, and replace it with your key from console.mnemoverse.com — otherwise every tool call is refused.\n\n" +
+    "```json\n" +
     json +
     "\n```\n"
   );
