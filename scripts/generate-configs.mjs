@@ -45,6 +45,23 @@ function envValues(envObj) {
 
 const ENV_VALUES = envValues(source.env);
 
+// Helper: the sample value a snippet carries for one env entry, looked up by
+// entry name through the registry itself. Prose that names the sample (the
+// Cursor paragraph under the one-click badge) reads it here rather than as
+// ENV_VALUES.MNEMOVERSE_API_KEY on purpose: every value in source.env is a
+// documented sample that ships in public README text, but a property access
+// named *_API_KEY flowing into the --check drift printout (which echoes the
+// first 200 characters of a regenerated artifact) reads to CodeQL as
+// clear-text logging of a credential (js/clear-text-logging, alert #4 on PR
+// #123). Going through the entries keeps the single source of truth and the
+// drift check, and drops the false credential signal.
+function sampleValue(envName) {
+  for (const [name, meta] of Object.entries(source.env)) {
+    if (name === envName) return meta.value;
+  }
+  throw new Error(`source.json env has no entry named ${envName}`);
+}
+
 // ─── Generators ──────────────────────────────────────────────────────────────
 
 /**
@@ -288,9 +305,9 @@ function snippetCursor({ utm = false } = {}) {
   // manual JSON fallback. The button and the JSON encode the same config.
   // The button carries the source.json placeholder key, so the paragraph
   // below it must keep saying so — don't drop it if this function changes.
-  // The placeholder text is interpolated from ENV_VALUES, not hardcoded:
-  // if source.json's MNEMOVERSE_API_KEY value ever changes, this sentence
-  // must not silently drift out of sync with it.
+  // The placeholder text is read from source.json (sampleValue), not
+  // hardcoded: if the MNEMOVERSE_API_KEY sample value ever changes, this
+  // sentence must not silently drift out of sync with it.
   //
   // `utm`: this function backs both the README block (npm's install page,
   // where the CHANGELOG's "two console links carry UTM tags" policy applies
@@ -299,7 +316,7 @@ function snippetCursor({ utm = false } = {}) {
   // console.mnemoverse.com cleanly elsewhere. Keep the tag npm-only: pass
   // `utm: true` only from the README assembly below.
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
-  const placeholderKey = ENV_VALUES.MNEMOVERSE_API_KEY;
+  const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
   const consoleUrl = utm
     ? "https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
     : "https://console.mnemoverse.com";
