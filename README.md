@@ -297,6 +297,10 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 The same hosted server, packaged for hosts that prefer a plugin or an extension over an MCP config block. Each one points at `https://mcp.mnemoverse.com/mcp` and signs in with OAuth, so there is no key to paste.
 
 - [Claude Code plugin](https://github.com/mnemoverse/claude-plugin) — bundles the memory server with the `agent-memory-discipline` skill
+  ```
+  claude plugin marketplace add mnemoverse/claude-plugin
+  claude plugin install mnemoverse@mnemoverse
+  ```
 - [Cursor plugin](https://github.com/mnemoverse/cursor-plugin)
 - [Gemini CLI extension](https://github.com/mnemoverse/gemini-extension) — `gemini extensions install https://github.com/mnemoverse/gemini-extension`
 - [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode)
