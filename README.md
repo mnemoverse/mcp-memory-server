@@ -294,21 +294,21 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 
 **Other ways to install it**
 
-The same hosted server, packaged for hosts that prefer a plugin or an extension over an MCP config block. Each one points at `https://mcp.mnemoverse.com/mcp` and signs in with OAuth, so there is no key to paste.
+The same memory, packaged for hosts that prefer a plugin or an extension over an MCP config block. How each one connects and authenticates differs, so the line below says which is which rather than claiming one flow for all of them.
 
-- [Claude Code plugin](https://github.com/mnemoverse/claude-plugin) — bundles the memory server with the `agent-memory-discipline` skill
+- [Claude Code plugin](https://github.com/mnemoverse/claude-plugin) — remote endpoint over MCP with an OAuth sign-in, no key to paste. Bundles the `agent-memory-discipline` skill
   ```
   claude plugin marketplace add mnemoverse/claude-plugin
   claude plugin install mnemoverse@mnemoverse
   ```
-- [Cursor plugin](https://github.com/mnemoverse/cursor-plugin)
-- [Gemini CLI extension](https://github.com/mnemoverse/gemini-extension) — `gemini extensions install https://github.com/mnemoverse/gemini-extension`
-- [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode)
-- Desktop extension: `manifest.json` in this repository is an MCPB manifest, and the packaged `.mcpb` ships with each release
+- [Cursor plugin](https://github.com/mnemoverse/cursor-plugin) — same remote endpoint, same sign-in
+- [Gemini CLI extension](https://github.com/mnemoverse/gemini-extension) — same remote endpoint. `gemini extensions install https://github.com/mnemoverse/gemini-extension`
+- [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode) — signs in through the browser, with pasting a key kept as a fallback command
+- Desktop extension: `manifest.json` in this repository is an MCPB manifest. This one is different from the four above: it runs the server as a local `node` process and reads `MNEMOVERSE_API_KEY` from the extension settings rather than calling the hosted endpoint. The packaged `.mcpb` ships with each release
 
 **Standing rules, separate from this server**
 
-- [agent-memory-discipline](https://github.com/mnemoverse/agent-memory-discipline) — when an agent should recall before acting and save afterwards. CC0, backend-neutral, works against any memory store rather than this one. Its own marketplace manifest is in the repository root.
+- [agent-memory-discipline](https://github.com/mnemoverse/agent-memory-discipline) — when an agent should recall before acting and save afterward. CC0, backend-neutral, works against any memory store rather than this one. It carries its own [marketplace manifest](https://github.com/mnemoverse/agent-memory-discipline/blob/main/.claude-plugin/marketplace.json) under `.claude-plugin/`.
 - [awesome-agent-memory](https://github.com/mnemoverse/awesome-agent-memory) — a curated index of the category, CC0, including the servers this one competes with
 
 **Project**
