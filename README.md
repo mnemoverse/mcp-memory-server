@@ -292,6 +292,21 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 - [Is this a vector database?](https://mnemoverse.com/docs/library/not-a-vector-database) — what makes a memory layer different
 - [Shared memory for multi-agent systems](https://mnemoverse.com/docs/library/shared-memory-for-multi-agent-systems) — how Rooms work and when to use them
 
+**Other ways to install it**
+
+The same hosted server, packaged for hosts that prefer a plugin or an extension over an MCP config block. Each one points at `https://mcp.mnemoverse.com/mcp` and signs in with OAuth, so there is no key to paste.
+
+- [Claude Code plugin](https://github.com/mnemoverse/claude-plugin) — bundles the memory server with the `agent-memory-discipline` skill
+- [Cursor plugin](https://github.com/mnemoverse/cursor-plugin)
+- [Gemini CLI extension](https://github.com/mnemoverse/gemini-extension) — `gemini extensions install https://github.com/mnemoverse/gemini-extension`
+- [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode)
+- Desktop extension: `manifest.json` in this repository is an MCPB manifest, and the packaged `.mcpb` ships with each release
+
+**Standing rules, separate from this server**
+
+- [agent-memory-discipline](https://github.com/mnemoverse/agent-memory-discipline) — when an agent should recall before acting and save afterwards. CC0, backend-neutral, works against any memory store rather than this one. Its own marketplace manifest is in the repository root.
+- [awesome-agent-memory](https://github.com/mnemoverse/awesome-agent-memory) — a curated index of the category, CC0, including the servers this one competes with
+
 **Project**
 
 - [GitHub](https://github.com/mnemoverse/mcp-memory-server)
