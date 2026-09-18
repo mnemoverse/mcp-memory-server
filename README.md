@@ -27,6 +27,16 @@ The consolidation stage of the engine — HDBSCAN clustering with Von Restorff p
 
 Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
+**Check the key in one command** before you put it in a config. Put it in place of `mk_live_YOUR_KEY` (in PowerShell, type `curl.exe`):
+```bash
+curl -s -H "X-Api-Key: mk_live_YOUR_KEY" https://core.mnemoverse.com/api/v1/memory/stats
+```
+| The API answers | What it means |
+|---|---|
+| JSON that includes `"total_atoms"` | The key works. |
+| `"message":"Invalid or revoked API key."` | The key is wrong, revoked, or still the placeholder. |
+| `"message":"Missing API key. Send X-Api-Key header."` | No key reached the API: the key in the command is empty. |
+
 ### 2. Connect to your AI tool
 
 The two canonical setups, Claude Code and Cursor. Each writes the key **once, at user scope, covering every project**. Avoid a per-project config file for this: it lives inside the repository and can be committed with it, and a key belongs outside:
