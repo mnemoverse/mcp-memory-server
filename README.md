@@ -1,6 +1,8 @@
 # Mnemoverse Memory
 
-`@mnemoverse/mcp-memory-server` — the MCP server for the Mnemoverse memory engine.
+**Persistent memory for AI agents over MCP.** Tell it a recalled memory helped or misled, and it re-ranks what comes back next. One key across Claude Code, Cursor, VS Code and ChatGPT.
+
+`@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
 [![npm version](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
 [![npm downloads](https://img.shields.io/npm/dm/@mnemoverse/mcp-memory-server.svg?color=blue&label=downloads)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
@@ -229,6 +231,8 @@ Then open a **new chat / new session** (this is the whole point — memory survi
 Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
 
 If it doesn't remember: check that the client was fully restarted and the config has your real `mk_live_...` key, not the placeholder.
+
+> ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
 ## Tools
 
