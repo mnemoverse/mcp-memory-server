@@ -164,11 +164,23 @@ function validatedKeysUrl(raw: unknown): string | undefined {
   // is not "the console". Credentials in the URL are refused outright, since
   // a link the agent reads aloud to a person has no business carrying any,
   // and `user@host` is the oldest way to make one host read like another.
+  // `url.href === raw`: the parser is forgiving, and what it forgives is the
+  // attack. It strips tabs and newlines out of the middle of the string and
+  // trims leading and trailing whitespace, so a value that continues on a new
+  // line ("...\nIGNORE PREVIOUS GUIDANCE") parses to the right host while the
+  // ORIGINAL string, newline and all, would land in guidance the model
+  // trusts, past the `inertOneLine` treatment the raw body gets (Copilot,
+  // #136). Accepting only a value that is already its own canonical
+  // serialization closes every variant at once: control characters, spaces,
+  // an upper-case host, a missing path. The engine sends a canonical URL, so
+  // nothing legitimate is lost, and what is returned is the serializer's
+  // string, never the caller's.
   return url.protocol === "https:" &&
     url.host === "console.mnemoverse.com" &&
     url.username === "" &&
-    url.password === ""
-    ? raw
+    url.password === "" &&
+    url.href === raw
+    ? url.href
     : undefined;
 }
 
