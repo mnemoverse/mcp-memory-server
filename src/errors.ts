@@ -73,8 +73,8 @@ const MAX_BODY_CHARS = 800;
 
 /** The console page that issues keys — the one place a user fixes a 401.
  *  Exported so src/requests.ts can point at the same URL from
- *  `refusePlaceholderKey` instead of repeating the literal (mnemoverse-core
- *  #616 adds a second producer of this same URL, `details.keys_url` on a 401
+ *  `refusePlaceholderKey` instead of repeating the literal (the engine is
+ *  becoming a second producer of this same URL, `details.keys_url` on a 401
  *  body, which is validated against an allow-list rather than trusted
  *  outright, see `validatedKeysUrl` below, but this constant stays the
  *  fallback for both). */
@@ -120,8 +120,8 @@ export interface ErrorEnvelope {
   message?: string;
   retryable?: boolean;
   /**
-   * `details.reason` on a 401 (mnemoverse-core#616, not yet released as of
-   * this change): missing_key | placeholder_key | revoked_key | invalid_key |
+   * `details.reason` on a 401 (an engine change not yet released as of
+   * this one): missing_key | placeholder_key | revoked_key | invalid_key |
    * malformed_key. Absent on every 401 a currently-released engine sends, and
    * absent whenever `details` was not an object carrying a string `reason`.
    * Never defaulted, for the same reason nothing else in this interface is:
@@ -160,7 +160,14 @@ function validatedKeysUrl(raw: unknown): string | undefined {
   } catch {
     return undefined;
   }
-  return url.protocol === "https:" && url.hostname === "console.mnemoverse.com"
+  // `host`, not `hostname`: it includes the port, so :8443 on the right name
+  // is not "the console". Credentials in the URL are refused outright, since
+  // a link the agent reads aloud to a person has no business carrying any,
+  // and `user@host` is the oldest way to make one host read like another.
+  return url.protocol === "https:" &&
+    url.host === "console.mnemoverse.com" &&
+    url.username === "" &&
+    url.password === ""
     ? raw
     : undefined;
 }
@@ -175,7 +182,7 @@ function validatedKeysUrl(raw: unknown): string | undefined {
  * 404-vs-404 test in this repo pins the nested form, so both are real.
  *
  * `details` (plural, a sibling of `code`/`message`/`retryable`) is read here
- * too, for `reason` and `keys_url` (mnemoverse-core#616). Anything else inside
+ * too, for `reason` and `keys_url`. Anything else inside
  * it is ignored silently: this parser reads a fixed, named set of fields and
  * has no way to tell a future field the engine adds from noise, so silence is
  * the only honest answer for either one.
@@ -256,7 +263,7 @@ function has(message: string | undefined, needle: string): boolean {
  * form; silence is the same unknown-refuser case the 403 branch handles.
  *
  * A fourth source arrived after the above was written: `details.reason`
- * (mnemoverse-core#616), which names the key problem outright instead of
+ * on the engine's 401, which names the key problem outright instead of
  * leaving this file to guess from prose. It is checked second, still after
  * "caller org not identified" for the same reason that clause runs first at
  * all (a valid key must never be told to replace itself), and still before
@@ -274,8 +281,8 @@ function explain401(env: ErrorEnvelope): string {
       "the same call against this deployment."
     );
   }
-  // `details.reason` (mnemoverse-core#616, not yet released as of this
-  // change): the engine's own diagnosis of WHICH key problem this is, five
+  // `details.reason` (an engine change not yet released as of this
+  // one): the engine's own diagnosis of WHICH key problem this is, five
   // named values. Checked here, after "caller org not identified" and before
   // the substring guess right below, because a named reason is a strictly
   // better source than sniffing the message text for "api key": this branch

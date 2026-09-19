@@ -115,11 +115,9 @@ export function writeRequestBody(a: WriteArgs): Record<string, unknown> {
  * Refuse a docs placeholder key from CONFIGURATION ALONE, before any tool
  * call sends it anywhere.
  *
- * WHY THIS EXISTS. Production, 30 days: rejections carrying the docs
- * placeholder key (prefix mk_live_YOUR) arrived from user agent "node", this
- * server itself, repeating for up to 12 days on the same account. The agent
- * got a 401, got this server's generic replace-the-key sentence, and called
- * again. A value this client can recognise as a placeholder WITHOUT any
+ * WHY THIS EXISTS. The engine sees this server calling it again and again
+ * with the example key from the install snippets. The agent got a 401, got
+ * this server's generic replace-the-key sentence, and called again. A value this client can recognise as a placeholder WITHOUT any
  * request is still worth refusing before the network, exactly as
  * `refuseInsecureBaseUrl` (src/index.ts) refuses an insecure
  * MNEMOVERSE_API_URL before the network, for the same reason: a config-only

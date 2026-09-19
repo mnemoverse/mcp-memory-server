@@ -51,13 +51,12 @@ git history and the GitHub releases are the record.
 
 ### Security
 
-- **A docs placeholder key never leaves the machine.** Production, 30 days:
-  rejections carrying the docs placeholder key (`mk_live_YOUR_KEY`, prefix
-  `mk_live_YOUR`) arrived from user agent `"node"`, this server itself,
-  repeating for up to 12 days on the same account. A value this client can
-  recognise as a placeholder WITHOUT any request was still going out over the
-  wire, day after day, and the generic 401 sentence gave the calling agent
-  nothing that said "stop retrying". `refusePlaceholderKey` (src/requests.ts)
+- **A docs placeholder key never leaves the machine.** The engine sees this
+  server calling it again and again with the example key from the install
+  snippets (`mk_live_YOUR_KEY`). A value this client can recognise as a
+  placeholder WITHOUT any request was still going out over the wire, and the
+  generic 401 sentence gave the calling agent nothing that said "stop
+  retrying". `refusePlaceholderKey` (src/requests.ts)
   recognises the two shapes that are certainly placeholders: an `mk_live_`
   label in upper case (`mk_live_YOUR_KEY`, `mk_live_USER_KEY`,
   `mk_live_CODING_AGENT_KEY`) and the `mk_live_xxxx…` template value shipped in
@@ -79,7 +78,7 @@ git history and the GitHub releases are the record.
 ### Fixed
 
 - **A 401 now uses the engine's own `details.reason` when it sends one**
-  (mnemoverse-core#616, not yet released). `parseErrorEnvelope` reads
+  (an engine change rolling out separately). `parseErrorEnvelope` reads
   `details.reason` (`missing_key` / `placeholder_key` / `revoked_key` /
   `invalid_key` / `malformed_key`) and `details.keys_url`, the latter validated
   against an allow-list (https only, host exactly `console.mnemoverse.com`)

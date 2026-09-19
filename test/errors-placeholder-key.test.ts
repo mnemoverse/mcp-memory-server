@@ -9,11 +9,10 @@
  * afterwards that the already-evaluated module would notice, and vitest gives
  * each test file its own module registry, so a second file is the seam.
  *
- * WHY IT IS WORTH A FILE. Production, 30 days: rejections carrying this exact
- * placeholder (prefix mk_live_YOUR) arrived from user agent "node", this
- * server itself, repeating for up to 12 days on the same account. A value
- * this client can recognise as a placeholder WITHOUT any request was still
- * being sent over the network, day after day, and the agent kept retrying
+ * WHY IT IS WORTH A FILE. The engine sees this server calling it again and
+ * again with this exact placeholder. A value this client can recognise as a
+ * placeholder WITHOUT any request was still being sent over the network, and
+ * the agent kept retrying
  * because the generic 401 sentence gave it nothing that said "stop". This
  * file pins that the refusal happens BEFORE fetch, not merely that the final
  * sentence reads correctly: the same trap test/base-url-guard.test.ts is

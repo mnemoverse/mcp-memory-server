@@ -174,14 +174,14 @@ describe("a rejected API key tells the agent what to do about it", () => {
 // ---------------------------------------------------------------------------
 
 /**
- * `details.reason` on a 401 (mnemoverse-core#616, not yet released as of this
- * change): the engine names WHICH key problem this is instead of leaving this
+ * `details.reason` on a 401 (an engine change not yet released as of this
+ * one): the engine names WHICH key problem this is instead of leaving this
  * client to guess from message text. Every reason still gets the shared
  * `Mnemoverse: your API key was rejected (401).` opener the founder-endorsed
  * generic sentence uses, so an agent that only reads the first line still
  * gets the right headline either way.
  */
-describe("details.reason on a 401 uses the engine's own diagnosis (mnemoverse-core#616)", () => {
+describe("details.reason on a 401 uses the engine's own diagnosis", () => {
   /** The shape auth.py is expected to add: `details` carries `reason` and,
    *  optionally, `keys_url` next to it. */
   const envelopeWithReason = (reason: string, keysUrl?: string): string =>
@@ -314,6 +314,23 @@ describe("details.reason on a 401 uses the engine's own diagnosis (mnemoverse-co
 
     const guidance = res.text.slice(0, res.text.indexOf("Raw detail"));
     expect(guidance).not.toContain("http://console.mnemoverse.com/x");
+    expect(guidance).toContain("https://console.mnemoverse.com/dashboard/keys");
+  });
+
+  it.each([
+    ["a look-alike parent domain", "https://console.mnemoverse.com.evil.example/dashboard/keys"],
+    ["the right name used as userinfo", "https://console.mnemoverse.com@evil.example/dashboard/keys"],
+    ["credentials on the right host", "https://someone:secret@console.mnemoverse.com/dashboard/keys"],
+    ["a non-default port on the right host", "https://console.mnemoverse.com:8443/dashboard/keys"],
+    ["a scheme that is not https", "javascript:alert(1)//console.mnemoverse.com"],
+    ["not a URL at all", "ask support for the keys page"],
+  ])("the keys_url allow-list: %s is ignored", async (_name, sent) => {
+    mcp.on(READ, httpError(401, envelopeWithReason("revoked_key", sent)));
+
+    const res = await mcp.call("memory_read", { query: "x" });
+
+    const guidance = res.text.slice(0, res.text.indexOf("Raw detail"));
+    expect(guidance).not.toContain(sent);
     expect(guidance).toContain("https://console.mnemoverse.com/dashboard/keys");
   });
 
