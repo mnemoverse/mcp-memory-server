@@ -49,6 +49,49 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Security
+
+- **A docs placeholder key never leaves the machine.** Production, 30 days:
+  rejections carrying the docs placeholder key (`mk_live_YOUR_KEY`, prefix
+  `mk_live_YOUR`) arrived from user agent `"node"`, this server itself,
+  repeating for up to 12 days on the same account. A value this client can
+  recognise as a placeholder WITHOUT any request was still going out over the
+  wire, day after day, and the generic 401 sentence gave the calling agent
+  nothing that said "stop retrying". `refusePlaceholderKey` (src/requests.ts)
+  recognises the two shapes that are certainly placeholders: an `mk_live_`
+  label in upper case (`mk_live_YOUR_KEY`, `mk_live_USER_KEY`,
+  `mk_live_CODING_AGENT_KEY`) and the `mk_live_xxxx…` template value shipped in
+  `src/configs/source.json`. It refuses the call BEFORE `fetch`, at both
+  credential-bearing call sites (`apiFetch` and the startup probe), the same
+  shape as the existing `BASE_URL_REFUSAL` guard:
+
+  > Mnemoverse: this tool did not run, because MNEMOVERSE_API_KEY is still the
+  > example value from the documentation, not a real key. Nothing was sent […]
+  > Tell them to create a key at https://console.mnemoverse.com/dashboard/keys
+  > […]
+
+  Anything else is left alone and still reaches the engine: a self-hosted
+  static-auth secret with no `mk_live_` shape, a truncated real key, and a
+  mixed-case label (`mk_live_Your_Key`) all get the engine's own, more precise
+  401 rather than a local guess. The configured value is never echoed, not even
+  the placeholder itself.
+
+### Fixed
+
+- **A 401 now uses the engine's own `details.reason` when it sends one**
+  (mnemoverse-core#616, not yet released). `parseErrorEnvelope` reads
+  `details.reason` (`missing_key` / `placeholder_key` / `revoked_key` /
+  `invalid_key` / `malformed_key`) and `details.keys_url`, the latter validated
+  against an allow-list (https only, host exactly `console.mnemoverse.com`)
+  before it is ever shown, since a response body must not be able to point a
+  reader at an arbitrary site; an off-host or plain-http value falls back to
+  the same `KEYS_URL` every other 401 sentence already uses. `explain401`
+  branches on the named reason after the existing "caller org not identified"
+  clause and before the generic "api key" substring guess, so a valid key can
+  still never be told to replace itself. An unknown reason, or no reason at
+  all, every engine released today, falls through to today's
+  founder-endorsed generic sentence unchanged, byte for byte.
+
 ## [0.10.1] — 2026-09-16
 
 A PATCH under this file's own rule. Every change in this release lands in

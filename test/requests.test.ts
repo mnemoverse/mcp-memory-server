@@ -28,6 +28,7 @@ import {
   recentRequestBody,
   writeRequestBody,
   searchedScope,
+  refusePlaceholderKey,
 } from "../src/requests.js";
 
 /** The bytes fetch would send: serialization drops `undefined`-valued keys and
@@ -168,5 +169,54 @@ describe("writeRequestBody matches 0.8.0 for every domain shape", () => {
   it("defaults concepts to an empty array", () => {
     expect(writeRequestBody({ content: "c" }).concepts).toEqual([]);
     expect(writeRequestBody({ content: "c", concepts: ["a"] }).concepts).toEqual(["a"]);
+  });
+});
+
+/**
+ * refusePlaceholderKey: the config-only guard that keeps a docs placeholder
+ * off the wire (see the function's own doc comment for the incident this is
+ * against). Every case here is either a CERTAIN placeholder or a value that
+ * must reach the engine unchanged; there is deliberately no middle case,
+ * because the function itself recognises none.
+ */
+describe("refusePlaceholderKey fires only for values that are certainly placeholders", () => {
+  const placeholders: ReadonlyArray<readonly [label: string, key: string]> = [
+    ["the README/docs placeholder", "mk_live_YOUR_KEY"],
+    ["the agent-setup.md placeholder", "mk_live_USER_KEY"],
+    ["a third labelled placeholder, same shape", "mk_live_CODING_AGENT_KEY"],
+    [
+      "the source.json template value",
+      "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    ],
+    ["the template value, upper-case x", "mk_live_XXXX"],
+    ["the template value, mixed-case x", "mk_live_xXxX"],
+  ];
+
+  it.each(placeholders)("fires for %s (%s)", (_label, key) => {
+    const refusal = refusePlaceholderKey(key);
+    expect(refusal).not.toBeUndefined();
+    expect(refusal?.toolCall).toContain("MNEMOVERSE_API_KEY");
+    expect(refusal?.startupLog).toContain("MNEMOVERSE_API_KEY is still the example value");
+    // Never echoes the value it just refused.
+    expect(refusal?.toolCall).not.toContain(key);
+    expect(refusal?.startupLog).not.toContain(key);
+  });
+
+  const realValues: ReadonlyArray<readonly [label: string, key: string]> = [
+    ["a real-shaped key (32 lower-case hex)", "mk_live_" + "a1b2c3d4".repeat(4)],
+    ["a truncated real key", "mk_live_deadbeef"],
+    ["mixed case in the label, goes to the engine, not refused locally", "mk_live_Your_Key"],
+    ["an empty string", ""],
+    ["a self-hosted static-auth secret with no mk_live_ shape at all", "static-selfhost-secret"],
+    [
+      "a JWT-looking string",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+    ],
+    ["only three x's, below the template's four-x floor", "mk_live_xxx"],
+    ["mk_live_ with nothing after it", "mk_live_"],
+  ];
+
+  it.each(realValues)("does NOT fire for %s", (_label, key) => {
+    expect(refusePlaceholderKey(key)).toBeUndefined();
   });
 });

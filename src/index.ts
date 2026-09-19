@@ -30,6 +30,7 @@ import {
   recentRequestBody,
   writeRequestBody,
   searchedScope,
+  refusePlaceholderKey,
 } from "./requests.js";
 import {
   domainPhrase,
@@ -247,6 +248,17 @@ function refuseInsecureBaseUrl(raw: string): BaseUrlRefusal | undefined {
 const BASE_URL_REFUSAL = refuseInsecureBaseUrl(API_URL);
 
 /**
+ * The verdict on this process's API key, computed once next to
+ * BASE_URL_REFUSAL because both are config-only guards checked at the same
+ * two call sites below (apiFetch, the startup probe) before anything is
+ * sent. `undefined` means the key is not certainly a docs placeholder; it
+ * may still be wrong, but that is the engine's 401 to diagnose, not a guess
+ * this client can make from shape alone. See `refusePlaceholderKey` in
+ * src/requests.ts for exactly what counts as "certainly".
+ */
+const PLACEHOLDER_KEY_REFUSAL = refusePlaceholderKey(API_KEY);
+
+/**
  * Fetch from the Mnemoverse core API with authentication.
  *
  * Generic so call sites can declare the expected response shape:
@@ -279,6 +291,15 @@ async function apiFetch<T = unknown>(
         "and starts with mk_live_. Do not retry until it is set; every memory " +
         "tool will fail the same way until then.",
     );
+  }
+  if (PLACEHOLDER_KEY_REFUSAL !== undefined) {
+    // After the empty-key check, for the same reason that one runs first:
+    // "set the variable" and "replace the placeholder" are different fixes,
+    // and a key that is present but certainly a docs example gets its own
+    // sentence rather than the emptiness one. Decided from CONFIGURATION
+    // alone, exactly like BASE_URL_REFUSAL right below, so it belongs here
+    // and not in a diagnosis of a response this call never sends.
+    throw new Error(PLACEHOLDER_KEY_REFUSAL.toolCall);
   }
   if (BASE_URL_REFUSAL !== undefined) {
     // Alongside the key check, and after it: with no key configured there is
@@ -2138,6 +2159,16 @@ server.registerTool(
  */
 function probeApiKeyInBackground(): void {
   if (!API_KEY) return;
+  if (PLACEHOLDER_KEY_REFUSAL !== undefined) {
+    // Same reasoning as the BASE_URL_REFUSAL skip right below, for the same
+    // reason it is checked first inside apiFetch: this probe is a second
+    // credential-bearing call site outside apiFetch, so a config-only
+    // refusal decided at import time has to be checked here too, or a docs
+    // placeholder key would go out over the wire once per server start even
+    // though every tool call already refuses to send it.
+    console.error(PLACEHOLDER_KEY_REFUSAL.startupLog);
+    return;
+  }
   if (BASE_URL_REFUSAL !== undefined) {
     // THE SECOND CREDENTIAL-BEARING CALL SITE (#99). This probe predates
     // apiFetch's base-URL guard and calls `fetch` directly, so the guard does

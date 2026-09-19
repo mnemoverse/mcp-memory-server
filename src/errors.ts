@@ -71,8 +71,14 @@
  *  body lives. Truncation is announced, never silent. */
 const MAX_BODY_CHARS = 800;
 
-/** The console page that issues keys — the one place a user fixes a 401. */
-const KEYS_URL = "https://console.mnemoverse.com/dashboard/keys";
+/** The console page that issues keys — the one place a user fixes a 401.
+ *  Exported so src/requests.ts can point at the same URL from
+ *  `refusePlaceholderKey` instead of repeating the literal (mnemoverse-core
+ *  #616 adds a second producer of this same URL, `details.keys_url` on a 401
+ *  body, which is validated against an allow-list rather than trusted
+ *  outright, see `validatedKeysUrl` below, but this constant stays the
+ *  fallback for both). */
+export const KEYS_URL = "https://console.mnemoverse.com/dashboard/keys";
 
 /** The console page that shows quota and upgrades — where a 429 that waiting
  *  cannot fix is resolved. Same URL the engine puts in its own 429 bodies. */
@@ -113,6 +119,50 @@ export interface ErrorEnvelope {
   code?: string;
   message?: string;
   retryable?: boolean;
+  /**
+   * `details.reason` on a 401 (mnemoverse-core#616, not yet released as of
+   * this change): missing_key | placeholder_key | revoked_key | invalid_key |
+   * malformed_key. Absent on every 401 a currently-released engine sends, and
+   * absent whenever `details` was not an object carrying a string `reason`.
+   * Never defaulted, for the same reason nothing else in this interface is:
+   * a made-up reason is a wrong instruction with a confident source.
+   */
+  reason?: string;
+  /**
+   * `details.keys_url` on the same 401, already validated by
+   * {@link validatedKeysUrl}: present only when it was an https URL whose
+   * host is exactly console.mnemoverse.com. A response body must not be able
+   * to point a reader at an arbitrary site, so an untrusted value never
+   * reaches this field at all; a caller that wants the URL for a reason
+   * branch falls back to {@link KEYS_URL} when this is undefined.
+   */
+  keysUrl?: string;
+}
+
+/**
+ * Is `details.keys_url` safe to put in front of a user?
+ *
+ * The body is server-controlled, or, on every path this module exists
+ * against, controlled by whoever answered instead: a proxy, a gateway, or
+ * the endpoint a wrong MNEMOVERSE_API_URL points at. Trusting a URL out of
+ * that body outright would let any of them steer a rejected user to a
+ * phishing page under the same "create a key here" instruction this file
+ * already gives. The allow-list is narrow on purpose: https only, and the
+ * host compared exactly against `console.mnemoverse.com` rather than by
+ * prefix or suffix, for the same reason src/index.ts compares a loopback
+ * hostname exactly rather than with `startsWith`/`endsWith`.
+ */
+function validatedKeysUrl(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  return url.protocol === "https:" && url.hostname === "console.mnemoverse.com"
+    ? raw
+    : undefined;
 }
 
 /**
@@ -123,6 +173,12 @@ export interface ErrorEnvelope {
  * as a FastAPI `HTTPException` arrives wrapped as `{"detail": …}` — where the
  * detail is sometimes a string and sometimes the envelope again. The feed's
  * 404-vs-404 test in this repo pins the nested form, so both are real.
+ *
+ * `details` (plural, a sibling of `code`/`message`/`retryable`) is read here
+ * too, for `reason` and `keys_url` (mnemoverse-core#616). Anything else inside
+ * it is ignored silently: this parser reads a fixed, named set of fields and
+ * has no way to tell a future field the engine adds from noise, so silence is
+ * the only honest answer for either one.
  */
 export function parseErrorEnvelope(body: string): ErrorEnvelope {
   let parsed: unknown;
@@ -135,10 +191,19 @@ export function parseErrorEnvelope(body: string): ErrorEnvelope {
     if (typeof v === "string") return { message: v };
     if (typeof v !== "object" || v === null) return {};
     const o = v as Record<string, unknown>;
+    const details =
+      typeof o.details === "object" && o.details !== null
+        ? (o.details as Record<string, unknown>)
+        : undefined;
     return {
       ...(typeof o.code === "string" ? { code: o.code } : {}),
       ...(typeof o.message === "string" ? { message: o.message } : {}),
       ...(typeof o.retryable === "boolean" ? { retryable: o.retryable } : {}),
+      ...(typeof details?.reason === "string" ? { reason: details.reason } : {}),
+      ...(() => {
+        const keysUrl = validatedKeysUrl(details?.keys_url);
+        return keysUrl !== undefined ? { keysUrl } : {};
+      })(),
     };
   };
   const top = pick(parsed);
@@ -189,6 +254,13 @@ function has(message: string | undefined, needle: string): boolean {
  * FIRST because its sentence itself contains "API key": a naive key-mention
  * test would misroute it. A message naming neither gets the honest generic
  * form; silence is the same unknown-refuser case the 403 branch handles.
+ *
+ * A fourth source arrived after the above was written: `details.reason`
+ * (mnemoverse-core#616), which names the key problem outright instead of
+ * leaving this file to guess from prose. It is checked second, still after
+ * "caller org not identified" for the same reason that clause runs first at
+ * all (a valid key must never be told to replace itself), and still before
+ * the substring guess, since a named reason needs no guessing.
  */
 function explain401(env: ErrorEnvelope): string {
   const m = env.message;
@@ -201,6 +273,69 @@ function explain401(env: ErrorEnvelope): string {
       "deployment does not have. Quote the detail below, and do not retry " +
       "the same call against this deployment."
     );
+  }
+  // `details.reason` (mnemoverse-core#616, not yet released as of this
+  // change): the engine's own diagnosis of WHICH key problem this is, five
+  // named values. Checked here, after "caller org not identified" and before
+  // the substring guess right below, because a named reason is a strictly
+  // better source than sniffing the message text for "api key": this branch
+  // makes that guess unnecessary for every engine new enough to send one.
+  // AN UNKNOWN REASON, OR NO REASON AT ALL, every engine released today,
+  // falls straight through the switch below to the existing clauses, byte
+  // for byte: `reason` is additive, never a replacement for a message this
+  // parser cannot yet interpret.
+  if (env.reason !== undefined) {
+    const keysUrl = env.keysUrl ?? KEYS_URL;
+    switch (env.reason) {
+      case "placeholder_key":
+        return (
+          "Mnemoverse: your API key was rejected (401). The engine itself " +
+          "recognises the configured value as the example key from the " +
+          "documentation, not one anyone created. Tell the user to replace " +
+          `MNEMOVERSE_API_KEY with a real key from ${keysUrl}. Do not retry ` +
+          "until they replace it."
+        );
+      case "revoked_key":
+        return (
+          "Mnemoverse: your API key was rejected (401). This key was " +
+          "revoked and will never work again, no matter how many times the " +
+          `call is retried. Tell the user to create a new one at ${keysUrl} ` +
+          "and put it in their MCP client config in place of this one. Do " +
+          "not retry with the same key."
+        );
+      case "invalid_key":
+        return (
+          "Mnemoverse: your API key was rejected (401). The engine does " +
+          "not recognise this key at all, most often because it was pasted " +
+          "incompletely. Tell the user to check that the whole key was " +
+          `copied from ${keysUrl}, with nothing missing from either end, or ` +
+          "to create a new one there. Do not retry until it is fixed."
+        );
+      case "malformed_key":
+        return (
+          "Mnemoverse: your API key was rejected (401). The configured " +
+          "value does not have the shape of a Mnemoverse key at all " +
+          "(mk_live_ followed by 32 lower-case hex characters). Common " +
+          "causes are pasting something else entirely, such as an OAuth " +
+          "token, or the key arriving wrapped in quotes or surrounding " +
+          `spaces. Tell the user to check MNEMOVERSE_API_KEY against a real ` +
+          `key from ${keysUrl}. Do not retry until it is fixed.`
+        );
+      case "missing_key":
+        return (
+          "Mnemoverse: your API key was rejected (401). The X-Api-Key " +
+          "header did not arrive at all, so the engine never saw a key to " +
+          "check. Tell the user to set MNEMOVERSE_API_KEY in their MCP " +
+          `client config to a real key from ${keysUrl}, then restart the ` +
+          "MCP server. Do not retry until it is set."
+        );
+      default:
+        // Not one of the five named values. Fall through: an engine that
+        // adds a sixth reason before this client learns it must not get a
+        // worse answer than the one it would have gotten with no reason at
+        // all.
+        break;
+    }
   }
   if (has(m, "api key") || has(m, "x-api-key")) {
     // Wording endorsed by the founder, kept verbatim — this is the sentence

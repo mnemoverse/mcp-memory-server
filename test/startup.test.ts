@@ -243,6 +243,29 @@ describe("the startup key probe does not leak the key either", () => {
     // not be told off about a URL it will never send anything to.
     expect(stderr).toEqual([]);
   });
+
+  /**
+   * A docs placeholder key is a THIRD reason this probe may skip, alongside
+   * an unparseable or insecure base URL above, and it is checked first (see
+   * `probeApiKeyInBackground` in src/index.ts), so a placeholder against an
+   * otherwise healthy https base URL is the case that isolates it: nothing
+   * about the URL would have stopped this probe, only the key does.
+   */
+  it("a placeholder key: no request is made, even against a healthy base URL", async () => {
+    const { calls } = await startupWith("https://core.mnemoverse.com/api/v1", "mk_live_YOUR_KEY");
+
+    expect(calls).toEqual([]);
+  });
+
+  it("and it says on stderr that it skipped, and why, without echoing the placeholder", async () => {
+    const { stderr } = await startupWith("https://core.mnemoverse.com/api/v1", "mk_live_YOUR_KEY");
+
+    expect(stderr).toHaveLength(1);
+    expect(stderr[0]).toContain("startup key check SKIPPED");
+    expect(stderr[0]).toContain("MNEMOVERSE_API_KEY is still the example value");
+    expect(stderr[0]).toContain("console.mnemoverse.com/dashboard/keys");
+    expect(stderr[0]).not.toContain("mk_live_YOUR_KEY");
+  });
 });
 
 // ---------------------------------------------------------------------------
