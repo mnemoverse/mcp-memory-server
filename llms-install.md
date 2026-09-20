@@ -43,9 +43,9 @@ MCP servers are picked up on client startup. After editing the config, restart t
 
 ## Step 3: verify
 
-1. Ask the assistant: "Remember that my favourite TypeScript framework is Hono, and call memory_write to save it." Expected: a `memory_write` call that reports the memory as stored.
+1. Ask the assistant: "Remember that my favourite TypeScript framework is Hono, and call memory_write to save it." Expected: a `memory_write` call that reports the memory as stored. If it answers `NOT STORED`, the engine judged it a near-duplicate of something already in this account (typical when this guide is run a second time): the connection works, go to step 2.
 2. Start a new session and ask: "What's my favourite TypeScript framework?" Expected: a `memory_read` call and the answer "Hono".
-3. If step 1 or 2 returns an authentication error, the key is missing or is still the placeholder. Fix the `MNEMOVERSE_API_KEY` value and restart the client again.
+3. If step 1 or 2 returns an authentication error, read it: the message says which problem it is (no key set, the placeholder still in place, a key cut short or wrapped in quotes, a key that does not exist, or a revoked key). Fix the `MNEMOVERSE_API_KEY` value accordingly (a revoked key needs a new one from the console) and restart the client again.
 
 ## Environment variables
 
@@ -85,4 +85,4 @@ Deletion is not exposed through this server. To correct a wrong or stale memory,
 - Documentation: https://mnemoverse.com/docs/api/mcp-server
 - Console (API key): https://console.mnemoverse.com
 - Source: https://github.com/mnemoverse/mcp-memory-server
-- Support: support@mnemoverse.com
+- Contact: hello@mnemoverse.com
