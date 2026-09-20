@@ -15,7 +15,7 @@ name: release-sync check
 # first-party surface DRIFTED (it answered with the wrong version, so a
 # release half-landed: open release.yml and re-run the missing leg), a
 # follow-up surface LAGGED (it answered with an older version because a bump
-# PR in a different repository — mnemoverse-docs or mnemoverse-marketing —
+# PR in a different repository (mnemoverse-docs or mnemoverse-marketing)
 # hasn't been merged yet; the release pipeline itself is fine), or a surface
 # COULD NOT BE CHECKED (it did not answer, so its version is unknown). Only
 # the first is drift. The second is a pending merge elsewhere, not a pipeline
@@ -123,14 +123,14 @@ jobs:
           look.
         * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (docs or marketing)
           answered with an older version. This is **not** drift and does **not** mean a
-          release half-landed — the release pipeline already succeeded. It means a small
+          release half-landed: the release pipeline already succeeded. It means a small
           bump PR in a *different* repository has not merged yet: for docs, merge the PR
           that `mcp-version-watch.yml` (in `mnemoverse-docs`) opens from branch
-          `bot/mcp-version-X.Y.Z` — or open one by hand from that branch if the bot could
+          `bot/mcp-version-X.Y.Z`, or open one by hand from that branch if the bot could
           not; for marketing, merge a `chore(mcp): version stamps` PR (in
           `mnemoverse-marketing`) that sets `serverInfo.version` in
           `public/.well-known/mcp/server-card.json`. Do not touch `release.yml` for this
-          outcome — it did its job.
+          outcome: it did its job.
         * `? could not be checked` means the surface did not answer at all (a timeout, a
           5xx, a rate limit), or, for docs/marketing, that its body could not be parsed for
           a version at all. The version it serves is unknown, so this is **not** evidence

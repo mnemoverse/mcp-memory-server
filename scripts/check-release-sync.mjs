@@ -9,7 +9,7 @@
  * landed (e.g. npm published but the registry publish failed), or a
  * FOLLOW-UP surface in another repository is simply waiting on a human to
  * merge a small bump PR. Both make a directory, a docs reader, or a
- * marketing visitor see a version we no longer ship — but only the first one
+ * marketing visitor see a version we no longer ship, but only the first one
  * means the release pipeline is broken.
  *
  * First-party surfaces (we publish these ourselves; a mismatch is DRIFT):
@@ -35,14 +35,14 @@
  * Testing hook: set RELEASE_SYNC_EXPECTED to the version you want this run to
  * compare surfaces against, instead of package.json#version. It exists to
  * rehearse the DRIFT / FOLLOW-UP LAG branches against the real, live surfaces
- * without touching any network code path. Leaving it unset changes nothing —
+ * without touching any network code path. Leaving it unset changes nothing:
  * EXPECTED falls back to package.json#version exactly as before this existed.
  *
  * Exit 0 = every first-party surface answered AND matched, AND both follow-up
  *          surfaces answered AND matched.
  * Exit 1 = at least one surface DRIFTED (first-party, answered with the wrong
- *          version — a release half-landed), or LAGGED (follow-up, answered
- *          with an older version — a bump PR elsewhere hasn't merged yet), or
+ *          version: a release half-landed), or LAGGED (follow-up, answered
+ *          with an older version: a bump PR elsewhere hasn't merged yet), or
  *          COULD NOT BE CHECKED (didn't answer at all, or its body couldn't
  *          be parsed for a version).
  *
@@ -50,10 +50,10 @@
  * stay separate. A timeout against npm is not evidence that a release half-
  * landed; it is evidence that nothing is known about npm this run. An old
  * version on the docs site is likewise not evidence that npm or the registry
- * are broken — it's evidence that a docs PR is sitting unmerged in a
+ * are broken: it is evidence that a docs PR is sitting unmerged in a
  * different repository. Folding either into "drift" sends a responder into
  * release-pipeline recovery for a problem that lives elsewhere (or does not
- * exist at all) — that exact confusion sent a responder into release
+ * exist at all). That exact confusion sent a responder into release
  * recovery for a network blip before this file grew the distinction. All
  * three outcomes are still red, because a surface nobody could read, or a
  * surface still lagging, is a surface nobody has confirmed matches the
@@ -163,14 +163,14 @@ async function checkMarketingServerCard() {
 }
 
 // Follow-up surfaces carry their own remediation text because "merge a PR"
-// means a different PR, in a different repository, for each of them — a
+// means a different PR, in a different repository, for each of them: a
 // responder reading only the failure output should not have to go find that
 // out on their own.
 const FOLLOW_UP = [
   {
     name: "docs (llms-full.txt)",
     check: checkDocsLlmsFull,
-    fix: `merge the bump PR that mcp-version-watch.yml (in mnemoverse-docs) opens from branch bot/mcp-version-${EXPECTED} — or, if the bot could not open it, open one by hand from that branch.`,
+    fix: `merge the bump PR that mcp-version-watch.yml (in mnemoverse-docs) opens from branch bot/mcp-version-${EXPECTED}, or, if the bot could not open it, open one by hand from that branch.`,
   },
   {
     name: "marketing (server-card)",
@@ -224,7 +224,7 @@ async function main() {
       } else {
         // NOT drift either. This surface is updated by a human merging a PR
         // in a different repository, so an old version here means that PR
-        // hasn't merged yet — the release pipeline itself already succeeded.
+        // hasn't merged yet: the release pipeline itself already succeeded.
         lagging.push({ name, version, fix });
         console.log(line(name, `✗ FOLLOW-UP LAG (have v${version || "?"})`, version));
       }
@@ -242,7 +242,7 @@ async function main() {
     console.error(`\nDRIFT: ${drifted.join(", ")} answered, but not with v${EXPECTED} (or the registry entry has no remote). A release half-landed. Investigate the release pipeline (release.yml).`);
   }
   if (lagging.length > 0) {
-    console.error(`\nFOLLOW-UP LAG: ${lagging.map((l) => l.name).join(", ")} answered with an older version than v${EXPECTED}. This is NOT drift and does not mean a release half-landed — the release pipeline is fine, a bump PR in another repository is simply not merged yet:`);
+    console.error(`\nFOLLOW-UP LAG: ${lagging.map((l) => l.name).join(", ")} answered with an older version than v${EXPECTED}. This is NOT drift and does not mean a release half-landed: the release pipeline is fine, a bump PR in another repository is simply not merged yet:`);
     for (const l of lagging) {
       console.error(`  - ${l.name}: ${l.fix}`);
     }
