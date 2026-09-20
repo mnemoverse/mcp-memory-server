@@ -148,18 +148,30 @@ async function checkGithubRelease() {
   return { version: norm(j.tag_name) };
 }
 
+// A follow-up surface must yield a readable X.Y.Z. Anything else (an empty
+// capture, a placeholder, a template that did not render) means the version
+// served there is unknown, which is COULD NOT BE CHECKED and never lag: a lag
+// tells the responder to merge a PR, and that advice needs a real version.
+function readableVersion(raw, where) {
+  const v = norm(raw);
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(v)) {
+    throw new Error(`${where} carries no readable version (got ${JSON.stringify(raw ?? null)})`);
+  }
+  return v;
+}
+
 async function checkDocsLlmsFull() {
   const text = await getText(DOCS_LLMS_FULL_URL);
   const m = text.match(/Current release: \*\*v([^*]+)\*\*/);
   if (!m) throw new Error('no "Current release: **v...**" line found in llms-full.txt');
-  return { version: norm(m[1]) };
+  return { version: readableVersion(m[1], "the Current release line in llms-full.txt") };
 }
 
 async function checkMarketingServerCard() {
   const j = await getJson(MARKETING_SERVER_CARD_URL);
   const v = j?.serverInfo?.version;
   if (!v) throw new Error("serverInfo.version missing from server-card.json");
-  return { version: norm(v) };
+  return { version: readableVersion(v, "serverInfo.version in server-card.json") };
 }
 
 // Follow-up surfaces carry their own remediation text because "merge a PR"
