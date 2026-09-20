@@ -240,7 +240,11 @@ describe("details.reason on a 401 uses the engine's own diagnosis", () => {
     expect(res.text).toContain("does not have the shape of a Mnemoverse key");
     expect(res.text).toContain("32 lower-case hex characters");
     expect(res.text).toContain("OAuth token");
-    expect(res.text).toContain("quotes or surrounding");
+    expect(res.text).toContain("cut short in the paste");
+    expect(res.text).toContain("wrapped in quotes");
+    // A padded key is NOT a cause: fetch trims whitespace around a header value.
+    expect(res.text).not.toContain("surrounding");
+    expect(res.text).not.toContain("spaces");
   });
 
   it("missing_key: says the header never arrived and points at the client config", async () => {

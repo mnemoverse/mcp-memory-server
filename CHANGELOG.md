@@ -77,6 +77,12 @@ git history and the GitHub releases are the record.
 
 ### Fixed
 
+- **The `malformed_key` guidance no longer blames spaces around the key.** It listed "wrapped in quotes or
+  surrounding spaces" among the common causes. `fetch` trims whitespace around a header value, so a padded key
+  reaches the engine intact and is judged on its own; probed live, a quoted key is `malformed_key` and a key with a
+  trailing space is not. The sentence now names the causes that do occur: a different token (such as an OAuth
+  token), a key cut short in the paste, or a key wrapped in quotes.
+
 - **A 401 now uses the engine's own `details.reason` when it sends one**
   (an engine change rolling out separately). `parseErrorEnvelope` reads
   `details.reason` (`missing_key` / `placeholder_key` / `revoked_key` /
