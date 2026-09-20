@@ -27,15 +27,29 @@ The consolidation stage of the engine — HDBSCAN clustering with Von Restorff p
 
 Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
-**Check the key in one command** before you put it in a config. Put it in place of `mk_live_YOUR_KEY` (in PowerShell, type `curl.exe`):
+**Check the key before you put it in a config.** Both forms ask for the key at a prompt, so it is never part of the command you typed and does not land in your shell history.
+
+macOS, Linux, Git Bash:
 ```bash
-curl -s -H "X-Api-Key: mk_live_YOUR_KEY" https://core.mnemoverse.com/api/v1/memory/stats
+printf 'Mnemoverse API key: '; read -rs KEY; echo
+printf 'X-Api-Key: %s\n' "$KEY" | curl -s -H @- https://core.mnemoverse.com/api/v1/memory/stats; unset KEY
 ```
+
+Windows PowerShell:
+```powershell
+curl.exe -s -H ("X-Api-Key: " + (Read-Host "Mnemoverse API key")) https://core.mnemoverse.com/api/v1/memory/stats
+```
+
 | The API answers | What it means |
 |---|---|
 | JSON that includes `"total_atoms"` | The key works. |
-| `"message":"Invalid or revoked API key."` | The key is wrong, revoked, or still the placeholder. |
-| `"message":"Missing API key. Send X-Api-Key header."` | No key reached the API: the key in the command is empty. |
+| `"reason":"placeholder_key"` | That is the example key from these docs. Create a real one at the console. |
+| `"reason":"malformed_key"` | Not the shape of a key: cut short in the paste, wrapped in quotes, or a different token entirely. |
+| `"reason":"invalid_key"` | The shape is right and no such key exists. Copy it again from the console. |
+| `"reason":"revoked_key"` | The key was revoked and will not work again. Create a new one. |
+| `"reason":"missing_key"` | No key reached the API: what you entered was empty. |
+
+Every rejection also carries `keys_url`, the console page where keys are created.
 
 ### 2. Connect to your AI tool
 
