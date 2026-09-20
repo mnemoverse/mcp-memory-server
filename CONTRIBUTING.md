@@ -168,7 +168,9 @@ That push fires [`.github/workflows/release.yml`](.github/workflows/release.yml)
 1. Verifies the tag matches `package.json#version` (belt and suspenders).
 2. Runs `npm ci && npm run build` (which also runs `generate:configs` via `prebuild`).
 3. Runs `npm run verify:configs` for drift.
-4. `npm publish` using the `NPM_TOKEN` secret.
+4. `npm publish` using the `NPM_TOKEN` secret, skipped if npm already serves the version,
+   then a wait until npm serves it (npm accepts a publish minutes before it serves it,
+   and the registry in step 7 checks npm at once).
 5. Installs `mcp-publisher` from its Linux amd64 release bottle.
 6. Authenticates to the Registry via `mcp-publisher login github-oidc` — this uses GitHub Actions' OIDC identity token. **No long-lived PAT is stored anywhere.** The prerequisite is that the authenticating GitHub account's membership in the `mnemoverse` org be **public** (already the case for `izgorodin`).
 7. `mcp-publisher publish` uploads the freshly-generated `server.json`.
@@ -181,9 +183,11 @@ same as "nothing partial gets published": whatever already succeeded stays publi
 - Fail **at** the npm publish and nothing landed — fix the cause and re-run from the tag.
 - Fail **after** npm published and the package is live while the registry entry and the
   release page lag. That is a half-landed release, and it is what the daily
-  `release-sync check` exists to catch. A plain re-run will **not** recover it: it dies
-  at the npm publish step, because that version already exists (`403`). Finish the
-  remaining legs by hand, or cut a new patch version.
+  `release-sync check` exists to catch. To recover it, run the workflow by hand
+  (Actions, release, Run workflow) with the tag: the npm step sees the published
+  version and skips, a registry entry that already exists is skipped too, and the legs
+  that never ran run. Before 2026-09-20 this was not possible (the re-run died at
+  `npm publish` with a `403`), which is how v0.10.2 came to need it.
 
 ### One-time setup for the workflow
 
