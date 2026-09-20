@@ -1,19 +1,26 @@
 name: release-sync check
 
 # Issue #31: confirm every first-party public surface (npm, the Official MCP
-# Registry, the GitHub release) is still tracking package.json#version — so a
-# half-landed release (e.g. npm published but the registry publish failed) can't
-# drift silently and make directories read us as unmaintained.
+# Registry, the GitHub release) AND every follow-up surface (the docs site's
+# llms-full.txt, the marketing site's server-card.json) is still tracking
+# package.json#version — so a half-landed release (e.g. npm published but the
+# registry publish failed), or a forgotten bump PR in another repository,
+# can't drift silently and make directories, docs readers or visitors read us
+# as unmaintained or out of date.
 #
 # Runs on a schedule (not on every push — a release needs a moment to propagate,
 # and we don't want a false red right after tagging) plus manual dispatch.
 #
-# A red run means one of TWO things, and the log distinguishes them: a surface
-# DRIFTED (it answered with the wrong version, so a release half-landed: open
-# release.yml and re-run the missing leg), or a surface COULD NOT BE CHECKED (it
-# did not answer, so its version is unknown). Only the first is drift. The second
-# is still red, because an unverified surface is not a verified one, but it is
-# not grounds to touch the release pipeline.
+# A red run means one of THREE things, and the log distinguishes them: a
+# first-party surface DRIFTED (it answered with the wrong version, so a
+# release half-landed: open release.yml and re-run the missing leg), a
+# follow-up surface LAGGED (it answered with an older version because a bump
+# PR in a different repository — mnemoverse-docs or mnemoverse-marketing —
+# hasn't been merged yet; the release pipeline itself is fine), or a surface
+# COULD NOT BE CHECKED (it did not answer, so its version is unknown). Only
+# the first is drift. The second is a pending merge elsewhere, not a pipeline
+# problem. The third is still red, because an unverified surface is not a
+# verified one, but it is not grounds to touch the release pipeline either.
 #
 # Until 2026-09-01 that guidance was the entire alerting story, and it assumed a
 # human watching the Actions tab. On 2026-08-31 the v0.10.0 release failed its npm
@@ -101,21 +108,34 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       ISSUE_BODY: |
         `release-sync check` is red. At least one first-party surface (npm, the Official
-        MCP Registry, the GitHub release) either did **not match** `package.json#version`,
-        or could **not be checked at all**. Those are different events and the run log
-        reports them separately, surface by surface.
+        MCP Registry, the GitHub release) or follow-up surface (the docs site's
+        `llms-full.txt`, the marketing site's `server-card.json`) either did **not match**
+        `package.json#version`, or could **not be checked at all**. Those are three
+        different events and the run log reports them separately, surface by surface.
         [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
-        Read the log before acting, because the two outcomes call for opposite responses:
+        Read the log before acting, because the three outcomes call for different responses:
 
-        * `✗ DRIFT (have vX.Y.Z)` means the surface answered, with the wrong version. A
-          release half-landed. The publish legs in `release.yml` run npm first, then the
-          Official MCP Registry, then the GitHub release, and each is skipped once an
-          earlier one fails, so the **first** drifted surface in the list is where to look.
-        * `? could not be checked` means the surface did not answer at all: a timeout, a
-          5xx, a rate limit. The version it serves is unknown, so this is **not** evidence
-          of a failed release and it is not counted as drift. Re-run this check, or let
-          tomorrow's cron settle it, before touching the release pipeline.
+        * `✗ DRIFT (have vX.Y.Z)` means a **first-party** surface answered, with the wrong
+          version. A release half-landed. The publish legs in `release.yml` run npm first,
+          then the Official MCP Registry, then the GitHub release, and each is skipped once
+          an earlier one fails, so the **first** drifted surface in the list is where to
+          look.
+        * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (docs or marketing)
+          answered with an older version. This is **not** drift and does **not** mean a
+          release half-landed — the release pipeline already succeeded. It means a small
+          bump PR in a *different* repository has not merged yet: for docs, merge the PR
+          that `mcp-version-watch.yml` (in `mnemoverse-docs`) opens from branch
+          `bot/mcp-version-X.Y.Z` — or open one by hand from that branch if the bot could
+          not; for marketing, merge a `chore(mcp): version stamps` PR (in
+          `mnemoverse-marketing`) that sets `serverInfo.version` in
+          `public/.well-known/mcp/server-card.json`. Do not touch `release.yml` for this
+          outcome — it did its job.
+        * `? could not be checked` means the surface did not answer at all (a timeout, a
+          5xx, a rate limit), or, for docs/marketing, that its body could not be parsed for
+          a version at all. The version it serves is unknown, so this is **not** evidence
+          of a failed release or a pending PR, and it is not counted as drift or lag. Re-run
+          this check, or let tomorrow's cron settle it, before acting on it.
 
         **If npm DRIFTED** and the release run shows `npm error code E404` on `PUT` for a
         package that plainly exists, read it as **authorization**, not absence: npm answers

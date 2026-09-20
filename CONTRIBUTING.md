@@ -194,6 +194,13 @@ same as "nothing partial gets published": whatever already succeeded stays publi
   `Release did not complete` issue when a release fails, and nothing closes it
   automatically: close it by hand once the resumed run is green.
 
+  `release-sync check` also stays red after the pipeline above is fully green: it gates
+  two follow-up surfaces (the docs site's `llms-full.txt`, the marketing site's
+  `server-card.json`) that a human updates by merging a small bump PR in a *different*
+  repository (`mnemoverse-docs`, `mnemoverse-marketing`). That is reported as follow-up
+  lag, not drift, and closing it means merging those PRs, not touching this release
+  pipeline.
+
 ### One-time setup for the workflow
 
 A single secret must be added at [Settings → Secrets → Actions](https://github.com/mnemoverse/mcp-memory-server/settings/secrets/actions):
