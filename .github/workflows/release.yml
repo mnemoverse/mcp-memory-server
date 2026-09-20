@@ -72,7 +72,11 @@ jobs:
     # One run per tag at a time. Two runs for one tag used to be harmless: the
     # second died at `npm publish`. Now that the publish legs skip what exists,
     # both would go on to the registry and the release page together. The
-    # second waits instead; nothing is cancelled.
+    # second waits instead. This is mutual exclusion, not a queue: Actions
+    # holds one run per group plus ONE waiting behind it, so a third dispatch
+    # of the same tag replaces the waiting run, which is then cancelled. That
+    # costs nothing here, because any run for the tag resumes where the
+    # release stands.
     concurrency:
       group: release-${{ github.event.inputs.tag || github.ref_name }}
       cancel-in-progress: false
@@ -434,7 +438,7 @@ jobs:
         run: |
           set -euo pipefail
           ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
-          if grep -qx 'mnemoverse-memory.mcpb' <<<"$ASSETS"; then
+          if grep -qxF 'mnemoverse-memory.mcpb' <<<"$ASSETS"; then
             echo "::notice::release $TAG already exists with its .mcpb bundle, leaving it untouched"
             echo "complete=true" >> "$GITHUB_OUTPUT"
           else
