@@ -327,16 +327,22 @@ jobs:
           VERSION="${TAG#v}"
           PKG="$(node -p "require('./package.json').name")"
           URL="https://registry.npmjs.org/${PKG//\//%2F}/$VERSION"
-          for i in $(seq 1 90); do
+          # Bounded by the clock, not by an attempt count: with a request that can
+          # take 20 s, ninety attempts would be 45 minutes, not 15.
+          DEADLINE=$((SECONDS + 900))
+          i=0
+          while :; do
+            i=$((i + 1))
             CODE="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$URL" || true)"
             if [ "$CODE" = "200" ]; then
-              echo "npm serves $PKG@$VERSION (attempt $i)"
+              echo "npm serves $PKG@$VERSION (attempt $i, ${SECONDS}s into this step)"
               exit 0
             fi
-            echo "attempt $i/90: npm answered $CODE"
-            if [ "$i" -lt 90 ]; then sleep 10; fi
+            echo "attempt $i: npm answered $CODE"
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then break; fi
+            sleep 10
           done
-          echo "::error::npm did not serve $PKG@$VERSION within about 15 minutes of accepting it. Nothing is lost: once it does, run this workflow by hand (workflow_dispatch) with tag $TAG. The npm step sees the version and skips, and the remaining legs run."
+          echo "::error::npm did not serve $PKG@$VERSION within 15 minutes of accepting it. Nothing is lost: once it does, run this workflow by hand (workflow_dispatch) with tag $TAG. The npm step sees the version and skips, and the remaining legs run."
           exit 1
 
       - name: Install mcp-publisher CLI
@@ -437,7 +443,18 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          # Only an explicit "release not found" means there is no page. Any other
+          # failure (403, rate limit, 5xx) is "could not tell", and the step stops:
+          # reading it as "no page" would hand a complete release to the action
+          # below, which deletes a same-named asset before uploading it again.
+          if OUT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>&1)"; then
+            ASSETS="$OUT"
+          elif [[ "$OUT" == *"release not found"* ]]; then
+            ASSETS=""
+          else
+            echo "::error::could not tell whether release $TAG exists: $OUT. Not guessing: run this workflow again by hand (workflow_dispatch) with tag $TAG."
+            exit 1
+          fi
           if grep -qxF 'mnemoverse-memory.mcpb' <<<"$ASSETS"; then
             echo "::notice::release $TAG already exists with its .mcpb bundle, leaving it untouched"
             echo "complete=true" >> "$GITHUB_OUTPUT"
