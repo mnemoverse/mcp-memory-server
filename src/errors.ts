@@ -30,6 +30,10 @@
  * folklore. The distinctions below are the entire point of this file:
  *
  *   401  auth.py — "Invalid or revoked API key." / "Missing API key." The key.
+ *        (Read on 2026-08-16. Since 2026-09-20 the engine answers a sentence
+ *        per cause and adds `details.reason` and `details.keys_url`; the old
+ *        sentence is what an engine without that change still sends, which is
+ *        why explain401 keeps the substring branch as its fallback.)
  *   403  routes.py, rooms_routes.py, auth.py — "Room is archived", "Not an
  *        active member of this room", "Read-only membership cannot write to
  *        this room", "Invalid room address", "You do not own this room", plus
