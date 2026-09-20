@@ -42,7 +42,7 @@ try { (Invoke-WebRequest https://core.mnemoverse.com/api/v1/memory/stats -Header
 catch { if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { (New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd() } }; Remove-Variable k
 ```
 
-| The API answers | What it means |
+| The output contains | What it means |
 |---|---|
 | JSON that includes `"total_atoms"` | The key works. |
 | `"reason":"placeholder_key"` | That is the example key from these docs. Create a real one at the console. |
@@ -51,7 +51,7 @@ catch { if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { (New-Obj
 | `"reason":"revoked_key"` | The key was revoked and will not work again. Create a new one. |
 | `"reason":"missing_key"` | No key reached the API: what you entered was empty. |
 
-Every rejection also carries `keys_url`, the console page where keys are created.
+In the JSON, `reason` sits inside the `details` object (`details.reason`), next to `details.keys_url`, the console page where keys are created.
 
 ### 2. Connect to your AI tool
 
