@@ -27,7 +27,7 @@ The consolidation stage of the engine — HDBSCAN clustering with Von Restorff p
 
 Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
-**Check the key before you put it in a config.** Both forms ask for the key at a prompt, so it is never part of the command you typed and does not land in your shell history.
+**Check the key before you put it in a config.** Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in your shell history nor in the process list.
 
 macOS, Linux, Git Bash:
 ```bash
@@ -35,9 +35,11 @@ printf 'Mnemoverse API key: '; read -rs KEY; echo
 printf 'X-Api-Key: %s\n' "$KEY" | curl -s -H @- https://core.mnemoverse.com/api/v1/memory/stats; unset KEY
 ```
 
-Windows PowerShell:
+Windows PowerShell 5.1 and PowerShell 7:
 ```powershell
-curl.exe -s -H ("X-Api-Key: " + (Read-Host "Mnemoverse API key")) https://core.mnemoverse.com/api/v1/memory/stats
+$k = [Net.NetworkCredential]::new('', (Read-Host 'Mnemoverse API key' -AsSecureString)).Password
+try { (Invoke-WebRequest https://core.mnemoverse.com/api/v1/memory/stats -Headers @{ 'X-Api-Key' = $k } -UseBasicParsing).Content }
+catch { if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { (New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd() } }; Remove-Variable k
 ```
 
 | The API answers | What it means |
