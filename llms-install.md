@@ -75,7 +75,7 @@ Deletion is not exposed through this server. To correct a wrong or stale memory,
 
 ## Notes for agents
 
-- Windows: the same JSON works in Cline on Windows. If you run the Claude Code CLI command from `README.md` in PowerShell, paste it as one line.
+- Windows: if you run the Claude Code CLI command from `README.md` in PowerShell, paste it as one line.
 - The `@latest` suffix makes `npx` check the registry on each start, so the user picks up new releases without reinstalling.
 - Transport is stdio only for this package. A hosted remote MCP endpoint with OAuth 2.1 sign-in through the browser is documented separately at https://mnemoverse.com/docs/api/remote-mcp-server for clients that support remote servers; it is not what this file installs.
 - Do not put the API key into a project file that is committed with the repository.
