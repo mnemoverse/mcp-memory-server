@@ -49,6 +49,15 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.10.2] — 2026-09-20
+
+A PATCH under this file's own rule: it changes TEXT and removes a request, and it changes no SHAPE and no ROUTING.
+No `registerTool` call changes: no tool, parameter, annotation or default moves. What changes is what a tool call
+and the startup line SAY when the API key is bad, and one case in which nothing is sent at all (a key that is
+certainly a documentation placeholder). That is the opposite of a probe: fewer requests, not more.
+`git diff v0.10.1..v0.10.2 --stat -- src/` touches `src/errors.ts`, `src/requests.ts` and `src/index.ts`, and in
+`src/index.ts` only the two places that check the key before sending it.
+
 ### Security
 
 - **A docs placeholder key never leaves the machine.** The engine sees this
@@ -96,6 +105,20 @@ git history and the GitHub releases are the record.
   still never be told to replace itself. An unknown reason, or no reason at
   all, every engine released today, falls through to today's
   founder-endorsed generic sentence unchanged, byte for byte.
+
+### Documentation
+
+- **`README.md`: check the API key before putting it in a config.** A key-check block next to the install step.
+  Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in
+  shell history nor in the process list: bash streams the header through stdin (`curl -H @-`), PowerShell uses
+  `Read-Host -AsSecureString` with `Invoke-WebRequest` and prints the error body on both Windows PowerShell 5.1
+  and PowerShell 7. The table lists what the output contains: `total_atoms` for a working key, and
+  `details.reason` per cause of a rejection.
+- **`README.md`: first screen.** What the package gives you, in one sentence, and one paragraph on what is open
+  source here (this server and the Python SDK, MIT) and what is a hosted service (the memory engine).
+- **`llms-install.md`** (new, repository only, not part of the npm package): install steps written for an AI agent
+  that sets the server up on a user's behalf, including what `NOT STORED` means on a second run of the verify step.
+- `glama.json`: a second maintainer for the Glama listing.
 
 ## [0.10.1] — 2026-09-16
 
