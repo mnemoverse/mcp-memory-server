@@ -16,14 +16,16 @@ name: release
 #   6. Validates and packs the .mcpb bundle (#85).
 #   7. Smokes the packed npm tarball through its bin entry (#69 follow-up).
 #   8. npm publish — repo-scoped automation token from the NPM_TOKEN secret.
-#      Skipped when npm already serves the version, which is what makes a
+#      Skipped when npm already serves the version with the bytes this run
+#      packed (a different checksum stops the run), which is what makes a
 #      half-landed release resumable. Then waits until npm SERVES the version:
 #      npm accepts a publish minutes before it serves it, and the registry in
 #      step 9 checks npm at once.
 #   9. mcp-publisher login github-oidc + publish — uploads server.json to
 #      registry.modelcontextprotocol.io, then verifies the entry propagated.
 #      Skipped when the registry already lists the version.
-#  10. gh release create — hand-written CHANGELOG section as the body,
+#  10. gh release create — skipped when the release page already carries the
+#      .mcpb bundle; otherwise hand-written CHANGELOG section as the body,
 #      auto-generated commit list appended, .mcpb bundle attached.
 #  11. repository_dispatch to mnemoverse-docs so the docs site learns the new
 #      version immediately (#98); its daily cron is the fallback.
@@ -67,6 +69,13 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # One run per tag at a time. Two runs for one tag used to be harmless: the
+    # second died at `npm publish`. Now that the publish legs skip what exists,
+    # both would go on to the registry and the release page together. The
+    # second waits instead; nothing is cancelled.
+    concurrency:
+      group: release-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     # Trust boundary (adversarial review F1): every gate below lives in THIS
     # file, and GitHub runs the file at the pushed tag's commit — so the gates
     # stop mistakes, not a write-access actor who tags a branch carrying a
@@ -245,11 +254,20 @@ jobs:
       # this step could not be run again: the second `npm publish` died on
       # "version exists", and the registry entry, the release page and the docs
       # ping had to be finished by hand. v0.10.2 (2026-09-20) landed exactly
-      # there. If npm already serves this version, the step says so and moves
-      # on, and a workflow_dispatch of this workflow with the tag runs the legs
-      # that never ran. The checksums are compared for the record, not as a
-      # gate: a job can do nothing about a published version except report it,
-      # and stopping here is the stranding this step exists to end.
+      # there. If npm already serves this version AND serves the bytes this run
+      # packed, the step says so and moves on, and a workflow_dispatch of this
+      # workflow with the tag runs the legs that never ran.
+      #
+      # The checksum IS a gate. The build is reproducible (the 0.10.2 tarball
+      # was rebuilt byte for byte on another OS and another Node major), so a
+      # mismatch is not rebuild noise: this checkout is not what npm shipped,
+      # for example because the tag was moved. Finishing the registry entry and
+      # the release page from that tree would describe a package npm does not
+      # serve.
+      #
+      # An answer that is neither 200 nor 404 means "could not tell", and the
+      # step stops instead of guessing: guessing "absent" would run
+      # `npm publish` into a version that exists.
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -258,27 +276,45 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#v}"
           PKG="$(node -p "require('./package.json').name")"
-          CODE="$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$PKG/$VERSION" || true)"
-          if [ "$CODE" = "200" ]; then
-            PUBLISHED="$(npm view "$PKG@$VERSION" dist.shasum || true)"
-            LOCAL="$(sha1sum "$TARBALL" | cut -d' ' -f1)"
-            echo "::notice::$PKG@$VERSION is already on npm, so this run resumes with the legs after it"
-            if [ "$PUBLISHED" != "$LOCAL" ]; then
-              echo "::warning::npm serves shasum ${PUBLISHED:-unknown} and this run packed $LOCAL. The published bytes cannot change; what differs is this rebuild. Compare the two tarballs before trusting the .mcpb attached below."
-            fi
-            exit 0
-          fi
-          npm publish "$TARBALL" --access public
+          # The request the MCP Registry's own validator makes: the scoped name
+          # as ONE escaped path segment.
+          URL="https://registry.npmjs.org/${PKG//\//%2F}/$VERSION"
+          BODY="${RUNNER_TEMP:-/tmp}/npm-version.json"
+          CODE=000
+          for i in 1 2 3; do
+            CODE="$(curl -sS --max-time 20 -o "$BODY" -w '%{http_code}' "$URL" || true)"
+            case "$CODE" in 200|404) break ;; esac
+            echo "attempt $i/3: npm answered $CODE"
+            if [ "$i" -lt 3 ]; then sleep 5; fi
+          done
+          case "$CODE" in
+            404)
+              npm publish "$TARBALL" --access public
+              ;;
+            200)
+              PUBLISHED="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).dist.shasum" "$BODY")"
+              LOCAL="$(sha1sum "$TARBALL" | cut -d' ' -f1)"
+              if [ "$PUBLISHED" != "$LOCAL" ]; then
+                echo "::error::npm serves $PKG@$VERSION with shasum $PUBLISHED, and this run packed $LOCAL. The build is reproducible, so this checkout is not what npm shipped (a moved tag?). Not finishing the release from it: compare the two tarballs first."
+                exit 1
+              fi
+              echo "::notice::$PKG@$VERSION is already on npm with the bytes this run packed, so this run resumes with the legs after it"
+              ;;
+            *)
+              echo "::error::could not tell whether npm already has $PKG@$VERSION (last answer: $CODE). Not guessing: run this workflow again by hand (workflow_dispatch) with tag $TAG."
+              exit 1
+              ;;
+          esac
 
       # npm answers a publish BEFORE it serves the version ("Your package is
       # being processed and may take a few minutes to become available"), and the
       # MCP Registry validates the npm package the moment it receives
-      # server.json. Going there straight away is a race. 0.10.0 and 0.10.1 won
-      # it only because npm then registered a version before it answered;
-      # v0.10.2 lost it: the registry asked npm two seconds after the publish
-      # returned, got a 404 and refused the entry, and npm began serving the
-      # version 2 min 36 s later. Wait until npm serves it before telling
-      # anyone else it exists.
+      # server.json, with the very request this step polls. Going there straight
+      # away is a race. 0.10.0 and 0.10.1 won it only because npm then
+      # registered a version before it answered; v0.10.2 lost it: the registry
+      # asked npm two seconds after the publish returned, got a 404 and refused
+      # the entry, and npm began serving the version 2 min 36 s later. Wait
+      # until npm serves it before telling anyone else it exists.
       - name: Wait until npm serves the new version
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -286,17 +322,17 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#v}"
           PKG="$(node -p "require('./package.json').name")"
-          URL="https://registry.npmjs.org/$PKG/$VERSION"
+          URL="https://registry.npmjs.org/${PKG//\//%2F}/$VERSION"
           for i in $(seq 1 90); do
-            CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$URL" || true)"
+            CODE="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$URL" || true)"
             if [ "$CODE" = "200" ]; then
               echo "npm serves $PKG@$VERSION (attempt $i)"
               exit 0
             fi
-            echo "attempt $i/90: npm answered $CODE, waiting 10s..."
-            sleep 10
+            echo "attempt $i/90: npm answered $CODE"
+            if [ "$i" -lt 90 ]; then sleep 10; fi
           done
-          echo "::error::npm did not serve $PKG@$VERSION within 15 minutes of accepting it. Nothing is lost: once it does, run this workflow by hand (workflow_dispatch) with tag $TAG. The npm step sees the version and skips, and the remaining legs run."
+          echo "::error::npm did not serve $PKG@$VERSION within about 15 minutes of accepting it. Nothing is lost: once it does, run this workflow by hand (workflow_dispatch) with tag $TAG. The npm step sees the version and skips, and the remaining legs run."
           exit 1
 
       - name: Install mcp-publisher CLI
@@ -311,9 +347,13 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       # Resumable like the npm step: a version the registry already lists is
-      # skipped, so a re-run after a LATER leg failed does not die here either.
+      # skipped, so a re-run after a LATER leg failed does not die here either
+      # (the registry refuses a duplicate version). As above, an answer that is
+      # neither 200 nor 404 stops the step instead of being read as "absent".
       # The retries cover the registry reading npm through a cache that still
-      # holds the 404 this job stopped seeing a moment ago.
+      # holds the 404 this job stopped seeing a moment ago; after each refusal
+      # the step looks again, because a refused attempt whose answer was lost
+      # may have landed.
       - name: Publish to Official MCP Registry
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -321,17 +361,32 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#v}"
           URL="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mnemoverse%2Fmcp-memory-server/versions/$VERSION"
-          CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$URL" || true)"
+          listed() { curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$URL" || true; }
+          CODE=000
+          for i in 1 2 3; do
+            CODE="$(listed)"
+            case "$CODE" in 200|404) break ;; esac
+            echo "attempt $i/3: the registry answered $CODE"
+            if [ "$i" -lt 3 ]; then sleep 5; fi
+          done
           if [ "$CODE" = "200" ]; then
             echo "::notice::the MCP Registry already lists $VERSION, skipping"
             exit 0
           fi
-          for i in $(seq 1 5); do
+          if [ "$CODE" != "404" ]; then
+            echo "::error::could not tell whether the MCP Registry already lists $VERSION (last answer: $CODE). Not guessing: run this workflow again by hand (workflow_dispatch) with tag $TAG."
+            exit 1
+          fi
+          for i in 1 2 3 4 5; do
             if ./mcp-publisher publish; then
               exit 0
             fi
-            echo "attempt $i/5 failed, waiting 30s..."
-            sleep 30
+            if [ "$(listed)" = "200" ]; then
+              echo "::notice::the publisher reported a failure, but the MCP Registry lists $VERSION"
+              exit 0
+            fi
+            echo "attempt $i/5 was refused"
+            if [ "$i" -lt 5 ]; then sleep 30; fi
           done
           echo "::error::the MCP Registry refused the entry five times. npm already carries $VERSION, so fix the cause and run this workflow by hand (workflow_dispatch) with tag $TAG: the npm step skips and this leg runs again."
           exit 1
@@ -365,7 +420,29 @@ jobs:
           done
           echo "::warning::registry entry for $VERSION not visible after 60s — check https://registry.modelcontextprotocol.io manually; NOT failing the release"
 
+      # Until 2026-09-20 dispatching a tag that had already been released died at
+      # `npm publish`. Now that the publish legs skip what exists, the same
+      # dispatch reaches this point, and action-gh-release UPDATES an existing
+      # release in place: body rewritten, asset uploaded again. A release page
+      # that already carries the bundle is complete, so it is left alone. A
+      # page without the bundle (the upload failed) is not, and gets finished.
+      - name: Is the release page already complete?
+        id: release_page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if grep -qx 'mnemoverse-memory.mcpb' <<<"$ASSETS"; then
+            echo "::notice::release $TAG already exists with its .mcpb bundle, leaving it untouched"
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub release
+        if: steps.release_page.outputs.complete != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
@@ -508,6 +585,7 @@ jobs:
         tag: the npm step sees the published version and skips, a registry entry that
         already exists is skipped too, and the legs that never ran run. CONTRIBUTING.md
         describes it under "Automated release pipeline" (the half-landed release note).
+        Nothing closes this issue for you: close it by hand once that run is green.
 
         `release-sync check` (daily, 07:00 UTC) is what verifies the recovery: it compares
         every first-party surface against `package.json#version` and stays red until they

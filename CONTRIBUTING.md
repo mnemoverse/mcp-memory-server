@@ -168,7 +168,7 @@ That push fires [`.github/workflows/release.yml`](.github/workflows/release.yml)
 1. Verifies the tag matches `package.json#version` (belt and suspenders).
 2. Runs `npm ci && npm run build` (which also runs `generate:configs` via `prebuild`).
 3. Runs `npm run verify:configs` for drift.
-4. `npm publish` using the `NPM_TOKEN` secret, skipped if npm already serves the version,
+4. `npm publish` using the `NPM_TOKEN` secret, skipped if npm already serves the same bytes,
    then a wait until npm serves it (npm accepts a publish minutes before it serves it,
    and the registry in step 7 checks npm at once).
 5. Installs `mcp-publisher` from its Linux amd64 release bottle.
@@ -187,7 +187,12 @@ same as "nothing partial gets published": whatever already succeeded stays publi
   (Actions, release, Run workflow) with the tag: the npm step sees the published
   version and skips, a registry entry that already exists is skipped too, and the legs
   that never ran run. Before 2026-09-20 this was not possible (the re-run died at
-  `npm publish` with a `403`), which is how v0.10.2 came to need it.
+  `npm publish` with a `403`), which is how v0.10.2 came to need it. The run stops
+  if npm serves different bytes from the ones it packed (the build is reproducible, so
+  that means the checkout is not what was published), and it leaves a release page that
+  already carries the `.mcpb` bundle untouched. The workflow opens a
+  `Release did not complete` issue when a release fails, and nothing closes it
+  automatically: close it by hand once the resumed run is green.
 
 ### One-time setup for the workflow
 
