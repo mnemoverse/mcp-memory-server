@@ -49,6 +49,23 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`@mnemoverse/mcp-memory-server/shared`: the ten memory tools as one function
+  another MCP server can register.** ADR-025 (mnemoverse-core) makes this package
+  the definition of the Mnemoverse MCP surface. Until now the hosted connector
+  (`mnemoverse-mcp-remote`) kept its own hand-written copy of every tool, and the
+  two had drifted in wording, errors, paging and room handling. The new entry
+  exports `registerMemoryTools(server, { apiFetch })`, `SERVER_INSTRUCTIONS` and
+  the three error classes an `apiFetch` must reject with. Importing it starts
+  nothing: the stdio server stays in the main entry, which it does not import.
+  This change only moves code: the handlers in `src/tools.ts` are the lines that
+  were in `src/index.ts`, verbatim except for indentation. No tool, parameter,
+  text or annotation changes, and the stdio server behaves exactly as before.
+  The two source-level denylists in the tests (no domain normalisation, no
+  domain through `safeInline`) now scan `src/tools.ts` too. Scanning only the
+  file the handlers left would have kept them green while guarding nothing.
+
 ## [0.10.2] — 2026-09-20
 
 A PATCH under this file's own rule: it changes TEXT and removes a request, and it changes no SHAPE and no ROUTING.

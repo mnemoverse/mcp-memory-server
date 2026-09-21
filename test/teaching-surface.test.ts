@@ -50,6 +50,14 @@ const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
 );
+// The tool handlers moved here from src/index.ts (ADR-025: the package's shared
+// tool registration). Every source-level check below that used to scan
+// index.ts scans BOTH files: a denylist that reads only the file the handlers
+// left would pass on nothing and stop guarding without anyone noticing.
+const toolsSource = readFileSync(
+  new URL("../src/tools.ts", import.meta.url),
+  "utf8",
+);
 const requestsSource = readFileSync(
   new URL("../src/requests.ts", import.meta.url),
   "utf8",
@@ -353,7 +361,11 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
     // test/handlers.test.ts "the diagnosis uses the RAW name" and "a domain
     // ENDING in a trim-strippable character goes out raw and is diagnosed
     // raw", which a `.trimEnd()` cannot get past).
-    const sources = { "src/index.ts": indexSource, "src/requests.ts": requestsSource };
+    const sources = {
+      "src/index.ts": indexSource,
+      "src/tools.ts": toolsSource,
+      "src/requests.ts": requestsSource,
+    };
     for (const [file, source] of Object.entries(sources)) {
       // Any method-call normalisation, on any spelling of the domain value
       // that has existed on this branch (the raw arg, the searched copy, the
@@ -427,8 +439,8 @@ describe("the record of what went wrong stays in the source", () => {
     // Not the code — the history. If this ever fails, check whether the comment
     // was deleted or whether the sentence came BACK: the second is a regression
     // the behavioural tests will already have caught.
-    expect(indexSource).toContain("Nothing new since your watermark.");
-    expect(indexSource).toContain("Below importance threshold");
+    expect(toolsSource).toContain("Nothing new since your watermark.");
+    expect(toolsSource).toContain("Below importance threshold");
   });
 });
 
@@ -482,9 +494,15 @@ describe("naming a store", () => {
       "safeInline(r?.reason",
       "safeInline(r.reason",
     ]) {
-      expect(indexSource, `${banned} sends a value the reader must reproduce through the sanitiser`).not.toContain(
-        banned,
-      );
+      for (const [file, source] of [
+        ["src/index.ts", indexSource],
+        ["src/tools.ts", toolsSource],
+      ] as const) {
+        expect(
+          source,
+          `${file}: ${banned} sends a value the reader must reproduce through the sanitiser`,
+        ).not.toContain(banned);
+      }
     }
     // And the exact-rendering module may not CALL the sanitiser at all — its
     // whole contract is "print exactly or not at all", so a safeInline call in
