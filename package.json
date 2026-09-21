@@ -17,6 +17,7 @@
       "types": "./dist/shared.d.ts",
       "default": "./dist/shared.js"
     },
+    "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },
   "files": [

@@ -59,6 +59,11 @@ git history and the GitHub releases are the record.
   exports `registerMemoryTools(server, { apiFetch })`, `SERVER_INSTRUCTIONS` and
   the three error classes an `apiFetch` must reject with. Importing it starts
   nothing: the stdio server stays in the main entry, which it does not import.
+  This is the package's first `exports` map, and it narrows nothing: `.` still
+  resolves to `dist/index.js` (as do `main` and the `bin`), and a `./dist/*`
+  passthrough keeps every path under `dist/` importable exactly as before, so a
+  consumer that imported, say, `@mnemoverse/mcp-memory-server/dist/errors.js`
+  is not broken by the upgrade.
   This change only moves code: the handlers in `src/tools.ts` are the lines that
   were in `src/index.ts`, verbatim except for indentation. No tool, parameter,
   text or annotation changes, and the stdio server behaves exactly as before.
