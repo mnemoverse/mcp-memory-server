@@ -1185,12 +1185,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: false,
         // NOT destructive (owner, 2026-09-21: "only deletion is destructive;
         // rating is a good action"). A rating moves the memory's valence and
-        // importance, which only decide how it ranks; the saved text, its
-        // concepts and its domain are untouched, and the next rating can move
-        // the scores back. Until 0.11 this said true, citing the spec's
-        // "destructive update" to stored state. A client that asks for
-        // confirmation on destructive tools would then have asked before every
-        // rating, taxing the one signal the ranking learns from.
+        // the weights of its associations, which decide how it ranks; the
+        // saved text, its concepts and its domain are untouched, and later
+        // ratings keep moving those scores. Until 0.11 this said true, citing
+        // the spec's "destructive update" to stored state. A client that asks
+        // for confirmation on destructive tools would then have asked before
+        // every rating, taxing the one signal the ranking learns from.
         destructiveHint: false,
         idempotentHint: false,
         openWorldHint: false,
