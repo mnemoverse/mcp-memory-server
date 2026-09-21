@@ -87,6 +87,9 @@ describe("memory_feedback takes memory_ids", () => {
       required?: string[];
     };
     expect(schema.properties).toHaveProperty("memory_ids");
+    // Neither id field can be schema-required while either name is accepted
+    // (the SDK takes a flat shape, no one-of), so the description carries it.
+    expect(schema.properties.memory_ids?.description).toMatch(/^Required/);
     expect(schema.properties.atom_ids?.description).toMatch(/deprecated/i);
     expect(schema.required ?? []).toContain("outcome");
   });

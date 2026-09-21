@@ -1156,7 +1156,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .min(1)
           .optional()
           .describe(
-            "IDs of the memories to rate: the `id:` line of each memory_read result",
+            "Required: IDs of the memories to rate, the `id:` line of each memory_read result. (Optional in this schema only while the deprecated atom_ids is still accepted in its place.)",
           ),
         atom_ids: z
           .array(z.string())
