@@ -58,11 +58,11 @@
   "homepage": "https://mnemoverse.com/docs/api/mcp-server",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
     "@types/node": "^22.15.3",
+    "typescript": "^5.8.3",
     "vitest": "^4.1.9"
   },
   "engines": {
