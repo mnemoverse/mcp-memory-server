@@ -100,7 +100,9 @@ file's tool-surface rule each change is announced here and none is silent.
   its domain are untouched, and later ratings keep moving those scores. The old
   `true` cited the spec's "destructive update" to stored state. A client that
   confirms destructive tools would have asked before every rating, taxing the
-  one signal the ranking learns from.
+  one signal the ranking learns from. Keeping every rating, so that any single
+  one can be undone, is planned in the engine; until it ships, each rating
+  replaces the previous scores.
 - **All ten tools: `openWorldHint` flips from `true` to `false`.** Every tool
   works on the user's own memory store and reaches nothing else. That the
   store sits behind an API does not make it an open world.

@@ -1190,7 +1190,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // ratings keep moving those scores. Until 0.11 this said true, citing
         // the spec's "destructive update" to stored state. A client that asks
         // for confirmation on destructive tools would then have asked before
-        // every rating, taxing the one signal the ranking learns from.
+        // every rating, taxing the one signal the ranking learns from. The
+        // engine still replaces the previous scores on each rating; keeping
+        // every rating so any one can be undone is planned there, and the
+        // 0.11 CHANGELOG entry says so until it ships.
         destructiveHint: false,
         idempotentHint: false,
         openWorldHint: false,
