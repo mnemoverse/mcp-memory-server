@@ -41,23 +41,23 @@ import {
   searchedScope,
 } from "./requests.js";
 import {
-  domainPhrase,
   exactLiteral,
   formatDomainList,
   roomNamePhrase,
   withDomainEscapeLegend,
 } from "./names.js";
-import { ApiError, NetworkError, UnreadableBodyError } from "./errors.js";
+import { ApiError } from "./errors.js";
 
 /**
  * How the tools reach the Mnemoverse API: send `path` (relative to the API base,
  * e.g. "/memory/read") and resolve to the parsed JSON body.
  *
  * Contract every implementation must keep, because the tools branch on it:
- * a non-2xx rejects with {@link ApiError} (status, core's error code and an
+ * a non-2xx rejects with `ApiError` (status, core's error code and an
  * agent-facing message), a request that never got an HTTP answer rejects with
- * {@link NetworkError}, and a 2xx whose body cannot be parsed rejects with
- * {@link UnreadableBodyError}. `options.signal` must be honoured.
+ * `NetworkError`, and a 2xx whose body cannot be parsed rejects with
+ * `UnreadableBodyError`. All three are exported from ./shared and defined in
+ * src/errors.ts. `options.signal` must be honoured.
  */
 export type ApiFetch = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 
