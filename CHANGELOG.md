@@ -64,6 +64,19 @@ git history and the GitHub releases are the record.
   passthrough keeps every path under `dist/` importable exactly as before, so a
   consumer that imported, say, `@mnemoverse/mcp-memory-server/dist/errors.js`
   is not broken by the upgrade.
+
+### Fixed
+
+- **`memory_list_recent` no longer says "More entries exist" when the feed has
+  ended.** When the engine answered with an empty `next_cursor` (`""`), the
+  paging loop correctly stopped, but the page was rendered with that empty
+  string as its cursor. The renderer reads only a missing cursor as the end, so
+  a finished feed printed "More entries exist but the continuation token could
+  not be displayed", an existence claim with nothing behind it. An empty
+  cursor now ends the page as it ends the loop, on both paths that set it. Any
+  other value the renderer cannot print still says entries exist. Found by
+  CodeRabbit in the code this release moved to `src/tools.ts`; the bug predates
+  the move.
   This change only moves code: the handlers in `src/tools.ts` are the lines that
   were in `src/index.ts`, verbatim except for indentation. No tool, parameter,
   text or annotation changes, and the stdio server behaves exactly as before.

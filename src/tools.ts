@@ -967,7 +967,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
 
         if (fits) {
           accepted.push(...batch);
-          acceptedCursor = next;
+          // An EMPTY cursor ends the feed for the page as well as for this loop.
+          // The loop below already stops on it (`position` is undefined), but
+          // the raw "" went to formatRecentPage, which reads only null as the
+          // end, so a finished feed printed "More entries exist but the
+          // continuation token could not be displayed" (CodeRabbit, #144).
+          // Only "" is normalised: any other non-null value still reaches the
+          // renderer, which says entries exist but refuses to print the token.
+          acceptedCursor = next === "" ? null : next;
           position = typeof next === "string" && next ? next : undefined;
           // No cursor: the feed ended, and the page says so. No entries: the
           // server is not advancing, so continuing would spend requests on the
@@ -1003,7 +1010,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         const narrower = Math.max(1, Math.min(Math.floor(ask / 2), batch.length - 1));
         if (batch.length <= 1 || batch.length > ask || narrower >= ask) {
           accepted.push(...batch);
-          acceptedCursor = next;
+          acceptedCursor = next === "" ? null : next; // same end-of-feed rule as above
           break;
         }
         // Re-ask the SAME position for fewer entries. `narrower < batch.length`
