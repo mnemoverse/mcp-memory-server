@@ -66,6 +66,32 @@ git history and the GitHub releases are the record.
   domain through `safeInline`) now scan `src/tools.ts` too. Scanning only the
   file the handlers left would have kept them green while guarding nothing.
 
+### Changed
+
+Three decisions about the shared MCP surface (owner, 2026-09-21). The stdio
+server and the hosted connector had answered each one opposite ways. Under this
+file's tool-surface rule each change is announced here and none is silent.
+
+- **`memory_feedback`: `destructiveHint` flips from `true` to `false`.** Only
+  deletion is destructive. A rating moves a memory's valence and importance,
+  which decide how it ranks. The saved text, its concepts and its domain are
+  untouched, and the next rating can move the scores back. The old `true`
+  cited the spec's "destructive update" to stored state. A client that
+  confirms destructive tools would have asked before every rating, taxing the
+  one signal the ranking learns from.
+- **All ten tools: `openWorldHint` flips from `true` to `false`.** Every tool
+  works on the user's own memory store and reaches nothing else. That the
+  store sits behind an API does not make it an open world.
+- **`memory_feedback` takes `memory_ids`.** Every result already calls these
+  ids memory ids, and the hosted connector named the parameter so.
+  **`atom_ids` is deprecated since 0.11 and removed in 0.12**: until then it
+  is still accepted on its own. Passing both is refused with a sentence and
+  nothing is rated, since which list was meant would be a guess. Passing
+  neither is refused the same way. The request to the API is unchanged: it
+  still sends the engine's field name, `atom_ids`. Neither name carries a
+  format or count check, because the engine validates the ids and sets no
+  maximum (ADR-025 keeps such checks with the engine).
+
 ## [0.10.2] — 2026-09-20
 
 A PATCH under this file's own rule: it changes TEXT and removes a request, and it changes no SHAPE and no ROUTING.

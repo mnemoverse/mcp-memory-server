@@ -238,6 +238,16 @@ const PROBE_TIMEOUT_MS = 4000;
 export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): void {
   const { apiFetch } = deps;
 
+  // ANNOTATIONS, decided once for every server that registers these tools
+  // (owner, 2026-09-21; the stdio server and the hosted connector had answered
+  // both opposite ways):
+  //  - openWorldHint is false on all ten. Every tool works on the user's own
+  //    memory store and reaches nothing else; that the store sits behind an API
+  //    does not make it an open world.
+  //  - destructiveHint is true only for a tool that deletes. None of these ten
+  //    does. Rating a memory moves its ranking signals and never alters or
+  //    erases what was saved (see memory_feedback).
+
   /**
    * What we know about the scope this read actually covered — a VALUE rather
    * than a sentence-or-empty-string. Costs one GET (rooms or stats, chosen by
@@ -307,7 +317,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: false,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ content, concepts, domain }) => {
@@ -557,7 +567,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ query, top_k, domain, order_by, since, until, exclude_author }) => {
@@ -844,7 +854,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ domain, since, until, exclude_author, limit, cursor }) => {
@@ -1132,13 +1142,28 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // reads. Nothing time-decays and nothing is auto-deleted: a downvoted
         // memory is OUT-RANKED, and deletion has been administrative-only since
         // 0.9.0. The replacement is the wording that release put on the README.
-        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
+        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
+      // `memory_ids` is the name (2026-09-21): every result already calls these
+      // ids memory ids, and the hosted connector named the parameter so. Both
+      // fields are optional in the schema only so the handler can refuse the
+      // two ways a call can get this wrong with a sentence instead of a
+      // validation dump. Neither carries a format or a count cap: the engine
+      // validates the ids and sets no maximum, and ADR-025 keeps such checks
+      // with the engine rather than copying them here.
       inputSchema: {
+        memory_ids: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe(
+            "IDs of the memories to rate: the `id:` line of each memory_read result",
+          ),
         atom_ids: z
           .array(z.string())
           .min(1)
+          .optional()
           .describe(
-            "IDs of memories to give feedback on (from memory_read results)",
+            "Deprecated since 0.11, removed in 0.12: atom_ids is the old name of memory_ids, still accepted on its own until then. Pass memory_ids instead.",
           ),
         outcome: z
           .number()
@@ -1151,16 +1176,51 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       annotations: {
         title: "Rate Memory Helpfulness",
         readOnlyHint: false,
-        // Feedback permanently mutates the memory's valence and importance
-        // scores on the backend — per MCP spec, that is a destructive update
-        // to the stored state (cf. ToolAnnotations.destructiveHint), even
-        // though the caller intends it as quality signal rather than delete.
-        destructiveHint: true,
+        // NOT destructive (owner, 2026-09-21: "only deletion is destructive;
+        // rating is a good action"). A rating moves the memory's valence and
+        // importance, which only decide how it ranks; the saved text, its
+        // concepts and its domain are untouched, and the next rating can move
+        // the scores back. Until 0.11 this said true, citing the spec's
+        // "destructive update" to stored state. A client that asks for
+        // confirmation on destructive tools would then have asked before every
+        // rating, taxing the one signal the ranking learns from.
+        destructiveHint: false,
         idempotentHint: false,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
-    async ({ atom_ids, outcome }) => {
+    async ({ memory_ids, atom_ids: legacyIds, outcome }) => {
+      // Both names at once is ambiguous (which list did the caller mean?), so
+      // it is refused rather than resolved by a silent preference.
+      if (memory_ids !== undefined && legacyIds !== undefined) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text:
+                "Pass the ids as memory_ids only. atom_ids is its old name, still " +
+                "accepted on its own, but both at once is ambiguous. Nothing was rated.",
+            },
+          ],
+        };
+      }
+      const atom_ids = memory_ids ?? legacyIds;
+      if (atom_ids === undefined) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text:
+                "memory_feedback needs memory_ids: the ids from the memory_read results " +
+                "you are rating. Nothing was rated.",
+            },
+          ],
+        };
+      }
+      // `atom_ids` below is the ENGINE's field name for the same list; the
+      // wire contract is unchanged.
       const r = await apiFetch<{ updated_count?: number }>("/memory/feedback", {
         method: "POST",
         body: JSON.stringify({ atom_ids, outcome }),
@@ -1335,7 +1395,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async () => {
@@ -1458,7 +1518,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: false,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ name, description }) => {
@@ -1535,7 +1595,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: false,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ room_id, scope, expires_in_days }) => {
@@ -1579,7 +1639,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async ({ code }) => {
@@ -1642,7 +1702,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async () => {
@@ -1749,7 +1809,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     async () => {

@@ -395,7 +395,7 @@ What each tool sends:
 | `memory_write` | the `content`, `concepts`, and `domain` you pass |
 | `memory_read` | the `query`, plus any filters: `domain`, `since`/`until`, `exclude_author`, `top_k`, `order_by` |
 | `memory_list_recent` | the feed filters: `domain`, `since`/`until`, `exclude_author`, `limit`, `cursor` |
-| `memory_feedback` | the `atom_ids` being rated and the `outcome` score |
+| `memory_feedback` | the `memory_ids` being rated (sent to the API as `atom_ids`) and the `outcome` score |
 | `memory_create_room` | the room `name` and `description` |
 | `memory_invite_to_room` | the `room_id`, invite `scope`, and expiry |
 | `memory_join_room` | the invite `code` |
