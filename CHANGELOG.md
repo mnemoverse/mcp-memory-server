@@ -106,8 +106,9 @@ file's tool-surface rule each change is announced here and none is silent.
 - **All ten tools: `openWorldHint` flips from `true` to `false`.** Every tool
   works on the user's own memory store and reaches nothing else. That the
   store sits behind an API does not make it an open world.
-- **`memory_feedback` takes `memory_ids`.** Every result already calls these
-  ids memory ids, and the hosted connector named the parameter so.
+- **`memory_feedback` takes `memory_ids`.** The tool rates memories, which is
+  what every result is; an atom is the engine's word for its smallest unit.
+  The hosted connector already names the parameter so.
   **`atom_ids` is deprecated since 0.11 and removed in 0.12**: until then it
   is still accepted on its own. Passing both is refused with a sentence and
   nothing is rated, since which list was meant would be a guess. Passing
@@ -117,7 +118,8 @@ file's tool-surface rule each change is announced here and none is silent.
   maximum (ADR-025 keeps such checks with the engine). The one check here is
   that the list is not empty, since rating nothing is not a call. `llms.txt`,
   which agents read to learn the tools, names `memory_ids` too, and a test now
-  holds every tool's parameter list there to the schema the server registers.
+  holds every parameter listed there, with its type and whether it is
+  required, to the schema the server registers.
 
 ## [0.10.2] — 2026-09-20
 

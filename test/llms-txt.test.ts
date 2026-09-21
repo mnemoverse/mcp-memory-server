@@ -28,9 +28,31 @@ import { startMemoryServer, type Harness } from "./harness.js";
 
 const llmsTxt = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
 
-/** Parameter names listed under each `### tool` heading, "since / until" split in two. */
-function listedParameters(): Map<string, string[]> {
-  const byTool = new Map<string, string[]>();
+interface Listed {
+  name: string;
+  type: string;
+  required: boolean;
+}
+
+// The type words llms.txt uses, as the JSON Schema type each one stands for.
+const LISTED_TYPES: Record<string, string> = {
+  string: "string",
+  "string[]": "array",
+  integer: "integer",
+  number: "number",
+  "ISO-8601 string": "string",
+  "ISO-8601 strings": "string",
+};
+
+/**
+ * Every parameter bullet under each `### tool` heading, read as
+ * `- name (type, required|optional[, ...]): ...`; "since / until" is two
+ * parameters sharing one bullet. A bullet that does not fit that shape fails
+ * here rather than being skipped, so the file cannot drift into a form this
+ * test no longer reads.
+ */
+function listedParameters(): Map<string, Listed[]> {
+  const byTool = new Map<string, Listed[]>();
   let tool: string | null = null;
   for (const line of llmsTxt.split("\n")) {
     const heading = line.match(/^### (\w+)/);
@@ -40,8 +62,12 @@ function listedParameters(): Map<string, string[]> {
     } else if (line.startsWith("## ")) {
       tool = null;
     } else if (tool && line.startsWith("- ")) {
-      const names = line.slice(2).split(" (")[0];
-      byTool.get(tool)!.push(...names.split(" / "));
+      const bullet = line.match(/^- ([\w /]+?) \(([^,)]+), (required|optional)[,)]/);
+      expect(bullet, `unreadable parameter bullet under ${tool}: ${line}`).toBeTruthy();
+      const [, names, type, requirement] = bullet!;
+      for (const name of names.split(" / ")) {
+        byTool.get(tool)!.push({ name, type, required: requirement === "required" });
+      }
     }
   }
   return byTool;
@@ -72,19 +98,34 @@ describe("llms.txt tool parameters", () => {
     await mcp.close();
   });
 
-  it("lists each tool's current parameters, and no deprecated one", async () => {
+  it("lists each tool's current parameters, with their type and requirement", async () => {
     const { tools } = await mcp.client.listTools();
     const listed = listedParameters();
     expect([...listed.keys()].sort()).toEqual(tools.map((t) => t.name).sort());
     for (const tool of tools) {
       const properties = (tool.inputSchema.properties ?? {}) as Record<
         string,
-        { description?: string }
+        { type?: string; description?: string }
       >;
-      const current = Object.keys(properties).filter(
-        (name) => !/^Deprecated/.test(properties[name].description ?? ""),
-      );
-      expect(listed.get(tool.name)?.sort(), tool.name).toEqual(current.sort());
+      const schemaRequired = new Set(tool.inputSchema.required ?? []);
+      // A deprecated alias is accepted but not advertised. A parameter is
+      // required when the schema says so or, for memory_ids, whose alias keeps
+      // it optional in the schema, when its description opens with "Required".
+      const expected = Object.keys(properties)
+        .filter((name) => !/^Deprecated/.test(properties[name].description ?? ""))
+        .map((name) => ({
+          name,
+          type: properties[name].type,
+          required:
+            schemaRequired.has(name) || /^Required/.test(properties[name].description ?? ""),
+        }));
+      const actual = (listed.get(tool.name) ?? []).map((p) => ({
+        name: p.name,
+        type: LISTED_TYPES[p.type] ?? `unknown type word "${p.type}"`,
+        required: p.required,
+      }));
+      const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+      expect(actual.sort(byName), tool.name).toEqual(expected.sort(byName));
     }
   });
 });

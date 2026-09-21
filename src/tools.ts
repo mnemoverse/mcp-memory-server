@@ -1150,8 +1150,9 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // memory is OUT-RANKED, and deletion has been administrative-only since
         // 0.9.0. The replacement is the wording that release put on the README.
         "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
-      // `memory_ids` is the name (2026-09-21): every result already calls these
-      // ids memory ids, and the hosted connector named the parameter so. Both
+      // `memory_ids` is the name (2026-09-21): the tool rates memories, which
+      // is what every result is (an atom is the engine's word for its smallest
+      // unit), and the hosted connector already names the parameter so. Both
       // fields are optional in the schema only so the handler can refuse the
       // two ways a call can get this wrong with a sentence instead of a
       // validation dump. Neither carries a format or a count cap: the engine
