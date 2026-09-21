@@ -23,9 +23,29 @@
  */
 
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { startMemoryServer, type Harness } from "./harness.js";
 
 const llmsTxt = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
+
+/** Parameter names listed under each `### tool` heading, "since / until" split in two. */
+function listedParameters(): Map<string, string[]> {
+  const byTool = new Map<string, string[]>();
+  let tool: string | null = null;
+  for (const line of llmsTxt.split("\n")) {
+    const heading = line.match(/^### (\w+)/);
+    if (heading) {
+      tool = heading[1];
+      byTool.set(tool, []);
+    } else if (line.startsWith("## ")) {
+      tool = null;
+    } else if (tool && line.startsWith("- ")) {
+      const names = line.slice(2).split(" (")[0];
+      byTool.get(tool)!.push(...names.split(" / "));
+    }
+  }
+  return byTool;
+}
 
 describe("llms.txt install command", () => {
   it("pins @latest, matching every other install surface in this repo", () => {
@@ -35,5 +55,36 @@ describe("llms.txt install command", () => {
     // add via CLI"), minus the `claude mcp add` wrapper — llms.txt describes
     // the bare npx invocation, not a client-specific config file.
     expect(commandLine).toBe("Command: npx -y @mnemoverse/mcp-memory-server@latest");
+  });
+});
+
+// Found by Copilot on #145: memory_feedback's parameter became memory_ids in
+// the tool schema while this file still told agents atom_ids was required, so
+// anything learning the surface from here kept sending the deprecated name.
+// Being hand-written, the file drifts silently unless a test holds it to the
+// schema the server actually registers.
+describe("llms.txt tool parameters", () => {
+  let mcp: Harness;
+  beforeAll(async () => {
+    mcp = await startMemoryServer();
+  });
+  afterAll(async () => {
+    await mcp.close();
+  });
+
+  it("lists each tool's current parameters, and no deprecated one", async () => {
+    const { tools } = await mcp.client.listTools();
+    const listed = listedParameters();
+    expect([...listed.keys()].sort()).toEqual(tools.map((t) => t.name).sort());
+    for (const tool of tools) {
+      const properties = (tool.inputSchema.properties ?? {}) as Record<
+        string,
+        { description?: string }
+      >;
+      const current = Object.keys(properties).filter(
+        (name) => !/^Deprecated/.test(properties[name].description ?? ""),
+      );
+      expect(listed.get(tool.name)?.sort(), tool.name).toEqual(current.sort());
+    }
   });
 });

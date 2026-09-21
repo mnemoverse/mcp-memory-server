@@ -113,7 +113,9 @@ file's tool-surface rule each change is announced here and none is silent.
   still sends the engine's field name, `atom_ids`. Neither name checks the id
   format or caps the count, because the engine validates the ids and sets no
   maximum (ADR-025 keeps such checks with the engine). The one check here is
-  that the list is not empty, since rating nothing is not a call.
+  that the list is not empty, since rating nothing is not a call. `llms.txt`,
+  which agents read to learn the tools, names `memory_ids` too, and a test now
+  holds every tool's parameter list there to the schema the server registers.
 
 ## [0.10.2] — 2026-09-20
 
