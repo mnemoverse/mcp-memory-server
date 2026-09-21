@@ -25,12 +25,15 @@ being told. 0.8.1 adds such probes; the disclosure is in its entry below.
 **What a MINOR may do to the tool surface** (stated 2026-09-13, after a reader
 asked to diff a saved `tools/list` against a live one): add tools and add
 annotation fields, each with its own line here. It may not remove or rename a
-tool, and it may not drop, rename or silently flip a declared annotation field.
-A removal or a rename, of a tool or of an annotation field, is announced one
-MINOR ahead (the tool stays and its description says `deprecated since x.y,
-removed in x.z`; a rename also names the old and the new name) and lands only in
-the announced version. A renamed annotation field is declared under both names
-until then, since a MINOR may add a field but not remove one. `tools/list` is therefore frozen per released version, and
+tool or a tool's input parameter, and it may not drop, rename or silently flip a
+declared annotation field. A removal or a rename, of a tool, a parameter or an
+annotation field, is announced one MINOR ahead (the tool or parameter stays and
+its description says `deprecated since x.y, removed in x.z`; a rename also names
+the old and the new name) and lands only in the announced version. A renamed
+parameter is accepted under both names until then, and a renamed annotation
+field is declared under both names until then, since a MINOR may add a field but
+not remove one. (Parameters were added to this rule on 2026-09-21, with the
+first parameter rename, so that it and the README say the same thing.) `tools/list` is therefore frozen per released version, and
 two servers of one version that differ are a bug. The README section "Tool
 surface stability" is the reader-facing statement of the same rule.
 
@@ -87,7 +90,7 @@ git history and the GitHub releases are the record.
 ### Changed
 
 Three decisions about the shared MCP surface (owner, 2026-09-21). The stdio
-server and the hosted connector had answered each one opposite ways. Under this
+server and the hosted connector had answered each one in opposite ways. Under this
 file's tool-surface rule each change is announced here and none is silent.
 
 - **`memory_feedback`: `destructiveHint` flips from `true` to `false`.** Only
