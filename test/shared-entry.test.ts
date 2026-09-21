@@ -74,6 +74,23 @@ describe("the shared entry point", () => {
     await server.close();
   });
 
+  it("adding an exports map narrows nothing that resolved before", () => {
+    // Until 0.11 the package had no "exports" field, so every file under dist/
+    // was importable by path. An exports map without a dist/* passthrough would
+    // turn `@mnemoverse/mcp-memory-server/dist/errors.js` into
+    // ERR_PACKAGE_PATH_NOT_EXPORTED for anyone who used it: a breaking change
+    // hidden in a refactor (review finding on #144). The map is additive only.
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      exports: Record<string, unknown>;
+      main: string;
+      bin: Record<string, string>;
+    };
+    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./dist/*", "./package.json", "./shared"]);
+    expect(pkg.exports["./dist/*"]).toBe("./dist/*");
+    expect(pkg.main).toBe("./dist/index.js");
+    expect(pkg.bin["mcp-memory-server"]).toBe("./dist/index.js");
+  });
+
   it("starts nothing on import: neither the entry nor the tools import src/index.ts", () => {
     // A "never" that no call can observe, so it is checked on the source. The
     // main entry opens a stdio transport when imported without
