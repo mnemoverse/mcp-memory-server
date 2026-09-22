@@ -27,6 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job only reads the checkout and a public document; it needs no
+          # git credentials (same as verify-configs.yml).
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

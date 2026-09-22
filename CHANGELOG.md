@@ -96,9 +96,8 @@ git history and the GitHub releases are the record.
 - **`memory_invite_to_room` takes `max_uses`.** One invite can now let several
   people join; without it an invite stays single-use, as before, and the
   request is unchanged. The hosted connector already offered this, and the
-  description here called every invite "one-time". Only the floor is checked
-  here (at least 1); the engine sets the ceiling, and its refusal is passed
-  on as an argument error. The description, `llms.txt`, `llms-install.md`,
+  description here called every invite "one-time". Both ends come from core's contract (see the
+  limits entry above): at least 1, at most 1000. The description, `llms.txt`, `llms-install.md`,
   the README table and the generated `manifest.json` say single-use by
   default. Core also returns a `next_steps` text on room create and join; it
   is still not shown, because it is written for REST callers, tells a
@@ -141,8 +140,11 @@ git history and the GitHub releases are the record.
   nobody checks drifts, and four had:
   - **`memory_read`'s `top_k` accepts up to 500**, the engine's ceiling since
     June, instead of refusing anything over 50 here.
-  - **Its description says the default is 10**, which is what an omitted
-    `top_k` actually gets. It said 5.
+  - **Its description now says whose default 5 is.** This server fills in 5
+    when the caller omits `top_k`, so the engine's own default of 10 never
+    applies; the description said "default: 5" without saying which it was.
+    A first draft of this change made the description say 10 and made it
+    false; Copilot caught it on #151.
   - **`memory_write`'s `domain` is capped at 100 characters** and **`concepts`
     at 256 items**, as the engine caps them, so an over-long value is refused
     here with the field named rather than as a 422 from the API. Only the

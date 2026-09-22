@@ -21,7 +21,7 @@
  * deployment). The contract is public, so the check needs no credential.
  */
 
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const URL_ = process.env.CORE_OPENAPI_URL ?? "https://core.mnemoverse.com/openapi.json";
@@ -58,10 +58,24 @@ function flatten(schema) {
   return flat;
 }
 
+/** Same bound as the repo's other network check (scripts/check-release-sync.mjs). */
+const TIMEOUT_MS = 20_000;
+
 async function fetchContract() {
-  const res = await fetch(URL_, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`${URL_} answered ${res.status}`);
-  return res.json();
+  // A deadline, so a connection that is accepted and then stalls cannot hold
+  // the scheduled runner until GitHub's job timeout.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(URL_, {
+      signal: ctrl.signal,
+      headers: { accept: "application/json", "user-agent": "mnemoverse-limits-check" },
+    });
+    if (!res.ok) throw new Error(`${URL_} answered ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function collect(contract) {
@@ -138,6 +152,11 @@ if (process.argv.includes("--check")) {
     process.exit(1);
   }
 } else {
-  writeFileSync(OUT, rendered, "utf8");
+  // Written through a temporary file in the same directory and renamed, so an
+  // interrupted run cannot leave a half-written src/limits.ts behind
+  // (CodeRabbit on #151).
+  const tmp = `${OUT}.tmp`;
+  writeFileSync(tmp, rendered, "utf8");
+  renameSync(tmp, OUT);
   console.log(`Wrote src/limits.ts from ${URL_} (core ${version})`);
 }

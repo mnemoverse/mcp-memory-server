@@ -542,7 +542,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .max(CORE_LIMITS.readTopK.maximum)
           .optional()
           .describe(
-            "Requested number of results (default: 10, the engine's own). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
+            "Requested number of results (default: 5, what this server asks for when you omit it; the engine's own default of 10 never applies, because the field is always sent). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
           ),
         domain: z
           .string()

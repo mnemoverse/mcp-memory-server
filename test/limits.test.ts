@@ -7,9 +7,9 @@
  *
  * What the drift cost before 0.11: `top_k` refused anything over 50 while the
  * engine had accepted 500 since June; `domain` had no length here while the
- * engine rejects over 100 characters; `concepts` had no count; `max_uses` had
- * no ceiling; and the `top_k` description promised a default of 5 where the
- * engine uses 10.
+ * engine rejects over 100 characters; `concepts` had no count; and `max_uses`
+ * had no ceiling. The `top_k` default stays this server's own 5, which is what
+ * it sends; the contract's 10 is recorded as the engine's.
  *
  * The other half of the chain is `npm run limits:check`, which refetches the
  * contract and fails if this file's values are no longer what core publishes.
@@ -19,6 +19,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_CONTRACT, CORE_LIMITS } from "../src/limits.js";
+import { readRequestBody } from "../src/requests.js";
 import { startMemoryServer, type Harness } from "./harness.js";
 
 interface JsonSchemaField {
@@ -97,7 +98,14 @@ describe("every bounded field carries core's limit", () => {
     expect(fields.memory_read.top_k.maximum).toBe(CORE_LIMITS.readTopK.maximum);
   });
 
-  it("states the engine's own default for top_k, which is what an omitted field gets", async () => {
+  // The description used to say "default: 5" and that is what the server
+  // sends: readRequestBody fills in 5 when the caller omits the field
+  // (src/requests.ts), so the engine's own default never applies. A first
+  // draft of this slice "fixed" the description to the contract's 10 and made
+  // it false; Copilot caught it. The number the caller sees must be the one
+  // that goes on the wire, and the contract's default is recorded next to it
+  // as the engine's, not as ours.
+  it("states the default this server actually sends, not the engine's", async () => {
     const { tools } = await mcp.client.listTools();
     const description = (
       tools.find((t) => t.name === "memory_read")?.inputSchema.properties as Record<
@@ -105,7 +113,12 @@ describe("every bounded field carries core's limit", () => {
         { description?: string }
       >
     ).top_k.description;
-    expect(description).toContain(`default: ${CORE_LIMITS.readTopK.default}`);
+    expect(description).toContain("default: 5");
+    expect(description).toContain(`the engine's own default of ${CORE_LIMITS.readTopK.default}`);
+  });
+
+  it("and sends exactly that when the caller omits top_k", () => {
+    expect(readRequestBody({ query: "q" }).top_k).toBe(5);
   });
 
   it("records where the limits came from", () => {

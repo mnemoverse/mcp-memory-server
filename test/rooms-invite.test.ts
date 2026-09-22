@@ -4,8 +4,8 @@
  *
  * max_uses. The hosted connector let an owner mint a multi-use invite and the
  * package did not; its description called every invite "one-time". Core takes
- * 1 to 1000, default 1 (CreateInviteRequestSchema). The package checks only
- * the floor and leaves the ceiling to core (ADR-025), whose 422 is passed on.
+ * 1 to 1000, default 1 (CreateInviteRequestSchema). Both ends come from that
+ * contract now (src/limits.ts), so a value past the ceiling is refused here.
  * The first two tests mirror the connector's rooms-tools.test.ts: the exact
  * request shape, and a description that mentions max_uses and no longer says
  * "one-time".
@@ -82,7 +82,7 @@ describe("memory_invite_to_room takes max_uses", () => {
       room_id: "room_01ABC",
       max_uses: CORE_LIMITS.inviteMaxUses.maximum,
     });
-    expect(mcp.requestTo(INVITE).body).toEqual({ max_uses: 1000 });
+    expect(mcp.requestTo(INVITE).body).toEqual({ max_uses: CORE_LIMITS.inviteMaxUses.maximum });
   });
 
   it("describes the invite as single-use by default, with max_uses for more", async () => {
