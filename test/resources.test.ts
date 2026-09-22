@@ -133,10 +133,18 @@ describe("what this package adds", () => {
     mcp.on(GET_ATOM, reply);
     const err = (await mcp.client
       .readResource({ uri: `memory://item/${ID}` })
-      .catch((e: unknown) => e)) as { code?: number; message: string };
+      .catch((e: unknown) => e)) as { code?: number; message: string; isError?: unknown };
     expect(err.code).toBe(-32603);
     expect(err.message).toContain("The memory came back in a shape this client does not recognise");
     expect(err.message).toContain("not evidence that it is empty or gone");
+    // The deliberate asymmetry (S2): the five tools' same unreadable-body
+    // sentence now comes back as `isError: true` on a RESOLVED call, because a
+    // declared outputSchema leaves them no honest structuredContent to pair
+    // with a text-only success. A resource has no outputSchema and no
+    // structuredContent to withhold, so nothing forces that change here. This
+    // read still fails the JSON-RPC call itself (an McpError), never a
+    // resolved result carrying `isError`.
+    expect(err.isError).toBeUndefined();
   });
 
   it("falls back to the requested id only when the engine omits its own", async () => {

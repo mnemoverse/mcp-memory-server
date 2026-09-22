@@ -215,6 +215,18 @@ file's tool-surface rule each change is announced here and none is silent.
   rooms, one key for Claude, Cursor & ChatGPT." Rooms have shipped for several releases, and
   the line that directories such as Glama and PulseMCP show did not mention
   them. It stays under the registry's 100-character limit (97). Text only.
+- **`memory_write`, `memory_read`, `memory_list_recent`, `memory_list_rooms` and
+  `vault_list`: a 2xx body this client cannot read now comes back as a tool
+  error, not a text-only reply.** The sentence itself is unchanged, the one
+  these five already used for "this client cannot read the answer." What
+  changes is the shape: once a tool declares an output schema, a non-error
+  result needs structuredContent to go with its text, and there is no honest
+  structuredContent for a body this client could not read (an empty shape such
+  as `{items: []}` would claim an absence the body never stated). `isError` is
+  the one shape the SDK exempts from that requirement, so it is what these five
+  call sites now carry. The `memory://item/{memory_id}` resource keeps the same
+  sentence without `isError`: it has no output schema to satisfy, and an
+  unreadable body there already fails the read itself.
 
 ## [0.10.2] — 2026-09-20
 

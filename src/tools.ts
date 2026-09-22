@@ -127,6 +127,16 @@ function capResult(
  * leaves the caller merely uninformed, whereas a WRITE that could not be read
  * leaves an operation whose outcome is unknown, and the caller must be told not
  * to report either outcome to the user.
+ *
+ * Carries `isError: true`, not a text-only success. Once a tool declares an
+ * `outputSchema`, the SDK's `validateToolOutput` (see the comment on
+ * `structured()` below) rejects a non-error result that has no
+ * `structuredContent`, and there is no honest `structuredContent` for "this
+ * client could not read the body": an empty shape such as `{items: []}` would
+ * make exactly the absence claim this sentence exists to avoid. `isError` is
+ * the one shape the SDK exempts from that check, so it is the shape this
+ * reply must take (pinned against the installed SDK in
+ * test/structured-output.test.ts).
  */
 function unreadableAnswerReply(
   subject: string,
@@ -141,6 +151,7 @@ function unreadableAnswerReply(
         text: unreadableAnswerText(subject, notA, absence, extra),
       },
     ],
+    isError: true as const,
   };
 }
 

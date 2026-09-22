@@ -34,6 +34,7 @@ import {
   NO_MATCH_SCOPED_HINT,
   SERVER_INSTRUCTIONS,
 } from "../src/teaching.js";
+import { unreadableAnswerText } from "../src/tools.js";
 
 let mcp: Harness;
 
@@ -648,11 +649,15 @@ describe("an unreadable or unreachable probe is reported as unknown, not as abse
     // x : []` turned a contract violation into a claim about the account.
     mcp.on(ROOMS, { nope: true });
 
-    const text = await mcp.callText("memory_list_rooms");
+    // isError, not a text-only success: an unreadable body under a declared
+    // outputSchema has no honest structuredContent, so this reply is the shape
+    // the SDK exempts from that requirement. See test/harness.ts callText.
+    const result = await mcp.call("memory_list_rooms");
 
-    expect(text).not.toContain("You have no shared rooms yet");
-    expect(text).toMatch(/shape this client does not recognise/);
-    expect(text).toMatch(/not evidence that you have none/);
+    expect(result.isError).toBe(true);
+    expect(result.text).not.toContain("You have no shared rooms yet");
+    expect(result.text).toMatch(/shape this client does not recognise/);
+    expect(result.text).toMatch(/not evidence that you have none/);
   });
 
   it("memory_list_rooms still says so when the list is genuinely empty", async () => {
@@ -1478,21 +1483,25 @@ describe("a result body this client cannot read is never an absence claim", () =
     for (const payload of [{}, { nope: true }, { items: "many" }, null] as Route[]) {
       mcp.reset().on(READ, payload);
 
-      const text = await mcp.callText("memory_read", { query: "anything" });
+      // isError, not a text-only success. See the comment on
+      // unreadableAnswerReply (src/tools.ts): a declared outputSchema leaves no
+      // honest structuredContent for a body this client could not read.
+      const result = await mcp.call("memory_read", { query: "anything" });
       const label = JSON.stringify(payload);
 
-      expect(text, label).toContain(
+      expect(result.isError, label).toBe(true);
+      expect(result.text, label).toContain(
         "The search result came back in a shape this client does not recognise",
       );
-      expect(text, label).toContain("not evidence that nothing matched");
+      expect(result.text, label).toContain("not evidence that nothing matched");
       // The tail must not attribute the unreadable 200 to "the memory service"
       // — this client cannot establish who answered: a gateway, a proxy, or a
       // mis-set MNEMOVERSE_API_URL produces the same 200. The shared builder
       // means this pin covers the feed and vault_list too.
-      expect(text, label).toContain("whatever answered this call");
-      expect(text, label).not.toContain("the memory service is answering");
-      expect(text, label).not.toContain(NO_MATCH_MESSAGE);
-      expect(text, label).not.toContain("nothing has been saved yet");
+      expect(result.text, label).toContain("whatever answered this call");
+      expect(result.text, label).not.toContain("the memory service is answering");
+      expect(result.text, label).not.toContain(NO_MATCH_MESSAGE);
+      expect(result.text, label).not.toContain("nothing has been saved yet");
       // And no probes: there is no zero-result to diagnose. (With no stub for
       // stats or rooms, a probe would also fail callText as unrouted.)
       expect(probed(), label).toEqual([READ]);
@@ -1502,27 +1511,29 @@ describe("a result body this client cannot read is never an absence claim", () =
   it("memory_read: filters do not turn an unreadable body into 'nothing matches the filters'", async () => {
     mcp.on(READ, { nope: true });
 
-    const text = await mcp.callText("memory_read", {
+    const result = await mcp.call("memory_read", {
       query: "anything",
       since: "2020-01-01T00:00:00Z",
     });
 
-    expect(text).toContain("shape this client does not recognise");
-    expect(text).not.toContain("matches within the given time/author filters");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("shape this client does not recognise");
+    expect(result.text).not.toContain("matches within the given time/author filters");
   });
 
   it("memory_list_recent: a 200 with no items array is not an empty feed", async () => {
     for (const payload of [{}, { nope: true }] as Route[]) {
       mcp.reset().on(RECENT, payload);
 
-      const text = await mcp.callText("memory_list_recent", {});
+      const result = await mcp.call("memory_list_recent", {});
       const label = JSON.stringify(payload);
 
-      expect(text, label).toContain(
+      expect(result.isError, label).toBe(true);
+      expect(result.text, label).toContain(
         "The recent-entries feed came back in a shape this client does not recognise",
       );
-      expect(text, label).toContain("not evidence that there is nothing to list");
-      expect(text, label).not.toMatch(/No memories in .* yet/);
+      expect(result.text, label).toContain("not evidence that there is nothing to list");
+      expect(result.text, label).not.toMatch(/No memories in .* yet/);
       expect(probed(), label).toEqual([RECENT]);
     }
   });
@@ -1530,13 +1541,14 @@ describe("a result body this client cannot read is never an absence claim", () =
   it("memory_list_recent: a watermark does not turn an unreadable body into 'nothing new'", async () => {
     mcp.on(RECENT, { nope: true });
 
-    const text = await mcp.callText("memory_list_recent", {
+    const result = await mcp.call("memory_list_recent", {
       since: "2020-01-01T00:00:00Z",
     });
 
-    expect(text).toContain("shape this client does not recognise");
-    expect(text).not.toContain("Nothing new");
-    expect(text).not.toContain("since your watermark");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("shape this client does not recognise");
+    expect(result.text).not.toContain("Nothing new");
+    expect(result.text).not.toContain("since your watermark");
   });
 
   it("vault_list: a 200 with no secrets array is not an empty vault", async () => {
@@ -1546,14 +1558,15 @@ describe("a result body this client cannot read is never an absence claim", () =
     for (const payload of [{}, { nope: true }, { secrets: "three" }] as Route[]) {
       mcp.reset().on(VAULT, payload);
 
-      const text = await mcp.callText("vault_list");
+      const result = await mcp.call("vault_list");
       const label = JSON.stringify(payload);
 
-      expect(text, label).toContain(
+      expect(result.isError, label).toBe(true);
+      expect(result.text, label).toContain(
         "The secret list came back in a shape this client does not recognise",
       );
-      expect(text, label).toContain("not evidence that none are stored");
-      expect(text, label).not.toContain("No secrets are stored");
+      expect(result.text, label).toContain("not evidence that none are stored");
+      expect(result.text, label).not.toContain("No secrets are stored");
     }
   });
 
@@ -1574,21 +1587,22 @@ describe("a result body this client cannot read is never an absence claim", () =
     ] as Route[]) {
       mcp.reset().on(WRITE, payload);
 
-      const text = await mcp.callText("memory_write", { content: "x" });
+      const result = await mcp.call("memory_write", { content: "x" });
       const label = JSON.stringify(payload);
 
-      expect(text, label).toContain(
+      expect(result.isError, label).toBe(true);
+      expect(result.text, label).toContain(
         "The write result came back in a shape this client does not recognise",
       );
-      expect(text, label).toContain("not confirmation that the memory was stored");
-      expect(text, label).toContain("not evidence that it was refused");
+      expect(result.text, label).toContain("not confirmation that the memory was stored");
+      expect(result.text, label).toContain("not evidence that it was refused");
       // Neither verdict may be asserted, and the fabricated cause is gone.
-      expect(text, label).not.toContain("NOT STORED");
-      expect(text, label).not.toContain("nothing was saved");
-      expect(text, label).not.toContain("near-duplicate is refused");
-      expect(text, label).not.toContain("Stored (importance");
+      expect(result.text, label).not.toContain("NOT STORED");
+      expect(result.text, label).not.toContain("nothing was saved");
+      expect(result.text, label).not.toContain("near-duplicate is refused");
+      expect(result.text, label).not.toContain("Stored (importance");
       // Same tail as the list surfaces: this client cannot name who answered.
-      expect(text, label).toContain("whatever answered this call");
+      expect(result.text, label).toContain("whatever answered this call");
     }
   });
 
@@ -1597,10 +1611,11 @@ describe("a result body this client cannot read is never an absence claim", () =
     // refused it".
     mcp.on(WRITE, noContent());
 
-    const text = await mcp.callText("memory_write", { content: "x" });
+    const result = await mcp.call("memory_write", { content: "x" });
 
-    expect(text).toContain("shape this client does not recognise");
-    expect(text).not.toContain("NOT STORED");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("shape this client does not recognise");
+    expect(result.text).not.toContain("NOT STORED");
   });
 
   it("memory_write: an explicit stored:false keeps the refusal AND its mechanism", async () => {
@@ -1623,6 +1638,80 @@ describe("a result body this client cannot read is never an absence claim", () =
     mcp.reset().on(RECENT, { items: [] }).on(ROOMS, []);
     expect(await mcp.callText("memory_list_recent", {})).toContain(
       "No memories in your own domains yet.",
+    );
+  });
+});
+
+/**
+ * One test per unreadableAnswerReply call site, asserting the two things that
+ * changed and the one thing that did not: `isError` is now true, and the
+ * sentence is the exact string `unreadableAnswerText` builds, byte-identical
+ * to what these five tools said before this release.
+ */
+describe("an unreadable answer is a tool error, byte-identical text", () => {
+  it("memory_write: the reply is isError with the unchanged sentence", async () => {
+    mcp.on(WRITE, { ok: true });
+
+    const result = await mcp.call("memory_write", { content: "x" });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      unreadableAnswerText(
+        "The write result",
+        "confirmation that the memory was stored",
+        "it was refused",
+        " Whether the content reached memory is unknown from here — report the" +
+          " outcome of the RETRY, not of this call, and do not tell the user it" +
+          " was saved or that it was rejected.",
+      ),
+    );
+  });
+
+  it("memory_read: the reply is isError with the unchanged sentence", async () => {
+    mcp.on(READ, { ok: true });
+
+    const result = await mcp.call("memory_read", { query: "anything" });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      unreadableAnswerText("The search result", "a list of matches", "nothing matched"),
+    );
+  });
+
+  it("memory_list_recent: the reply is isError with the unchanged sentence", async () => {
+    mcp.on(RECENT, { ok: true });
+
+    const result = await mcp.call("memory_list_recent", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      unreadableAnswerText(
+        "The recent-entries feed",
+        "an empty feed",
+        "there is nothing to list",
+      ),
+    );
+  });
+
+  it("memory_list_rooms: the reply is isError with the unchanged sentence", async () => {
+    mcp.on(ROOMS, { ok: true });
+
+    const result = await mcp.call("memory_list_rooms");
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      unreadableAnswerText("The room list", "a list of your rooms", "you have none"),
+    );
+  });
+
+  it("vault_list: the reply is isError with the unchanged sentence", async () => {
+    mcp.on(VAULT, { ok: true });
+
+    const result = await mcp.call("vault_list");
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      unreadableAnswerText("The secret list", "a list of your Vault secrets", "none are stored"),
     );
   });
 });
