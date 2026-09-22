@@ -272,7 +272,7 @@ If it doesn't remember: check that the client was fully restarted and the config
 | `memory_feedback` | Rate memories as helpful or not (improves future recall) |
 | `memory_stats` | Check how many memories stored, which domains exist |
 | `memory_create_room` | Create a shared memory room; its address works as a `domain` on write/read |
-| `memory_invite_to_room` | Mint a one-time invite (code + link) for a room you own |
+| `memory_invite_to_room` | Mint an invite (code + link) for a room you own; single-use unless `max_uses` allows more |
 | `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
 | `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
 | `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |

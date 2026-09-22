@@ -68,12 +68,13 @@ Parameters:
 Returns: The room's address, and its room_id for memory_invite_to_room.
 
 ### memory_invite_to_room
-Mint a one-time invite for a room you own and get a ready-to-forward message for the person you want to add.
+Mint an invite for a room you own and get a ready-to-forward message for the person you want to add. Single-use by default; max_uses allows more.
 
 Parameters:
 - room_id (string, required): The room's id (room_...), from memory_create_room.
 - scope (string, optional): "read" or "read_write" (default read_write).
 - expires_in_days (integer, optional): Days until the invite expires, 1-90 (default 7).
+- max_uses (integer, optional): How many people may join with this invite (default 1, single-use).
 
 Returns: A forwardable invite message.
 

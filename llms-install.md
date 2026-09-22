@@ -66,7 +66,7 @@ Ten tools. The same set is served by the hosted endpoint, so memories written he
 | `memory_feedback` | Rate recalled memories as helpful or not; the rating changes the order of the next recall |
 | `memory_stats` | Count of stored memories and the list of domains |
 | `memory_create_room` | Create a shared memory room; its address is used as `domain` on write and read |
-| `memory_invite_to_room` | Mint a one-time invite (code and link) for a room the user owns |
+| `memory_invite_to_room` | Mint an invite (code and link) for a room the user owns; single-use unless `max_uses` allows more |
 | `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
 | `memory_list_rooms` | List rooms the user owns or joined, with each room's address |
 | `vault_list` | List Vault secrets by alias and purpose; the secret value is never returned |

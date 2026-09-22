@@ -1565,6 +1565,16 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
   );
 
   // --- Tool: memory_create_room ---
+  //
+  // CORE'S `next_steps` IS NOT PRINTED, on purpose (checked 2026-09-22, step
+  // 3c). Core returns it on create and on join, and the closed
+  // mnemoverse-mcp-remote#29 proposed echoing it. It is written for REST
+  // callers ("POST /api/v1/memory/write ... mint an invite with POST
+  // .../invites"), which would steer a model toward calls it does not have;
+  // on join it tells every member to write, a read-only one included; and it
+  // carries the owner-chosen room name raw, which this file prints only
+  // through roomNamePhrase (CN-032). The usage lines below say the same
+  // things in MCP terms, scope-gated on join.
 
   server.registerTool(
     "memory_create_room",
@@ -1641,7 +1651,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
     "memory_invite_to_room",
     {
       description:
-        "Mint a one-time invite for a room you own and get a ready-to-forward message. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use after memory_create_room, or whenever the user says 'invite <someone>' to an existing room.",
+        "Mint an invite for a room you own and get a ready-to-forward message. An invite is single-use by default; pass max_uses to let several people join with the same one. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use after memory_create_room, or whenever the user says 'invite <someone>' to an existing room.",
       inputSchema: {
         room_id: z
           .string()
@@ -1661,6 +1671,16 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .max(90)
           .optional()
           .describe("Days until the invite expires (default 7)."),
+        // Added in 0.11 (step 3c; the hosted connector already had it). Core
+        // takes 1 to 1000, default 1. Only the floor is checked here, because
+        // an invite nobody can use is not a call; the ceiling stays with the
+        // engine (ADR-025), whose 422 names it.
+        max_uses: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("How many people may join with this invite (default 1, single-use)."),
       },
       annotations: {
         title: "Invite to room",
@@ -1670,14 +1690,16 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         openWorldHint: false,
       },
     },
-    async ({ room_id, scope, expires_in_days }) => {
+    async ({ room_id, scope, expires_in_days, max_uses }) => {
+      // JSON.stringify drops undefined keys, so a call without max_uses sends
+      // exactly the body it sent before 0.11 and core applies its default of 1.
       const r = await apiFetch<{
         share_message?: string;
         join_url?: string;
         code?: string;
       }>(`/memory/rooms/${encodeURIComponent(room_id)}/invites`, {
         method: "POST",
-        body: JSON.stringify({ scope, expires_in_days }),
+        body: JSON.stringify({ scope, expires_in_days, max_uses }),
       });
       return {
         content: [

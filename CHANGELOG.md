@@ -93,6 +93,17 @@ git history and the GitHub releases are the record.
   nothing, never 0. The engine's co-activation count is not shown: it links
   concepts only for a request that carries the query's concepts, which this
   tool does not send, so the count is always 0.
+- **`memory_invite_to_room` takes `max_uses`.** One invite can now let several
+  people join; without it an invite stays single-use, as before, and the
+  request is unchanged. The hosted connector already offered this, and the
+  description here called every invite "one-time". Only the floor is checked
+  here (at least 1); the engine sets the ceiling, and its refusal is passed
+  on as an argument error. The description, `llms.txt`, `llms-install.md`,
+  the README table and the generated `manifest.json` say single-use by
+  default. Core also returns a `next_steps` text on room create and join; it
+  is still not shown, because it is written for REST callers, tells a
+  read-only member to write, and carries the room name unescaped. The usage
+  lines this server prints say the same things in MCP terms.
 
 ### Fixed
 
