@@ -133,6 +133,24 @@ git history and the GitHub releases are the record.
   the words the tools use for an unreadable answer, never a resource made
   up from the id that was asked for. The id is decoded once from the URI
   and encoded once into the path.
+- **Field limits are read from core's API contract, not typed here.**
+  `src/limits.ts` is generated from the engine's OpenAPI document
+  (`npm run limits:refresh`), the tools' schemas use those values, and a
+  scheduled job (`npm run limits:check`) fails when the committed file stops
+  matching what core publishes. ADR-025 gives the engine the limits; a copy
+  nobody checks drifts, and four had:
+  - **`memory_read`'s `top_k` accepts up to 500**, the engine's ceiling since
+    June, instead of refusing anything over 50 here.
+  - **Its description says the default is 10**, which is what an omitted
+    `top_k` actually gets. It said 5.
+  - **`memory_write`'s `domain` is capped at 100 characters** and **`concepts`
+    at 256 items**, as the engine caps them, so an over-long value is refused
+    here with the field named rather than as a 422 from the API. Only the
+    write schema bounds a domain in the contract, so read, `list_recent` and
+    feedback still pass any domain through.
+  - **`memory_invite_to_room`'s `max_uses` is capped at 1000**, the engine's
+    ceiling. It had a floor only, and 5000 travelled to the API to be refused
+    there.
 - **Room guidance names `memory_list_recent`** (#64). `memory_create_room`'s
   description and reply, and `memory_join_room`'s usage line, named only
   `memory_write` and `memory_read`, though `memory_list_recent` is the tool

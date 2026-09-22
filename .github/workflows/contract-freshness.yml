@@ -1,0 +1,31 @@
+name: contract freshness
+
+# src/limits.ts holds the field limits this package takes from core's API
+# contract (ADR-025). This job refetches the contract and fails if the
+# committed file no longer matches it, so a limit that moves in the engine is
+# noticed here instead of surfacing as a refusal a caller cannot explain.
+#
+# It is NOT a pull-request gate: it needs the network and a healthy core, and
+# neither belongs in the path of someone else's change. It runs daily, on a
+# push that touches the limits, and on demand.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/limits.ts"
+      - "scripts/generate-limits.mjs"
+
+jobs:
+  limits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compare src/limits.ts with core's contract
+        run: node scripts/generate-limits.mjs --check

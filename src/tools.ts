@@ -47,6 +47,8 @@ import {
   withDomainEscapeLegend,
 } from "./names.js";
 import { ApiError } from "./errors.js";
+// Field limits, generated from core's contract (src/limits.ts, ADR-025).
+import { CORE_LIMITS } from "./limits.js";
 
 /**
  * How the tools reach the Mnemoverse API: send `path` (relative to the API base,
@@ -304,19 +306,25 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       inputSchema: {
         content: z
           .string()
-          .min(1)
-          .max(10000)
+          .min(CORE_LIMITS.writeContent.minLength)
+          .max(CORE_LIMITS.writeContent.maxLength)
           .describe(
             "The memory to store as a self-contained statement, e.g. 'User prefers TypeScript strict mode' or 'Decided to deploy the API on Cloudflare Workers (2026-06)'.",
           ),
         concepts: z
           .array(z.string())
+          .max(CORE_LIMITS.writeConcepts.maxItems)
           .optional()
           .describe(
             "Key concepts for linking related memories (e.g. ['deploy', 'friday', 'staging'])",
           ),
+        // The only domain the contract bounds is this one: core's write
+        // schema caps it at 100 characters, and a longer one is refused there.
+        // Read, list_recent and feedback have no limit in the contract, so
+        // none is invented for them here (src/limits.ts, ADR-025).
         domain: z
           .string()
+          .max(CORE_LIMITS.domain.maxLength)
           .optional()
           .describe(
             "Namespace to organize memories (e.g. 'engineering', 'user:alice', 'project:acme')." +
@@ -522,19 +530,19 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       inputSchema: {
         query: z
           .string()
-          .min(1)
-          .max(5000)
+          .min(CORE_LIMITS.readQuery.minLength)
+          .max(CORE_LIMITS.readQuery.maxLength)
           .describe(
             "Natural-language description of what you're looking for, e.g. 'database choice for the API' or 'user's preferred testing framework'.",
           ),
         top_k: z
           .number()
           .int()
-          .min(1)
-          .max(50)
+          .min(CORE_LIMITS.readTopK.minimum)
+          .max(CORE_LIMITS.readTopK.maximum)
           .optional()
           .describe(
-            "Requested number of results (default: 5). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
+            "Requested number of results (default: 10, the engine's own). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
           ),
         domain: z
           .string()
@@ -850,15 +858,15 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         limit: z
           .number()
           .int()
-          .min(1)
-          .max(100)
+          .min(CORE_LIMITS.recentLimit.minimum)
+          .max(CORE_LIMITS.recentLimit.maximum)
           .optional()
           .describe(
             "Most entries per page (default: 20). Newest first. ⚠️ A CEILING, not a promise: the page is ALSO bounded by size, so a page of long entries stops early and returns a cursor for the rest. In rooms whose entries run long, ask for 5–10 — a large `limit` there buys nothing the size budget will not take back, and costs round trips.",
           ),
         cursor: z
           .string()
-          .max(512)
+          .max(CORE_LIMITS.recentCursor.maxLength)
           .optional()
           .describe(
             "Opaque cursor from a previous page's 'More older entries exist' line — continues the listing without skips or duplicates.",
@@ -1200,8 +1208,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           ),
         outcome: z
           .number()
-          .min(-1)
-          .max(1)
+          .min(CORE_LIMITS.feedbackOutcome.minimum)
+          .max(CORE_LIMITS.feedbackOutcome.maximum)
           .describe(
             "How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong",
           ),
@@ -1599,14 +1607,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       inputSchema: {
         name: z
           .string()
-          .min(1)
-          .max(200)
+          .min(CORE_LIMITS.roomName.minLength)
+          .max(CORE_LIMITS.roomName.maxLength)
           .describe(
             "Room name, unique within your account (e.g. 'me-and-olya').",
           ),
         description: z
           .string()
-          .max(2000)
+          .max(CORE_LIMITS.roomDescription.maxLength)
           .optional()
           .describe("Optional description of the room."),
       },
@@ -1682,18 +1690,19 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         expires_in_days: z
           .number()
           .int()
-          .min(1)
-          .max(90)
+          .min(CORE_LIMITS.inviteExpiresInDays.minimum)
+          .max(CORE_LIMITS.inviteExpiresInDays.maximum)
           .optional()
           .describe("Days until the invite expires (default 7)."),
         // Added in 0.11 (step 3c; the hosted connector already had it). Core
-        // takes 1 to 1000, default 1. Only the floor is checked here, because
-        // an invite nobody can use is not a call; the ceiling stays with the
-        // engine (ADR-025), whose 422 names it.
+        // takes 1 to 1000, default 1. Both ends come from the contract now
+        // (src/limits.ts), so an engine that widens the range widens this
+        // parameter with it rather than being refused here.
         max_uses: z
           .number()
           .int()
-          .min(1)
+          .min(CORE_LIMITS.inviteMaxUses.minimum)
+          .max(CORE_LIMITS.inviteMaxUses.maximum)
           .optional()
           .describe("How many people may join with this invite (default 1, single-use)."),
       },

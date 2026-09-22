@@ -36,6 +36,8 @@
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",
+    "limits:refresh": "node scripts/generate-limits.mjs",
+    "limits:check": "node scripts/generate-limits.mjs --check",
     "install-hooks": "node scripts/install-hooks.mjs",
     "prebuild": "npm run generate:configs",
     "prepublishOnly": "npm run build",

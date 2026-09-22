@@ -18,6 +18,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CORE_LIMITS } from "../src/limits.js";
 import { httpError, startMemoryServer, type Harness } from "./harness.js";
 
 const INVITE = "POST /memory/rooms/room_01ABC/invites";
@@ -62,16 +63,26 @@ describe("memory_invite_to_room takes max_uses", () => {
     expect(mcp.calls).toHaveLength(0);
   });
 
-  it("leaves the ceiling to the engine, and passes its refusal on", async () => {
-    mcp.on(
-      INVITE,
-      httpError(422, envelope("VALIDATION_ERROR", "max_uses: Input should be less than or equal to 1000")),
-    );
-    const res = await mcp.call("memory_invite_to_room", { room_id: "room_01ABC", max_uses: 5000 });
-    expect(mcp.requestTo(INVITE).body).toEqual({ max_uses: 5000 });
+  it("refuses more than the engine's ceiling before sending anything", async () => {
+    // Until the limits came from core's contract, the ceiling was the
+    // engine's alone and 5000 went out to be refused there with a 422. The
+    // contract now gives this parameter both ends (src/limits.ts), so the
+    // call is refused here and no request is made.
+    const res = await mcp.call("memory_invite_to_room", {
+      room_id: "room_01ABC",
+      max_uses: CORE_LIMITS.inviteMaxUses.maximum + 1,
+    });
     expect(res.isError).toBe(true);
-    expect(res.text).toContain("rejected the CONTENTS of this request");
-    expect(res.text).toContain("less than or equal to 1000");
+    expect(mcp.calls).toHaveLength(0);
+  });
+
+  it("sends the engine's own ceiling through", async () => {
+    mcp.on(INVITE, { share_message: "Join my room: mnvr_x" });
+    await mcp.callText("memory_invite_to_room", {
+      room_id: "room_01ABC",
+      max_uses: CORE_LIMITS.inviteMaxUses.maximum,
+    });
+    expect(mcp.requestTo(INVITE).body).toEqual({ max_uses: 1000 });
   });
 
   it("describes the invite as single-use by default, with max_uses for more", async () => {
@@ -82,10 +93,9 @@ describe("memory_invite_to_room takes max_uses", () => {
     expect(tool?.description).not.toMatch(/\bone-time\b/i);
     const props = tool?.inputSchema.properties as Record<string, { type?: string; minimum?: number; maximum?: number }>;
     expect(props.max_uses?.type).toBe("integer");
-    expect(props.max_uses?.minimum).toBe(1);
-    // No copy of the engine's 1000 (ADR-025). zod 4 writes the safe-integer
-    // bound for any .int(), so that is the only maximum allowed here.
-    expect([undefined, Number.MAX_SAFE_INTEGER]).toContain(props.max_uses?.maximum);
+    // Both ends come from core's contract, not from a number typed here.
+    expect(props.max_uses?.minimum).toBe(CORE_LIMITS.inviteMaxUses.minimum);
+    expect(props.max_uses?.maximum).toBe(CORE_LIMITS.inviteMaxUses.maximum);
     expect(tool?.inputSchema.required ?? []).not.toContain("max_uses");
   });
 });
