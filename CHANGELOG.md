@@ -189,6 +189,12 @@ file's tool-surface rule each change is announced here and none is silent.
   which agents read to learn the tools, names `memory_ids` too, and a test now
   holds every parameter listed there, with its type and whether it is
   required, to the schema the server registers.
+- **Registry description names shared rooms.** The one-line description in
+  `src/configs/source.json` (and the `server.json` / `manifest.json` generated
+  from it) now reads "Hosted AI agent memory: learns from outcomes, shared
+  rooms, one key for Claude, Cursor & ChatGPT." Rooms have shipped since 0.9 and
+  the line that directories such as Glama and PulseMCP show did not mention
+  them. It stays under the registry's 100-character limit (97). Text only.
 
 ## [0.10.2] — 2026-09-20
 
