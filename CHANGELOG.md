@@ -192,7 +192,7 @@ file's tool-surface rule each change is announced here and none is silent.
 - **Registry description names shared rooms.** The one-line description in
   `src/configs/source.json` (and the `server.json` / `manifest.json` generated
   from it) now reads "Hosted AI agent memory: learns from outcomes, shared
-  rooms, one key for Claude, Cursor & ChatGPT." Rooms have shipped since 0.8 and
+  rooms, one key for Claude, Cursor & ChatGPT." Rooms have shipped for several releases, and
   the line that directories such as Glama and PulseMCP show did not mention
   them. It stays under the registry's 100-character limit (97). Text only.
 
