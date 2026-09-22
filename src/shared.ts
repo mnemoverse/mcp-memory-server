@@ -12,6 +12,7 @@
  *
  *     const server = new McpServer({ name, version }, { instructions: SERVER_INSTRUCTIONS });
  *     registerMemoryTools(server, { apiFetch });
+ *     registerMemoryPrompts(server);
  *
  * `apiFetch` is the server's own way to reach the API (credential, base URL,
  * transport). Its contract is on the `ApiFetch` type: reject with `ApiError`,
@@ -19,6 +20,7 @@
  */
 
 export { registerMemoryTools, type ApiFetch, type MemoryToolDeps } from "./tools.js";
+export { registerMemoryPrompts } from "./prompts.js";
 export { SERVER_INSTRUCTIONS } from "./teaching.js";
 export {
   ApiError,

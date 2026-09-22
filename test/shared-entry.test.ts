@@ -14,7 +14,12 @@ import { describe, expect, it } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { registerMemoryTools, SERVER_INSTRUCTIONS, type ApiFetch } from "../src/shared.js";
+import {
+  registerMemoryPrompts,
+  registerMemoryTools,
+  SERVER_INSTRUCTIONS,
+  type ApiFetch,
+} from "../src/shared.js";
 
 const TEN_TOOLS = [
   "memory_create_room",
@@ -49,6 +54,18 @@ describe("the shared entry point", () => {
     });
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TEN_TOOLS);
+    await server.close();
+  });
+
+  it("registers the three prompts on a server it did not create (0.11)", async () => {
+    const server = new McpServer({ name: "shared-entry-prompts", version: "0.0.0" });
+    registerMemoryPrompts(server);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "shared-entry-prompts-client", version: "0.0.0" });
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name).sort()).toEqual(["recall", "save_insight", "what_do_you_know"]);
     await server.close();
   });
 

@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { SERVER_INSTRUCTIONS } from "./teaching.js";
 import { refusePlaceholderKey } from "./requests.js";
 import { registerMemoryTools } from "./tools.js";
+import { registerMemoryPrompts } from "./prompts.js";
 // Every non-2xx becomes an instruction to the calling model instead of a raw
 // wire echo — see the header of src/errors.ts for why, and for what each status
 // actually means in this engine. So does a 2xx whose body this client cannot
@@ -342,6 +343,8 @@ export const server = new McpServer(
 // that exposes Mnemoverse memory over MCP (ADR-025). This server's part is
 // apiFetch above: the API key, the base URL and their refusals.
 registerMemoryTools(server, { apiFetch });
+// Three named entry points to those tools (src/prompts.ts); they call nothing.
+registerMemoryPrompts(server);
 
 
 // --- Start ---

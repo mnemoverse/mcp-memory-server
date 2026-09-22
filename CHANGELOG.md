@@ -104,6 +104,16 @@ git history and the GitHub releases are the record.
   is still not shown, because it is written for REST callers, tells a
   read-only member to write, and carries the room name unescaped. The usage
   lines this server prints say the same things in MCP terms.
+- **Three MCP prompts: `recall`, `save_insight`, `what_do_you_know`.** Clients
+  that show prompts as commands (Claude Code as `/mcp__mnemoverse__recall`)
+  get named shortcuts to the tools. Each renders one user message that asks
+  the model to use `memory_read` or `memory_write`; none calls the API
+  itself. They come from the hosted connector with the same names,
+  arguments and wording, and another server registers them with
+  `registerMemoryPrompts(server)` from `/shared`. One difference: the
+  `domain` of `save_insight` is quoted exactly as given, like every domain
+  this package handles. The withdrawn-claims and domain-normalisation
+  denylists now read the prompts too.
 
 ### Fixed
 

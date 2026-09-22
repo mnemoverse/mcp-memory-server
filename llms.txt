@@ -100,6 +100,12 @@ Parameters: none
 
 Returns: Alias and purpose per secret, never the value.
 
+## Prompts
+Named shortcuts that ask the model to use the tools above; they call nothing themselves.
+- recall (topic): search memory for the topic with memory_read and summarize only what is returned.
+- save_insight (insight, optional domain): store the insight with memory_write and confirm what was stored.
+- what_do_you_know (subject): a briefing from memory_read that flags where nothing is stored.
+
 ## Setup
 Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
 Transport: stdio

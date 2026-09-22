@@ -66,6 +66,12 @@ const namesSource = readFileSync(
   new URL("../src/names.ts", import.meta.url),
   "utf8",
 );
+// save_insight quotes a domain into its message (0.11, step 3c), so the
+// prompts join the files the normalisation denylist reads.
+const promptsSource = readFileSync(
+  new URL("../src/prompts.ts", import.meta.url),
+  "utf8",
+);
 
 // That these instructions REACH a connected client — the wiring the source
 // check `toContain("{ instructions: SERVER_INSTRUCTIONS }")` could only guess at
@@ -365,6 +371,7 @@ describe("buildReadEmptyResponse (first-contact greeting branch)", () => {
       "src/index.ts": indexSource,
       "src/tools.ts": toolsSource,
       "src/requests.ts": requestsSource,
+      "src/prompts.ts": promptsSource,
     };
     for (const [file, source] of Object.entries(sources)) {
       // Any method-call normalisation, on any spelling of the domain value

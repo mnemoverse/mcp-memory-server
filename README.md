@@ -277,6 +277,16 @@ If it doesn't remember: check that the client was fully restarted and the config
 | `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
 | `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |
 
+### Prompts
+
+Three named shortcuts for clients that show MCP prompts as commands (Claude Code as `/mcp__mnemoverse__<name>`). Each one only asks the model to use the tools above; none of them calls the API itself.
+
+| Prompt | Arguments | What it asks for |
+|------|------|-------------|
+| `recall` | `topic` | Search memory for a topic with `memory_read` and summarize only what comes back |
+| `save_insight` | `insight`, optional `domain` | Store an insight with `memory_write` and confirm what was stored |
+| `what_do_you_know` | `subject` | A briefing from `memory_read` that flags what is not stored |
+
 ### Tool surface stability
 
 `tools/list` is frozen per released version, so a client can save the list it

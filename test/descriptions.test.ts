@@ -320,6 +320,31 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
   // describing feedback as "Negative lets memories fade" through a release
   // whose own CHANGELOG deletes the claim. It is a surface a model reads;
   // it gets the same ban as the wire.
+  // The prompts (0.11) are a surface a model reads too: their descriptions,
+  // their argument descriptions and the message each one renders.
+  it("no prompt carries one, in its description, arguments or message", async () => {
+    const SAMPLE: Record<string, Record<string, string>> = {
+      recall: { topic: "x" },
+      save_insight: { insight: "x", domain: "d" },
+      what_do_you_know: { subject: "x" },
+    };
+    const { prompts } = await mcp.client.listPrompts();
+    expect(prompts.map((p) => p.name).sort()).toEqual(Object.keys(SAMPLE).sort());
+    for (const p of prompts) {
+      const rendered = await mcp.client.getPrompt({ name: p.name, arguments: SAMPLE[p.name] });
+      const surfaces = [
+        p.description ?? "",
+        ...(p.arguments ?? []).map((a) => a.description ?? ""),
+        ...rendered.messages.map((m) => (m.content as { text?: string }).text ?? ""),
+      ];
+      for (const text of surfaces) {
+        for (const [banned, why] of WITHDRAWN) {
+          expect(text, `prompt ${p.name} restores ${why} (${banned})`).not.toMatch(banned);
+        }
+      }
+    }
+  });
+
   it("the hand-written llms.txt carries none either", () => {
     const llms = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
     for (const [banned, why] of WITHDRAWN) {
