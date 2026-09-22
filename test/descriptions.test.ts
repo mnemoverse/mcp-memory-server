@@ -147,12 +147,19 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain("a guess like 'me' filters nothing, silently");
   });
 
-  it("memory_feedback names its boundary: rating a room memory silently does nothing", () => {
+  it("memory_feedback says how a room memory is rated, and who cannot rate it", () => {
+    // Until 0.11 the tool had no domain and this test pinned the boundary that
+    // followed from it ("rating a memory that lives in a shared room silently
+    // does nothing"). With domain added (owner, 2026-09-22) the boundary moved:
+    // a room memory is rated through the room's address, and a read-only
+    // member is refused. Both halves are pinned, and the withdrawn sentence
+    // must not come back.
     const d = description("memory_feedback");
-    expect(d).toContain("this reaches your own domains only");
-    expect(d).toContain(
-      "rating a memory that lives in a shared room silently does nothing",
-    );
+    expect(d).toContain("pass that room's address as domain");
+    expect(d).toContain("your own memories need no domain");
+    expect(d).toContain("A read-only room member cannot rate");
+    expect(d).not.toContain("silently does nothing");
+    expect(d).not.toContain("takes no domain");
   });
 
   it("memory_feedback states what a downvote does: out-ranks, never erases (#95)", () => {

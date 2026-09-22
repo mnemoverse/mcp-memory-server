@@ -826,7 +826,11 @@ describe("the load-bearing sentences, as returned", () => {
     });
 
     expect(text).toContain("No feedback was recorded");
-    expect(text).toContain("cannot reach room atoms");
+    expect(text).toContain("in your own domains");
+    // The invisible cause still comes first; since 0.11 it names the fix
+    // (the room's address as domain) instead of a limit of the tool.
+    expect(text).toMatch(/Possible causes: the ids came from a shared room, which is reached only\s+when domain is that room's address/);
+    expect(text.indexOf("shared room")).toBeLessThan(text.indexOf("deleted"));
     expect(text).not.toContain("Feedback recorded for 0");
     expect(text).not.toContain("Most often");
   });
@@ -913,7 +917,7 @@ describe("the load-bearing sentences, as returned", () => {
     // The defect: `atom_ids.length` was never compared with the count, so
     // five ids and `updated_count: 2` printed the unqualified success line and
     // three silent misses. It is the typical shape of the room case — half the
-    // ids off a room read, which this tool cannot reach — and the caller has
+    // ids off a read of a room this call did not address — and the caller has
     // no way to see it. A shortfall can only come from core's SYNC path (the
     // async ack is exactly `len(atom_ids)`), where the number is the
     // authoritative count of atoms that existed, so the diagnosis is sound.
@@ -928,7 +932,7 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).toContain("fewer than the 5 ids you sent");
     expect(text).toContain("3 of them matched nothing in your own domains");
     // Same causes, same order as the zero branch — one story, two scales.
-    expect(text).toContain("cannot reach room atoms");
+    expect(text).toContain("the ids came from a shared room, which is reached only");
   });
 
   it("a count LARGER than the ids sent is not passed off as a per-id result", async () => {

@@ -1131,14 +1131,24 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
    *
    * No frequency claim. "Most often that means…" was a statistic we do not have
    * (review, 2026-08-08); the causes are listed as possibilities, with the one
-   * the caller cannot otherwise guess first because it is invisible from the
-   * tool surface — this tool takes no `domain`, so a room atom is unreachable
-   * from it by construction.
+   * the caller cannot otherwise guess first. A room memory lives in the room's
+   * own store, and a rating reaches it only when that room's address is the
+   * `domain` (core routes the rating by it, routes.py `feedback` →
+   * `_resolve_target_org`). Until 0.11 this tool had no `domain` at all, so a
+   * room memory could not be rated from here; now the miss is a wrong or
+   * missing address, and the text says which store was searched.
    */
-  const FEEDBACK_MISS_CAUSES =
-    "Possible causes: the ids came from a shared room (this tool takes no domain " +
-    "argument and cannot reach room atoms, so rating them is a no-op); the memory " +
-    "was deleted; or the id came from somewhere other than a memory_read result.";
+  const feedbackMissCauses = (domain: string | undefined): string =>
+    isRoomDomain(domain)
+      ? "Possible causes: the ids did not come from that room (your own memories " +
+        "are rated without a domain, and another room's only with its own address); " +
+        "the memory was deleted; or the id came from somewhere other than a " +
+        "memory_read result."
+      : "Possible causes: the ids came from a shared room, which is reached only " +
+        "when domain is that room's address; the memory was deleted; or the id came " +
+        "from somewhere other than a memory_read result.";
+  const feedbackScope = (domain: string | undefined): string =>
+    isRoomDomain(domain) ? "in that room" : "in your own domains";
 
   server.registerTool(
     "memory_feedback",
@@ -1149,7 +1159,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // reads. Nothing time-decays and nothing is auto-deleted: a downvoted
         // memory is OUT-RANKED, and deletion has been administrative-only since
         // 0.9.0. The replacement is the wording that release put on the README.
-        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. NOTE: this reaches your own domains only — it takes no domain argument, so rating a memory that lives in a shared room silently does nothing.",
+        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       // `memory_ids` is the name (2026-09-21): the tool rates memories, which
       // is what every result is (an atom is the engine's word for its smallest
       // unit), and the hosted connector already names the parameter so. Both
@@ -1180,6 +1190,19 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .describe(
             "How helpful was this? 1.0 = very helpful, 0 = neutral, -1.0 = harmful/wrong",
           ),
+        // Added in 0.11 (owner, 2026-09-22). Core has always accepted it and
+        // routes the rating to the room's store when it is an xroom address,
+        // refusing a non-member, an archived room and a read-only member with
+        // a 403 that explain403 names. Any other value changes nothing: the
+        // rating goes to the caller's own store, as it does without one. No
+        // format or length check here (ADR-025), and the value is sent exactly
+        // as given, like every other domain this package passes on.
+        domain: z
+          .string()
+          .optional()
+          .describe(
+            "Only for memories read from a shared room: that room's address (xroom:...), exactly as you read it. Omit it for your own memories, which are rated by id alone.",
+          ),
       },
       annotations: {
         title: "Rate Memory Helpfulness",
@@ -1200,7 +1223,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         openWorldHint: false,
       },
     },
-    async ({ memory_ids, atom_ids: legacyIds, outcome }) => {
+    async ({ memory_ids, atom_ids: legacyIds, outcome, domain }) => {
       // Both names at once is ambiguous (which list did the caller mean?), so
       // it is refused rather than resolved by a silent preference.
       if (memory_ids !== undefined && legacyIds !== undefined) {
@@ -1231,10 +1254,18 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         };
       }
       // `atom_ids` below is the ENGINE's field name for the same list; the
-      // wire contract is unchanged.
-      const r = await apiFetch<{ updated_count?: number }>("/memory/feedback", {
+      // wire contract is unchanged. `domain` is sent only when given, so a
+      // call without it is byte-identical to one from before 0.11 and core
+      // applies its own default.
+      const r = await apiFetch<{
+        updated_count?: number;
+        avg_valence?: number;
+        coactivation_edges?: number;
+      }>("/memory/feedback", {
         method: "POST",
-        body: JSON.stringify({ atom_ids, outcome }),
+        body: JSON.stringify(
+          domain === undefined ? { atom_ids, outcome } : { atom_ids, outcome, domain },
+        ),
       });
 
       // A FIELD THE SERVER DID NOT SEND IS UNKNOWN, NOT ZERO — the rule
@@ -1310,20 +1341,21 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // the fact: an earlier version of this branch blamed deletion, which is
       // usually the wrong cause (review, 2026-08-08).
       //
-      // Core resolves the feedback org from a `domain` argument that defaults to
-      // "general" — and THIS TOOL EXPOSES NO domain PARAMETER. So the ordinary
-      // way to get zero is to rate atoms that live somewhere else: read a room,
-      // take the ids off the `id:` lines, rate them, and every one silently
-      // misses. The atoms exist, the ids are valid, and telling the caller they
-      // were deleted sends them to look for a problem that isn't there.
+      // Core resolves the feedback org from `domain`, defaulting to the
+      // caller's own store. So the ordinary way to get zero is to rate atoms
+      // that live somewhere else: read a room, take the ids off the `id:`
+      // lines, rate them without the room's address (or with another room's),
+      // and every one silently misses. The atoms exist, the ids are valid, and
+      // telling the caller they were deleted sends them to look for a problem
+      // that isn't there. Before 0.11 there was no `domain` to pass at all.
       if (count === 0) {
         return {
           content: [
             {
               type: "text" as const,
               text:
-                "No feedback was recorded — none of those ids matched a memory in your own " +
-                `domains. ${FEEDBACK_MISS_CAUSES}`,
+                "No feedback was recorded — none of those ids matched a memory " +
+                `${feedbackScope(domain)}. ${feedbackMissCauses(domain)}`,
             },
           ],
         };
@@ -1355,8 +1387,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // WHAT THE COUNT IS NOT: a guarantee that every id landed. `atom_ids.length`
       // was never compared with it, so five ids and `updated_count: 2` printed
       // the unqualified success line and three silent misses — the typical shape
-      // of the room case, where half the ids came off a room read this tool
-      // cannot reach. A SHORTFALL can only come from core's sync path (the async
+      // of the room case, where half the ids came off a read of a room this
+      // call did not address. A SHORTFALL can only come from core's sync path (the async
       // ack is exactly `len(atom_ids)`, memory_engine.py:4898-4902), where the
       // number is the authoritative count of atoms that existed — so the same
       // causes as the zero branch apply, at a smaller scale, and the string is
@@ -1371,12 +1403,33 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const mismatch =
         count < atom_ids.length
           ? ` That is fewer than the ${idsSent}: ${atom_ids.length - count} of them ` +
-            `matched nothing in your own domains. ${FEEDBACK_MISS_CAUSES}`
+            `matched nothing ${feedbackScope(domain)}. ${feedbackMissCauses(domain)}`
           : count > atom_ids.length
             ? ` That is more than the ${idsSent}, so it cannot be a per-id result — ` +
               `read it as the service's own tally, not as how many of your memories ` +
               `were rated.`
             : "";
+
+      // AVERAGE VALENCE, which core returns and this tool dropped until 0.11
+      // (the hosted connector already passed it on). It is the mean valence of
+      // the memories the rating reached, AFTER the rating: the one number that
+      // shows the rating moved something. Same degree of confidence as the
+      // count, and the same rule: a value that is not a finite number is
+      // unknown and prints nothing, never 0. Core's async mode acks with 0
+      // before the worker runs (memory_engine.py `feedback` docstring), which
+      // is why this is the service's report too; production ran the sync path
+      // for every rating in the week checked (Axiom 2026-09-15..22:
+      // feedback_completed 630, feedback_completed_async 0).
+      //
+      // coactivation_edges is left out of the text on purpose: core links
+      // concepts only when the request carries query_concepts, which this tool
+      // does not send, so the number is always 0 here and a sentence about it
+      // would report nothing.
+      const avg: unknown = r?.avg_valence;
+      const valence =
+        typeof avg === "number" && Number.isFinite(avg)
+          ? ` The service reports their average valence is now ${avg.toFixed(2)} (on a scale from -1 to 1).`
+          : "";
 
       return {
         content: [
@@ -1386,7 +1439,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             // for the ids — then the advice. Putting `pickADirection` before the
             // mismatch clause interrupted the report with a suggestion and
             // resumed it afterwards.
-            text: `${sent} The service reports ${noun} updated${effect}${mismatch}${pickADirection}`,
+            text: `${sent} The service reports ${noun} updated${effect}${valence}${mismatch}${pickADirection}`,
           },
         ],
       };

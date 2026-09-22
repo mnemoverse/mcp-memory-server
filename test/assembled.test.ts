@@ -906,9 +906,9 @@ const SITUATIONS: readonly Situation[] = [
     meaning(text) {
       // One character from the success line and it read like one.
       expect(text).toContain("No feedback was recorded");
-      // The cause the caller cannot guess comes first, because it is invisible
-      // from the tool surface: this tool exposes no domain argument at all, so
-      // ids taken off a room read silently miss every time.
+      // The cause the caller cannot guess comes first: ids taken off a room
+      // read miss every time unless the room's address is passed as domain
+      // (the tool had no domain at all before 0.11).
       const room = text.indexOf("shared room");
       const deleted = text.indexOf("was deleted");
       expect(room).toBeGreaterThan(-1);

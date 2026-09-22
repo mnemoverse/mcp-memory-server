@@ -47,8 +47,9 @@ Report whether a retrieved memory was helpful. Positive feedback re-ranks recall
 Parameters:
 - memory_ids (string[], required): IDs of memories to give feedback on, the id of each memory_read result. The old name atom_ids is still accepted until 0.12; pass one name, not both.
 - outcome (number, required): How helpful? Range: -1.0 (harmful) to 1.0 (very helpful).
+- domain (string, optional): Only for memories read from a shared room: that room's address (xroom:...). Omit it for your own memories. A read-only room member cannot rate.
 
-Returns: {updated_count: number}
+Returns: How many memories the service updated and their average valence afterwards (-1 to 1).
 
 ### memory_stats
 Get memory statistics — total count, episodes vs prototypes, Hebbian concept-concept edges, the list of domains, and average valence/importance scores. Counts cover your own domains; shared rooms are separate stores and are not included.

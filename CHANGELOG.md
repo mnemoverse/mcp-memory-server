@@ -74,6 +74,24 @@ git history and the GitHub releases are the record.
   normalisation, no domain through `safeInline`) now scan `src/tools.ts` too.
   Scanning only the file the handlers left would have kept them green while
   guarding nothing.
+- **`memory_feedback` can rate memories in a shared room.** It takes an
+  optional `domain` (owner, 2026-09-22): pass the room's address, the same
+  `xroom:...` you read the memories from. Until now the tool had no `domain`,
+  so a rating of a room memory matched nothing, as its description warned. The
+  engine has always routed a rating by `domain`. It refuses a
+  non-member, an archived room and a read-only member, and the refusal names
+  which one. Without `domain` the request is byte-identical to before and the
+  rating goes to your own memories. When nothing or only part matches, the
+  reply now says whether it searched the room or your own domains, and gives
+  the likely causes for that case.
+- **`memory_feedback` reports the average valence the engine returns.** The
+  engine answers every rating with the mean valence of the memories it reached,
+  after the rating. The tool dropped it, and the hosted connector passed it on.
+  The reply now ends with "The service reports their average valence is now
+  0.42 (on a scale from -1 to 1)". A missing or non-numeric value prints
+  nothing, never 0. The engine's co-activation count is not shown: it links
+  concepts only for a request that carries the query's concepts, which this
+  tool does not send, so the count is always 0.
 
 ### Fixed
 
