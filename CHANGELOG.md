@@ -133,6 +133,16 @@ git history and the GitHub releases are the record.
   the words the tools use for an unreadable answer, never a resource made
   up from the id that was asked for. The id is decoded once from the URI
   and encoded once into the path.
+- **Room guidance names `memory_list_recent`** (#64). `memory_create_room`'s
+  description and reply, and `memory_join_room`'s usage line, named only
+  `memory_write` and `memory_read`, though `memory_list_recent` is the tool
+  that catches up on what others wrote in the room. A read-only or
+  unknown-scope member is offered reading only, as before.
+- **README: what to do when the hosted connector stops answering in a
+  session** (the in-repository part of #97). Reconnecting on claude.ai does
+  not revive a stuck session; reconnect from inside it (`/mcp` in Claude
+  Code). Meanwhile this local server, with a key from the same account,
+  reaches the same memory.
 
 ### Fixed
 

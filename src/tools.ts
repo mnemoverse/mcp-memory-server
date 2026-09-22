@@ -1595,7 +1595,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
     "memory_create_room",
     {
       description:
-        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it. To bring someone in, call memory_invite_to_room next.",
+        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. To bring someone in, call memory_invite_to_room next.",
       inputSchema: {
         name: z
           .string()
@@ -1639,7 +1639,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // broken `domain=""` guidance — say so instead (Copilot).
       const text = address
         ? `Created shared room ${roomName}. Address: ${address}\n` +
-          `Use it now: pass domain="${address}" on memory_write / memory_read.\n` +
+          `Use it now: pass domain="${address}" on memory_write / memory_read, and on memory_list_recent to catch up on what others added.\n` +
           (roomId
             ? `To add someone: call memory_invite_to_room with room_id="${roomId}".`
             : "")
@@ -1782,10 +1782,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const usage = !address
         ? `The server did not return a room address — retry, or check that your API key is set.`
         : verdict === "read_write"
-          ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room.`
+          ? `Use it: pass domain="${address}" on memory_write / memory_read to read and write the shared room, and on memory_list_recent to catch up on what is new.`
           : verdict === "read"
-            ? `Use it: pass domain="${address}" on memory_read to read it; this membership is read-only, so memory_write to that address will be refused.`
-            : `Use it: pass domain="${address}" on memory_read to read it — the server did not report this membership's write access, so whether memory_write to that address would succeed is unknown.`;
+            ? `Use it: pass domain="${address}" on memory_read or memory_list_recent to read it; this membership is read-only, so memory_write to that address will be refused.`
+            : `Use it: pass domain="${address}" on memory_read or memory_list_recent to read it — the server did not report this membership's write access, so whether memory_write to that address would succeed is unknown.`;
       return {
         content: [
           {

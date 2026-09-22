@@ -1204,7 +1204,7 @@ describe("the room usage line names what the scope actually allows", () => {
     const text = await mcp.callText("memory_join_room", { code: "mnvr_abc" });
 
     expect(text).toContain(
-      'Use it: pass domain="xroom:room_01ABC" on memory_write / memory_read to read and write the shared room.',
+      'Use it: pass domain="xroom:room_01ABC" on memory_write / memory_read to read and write the shared room, and on memory_list_recent to catch up on what is new.',
     );
   });
 

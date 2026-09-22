@@ -90,6 +90,43 @@ describe("memory_invite_to_room takes max_uses", () => {
   });
 });
 
+// #64: the room guidance named memory_write and memory_read but not
+// memory_list_recent, which is the tool that catches up on what others wrote.
+describe("room guidance names memory_list_recent", () => {
+  const ROOM = {
+    room_id: "room_01ABC",
+    address: "xroom:room_01ABC",
+    name: "team",
+  };
+
+  it("memory_create_room's description and reply", async () => {
+    const { tools } = await mcp.client.listTools();
+    expect(tools.find((t) => t.name === "memory_create_room")?.description).toContain(
+      "on memory_list_recent to catch up on what others added",
+    );
+    mcp.on(CREATE, ROOM);
+    const text = await mcp.callText("memory_create_room", { name: "team" });
+    expect(text).toContain("and on memory_list_recent to catch up on what others added");
+  });
+
+  it("memory_join_room offers it to every scope, and write only to read_write", async () => {
+    mcp.on(JOIN, { ...ROOM, scope: "read_write", already_member: false });
+    expect(await mcp.callText("memory_join_room", { code: "mnvr_a" })).toContain(
+      "and on memory_list_recent to catch up on what is new",
+    );
+    mcp.reset();
+    mcp.on(JOIN, { ...ROOM, scope: "read", already_member: false });
+    const readOnly = await mcp.callText("memory_join_room", { code: "mnvr_b" });
+    expect(readOnly).toContain("on memory_read or memory_list_recent to read it");
+    expect(readOnly).toContain("memory_write to that address will be refused");
+    mcp.reset();
+    mcp.on(JOIN, { ...ROOM, already_member: false });
+    expect(await mcp.callText("memory_join_room", { code: "mnvr_c" })).toContain(
+      "on memory_read or memory_list_recent to read it",
+    );
+  });
+});
+
 describe("core's REST-oriented next_steps is not echoed", () => {
   it("memory_create_room keeps its MCP wording", async () => {
     mcp.on(CREATE, {
