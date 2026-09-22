@@ -150,6 +150,16 @@ describe("memory_feedback reports the average valence core returns", () => {
     expect(text).toContain("average valence is now -0.25");
   });
 
+  it.each([-0.001, -0.004, -0])(
+    "prints %s as 0.00, not a negative zero (CodeRabbit on #146)",
+    async (value) => {
+      mcp.on(FEEDBACK, { updated_count: 1, avg_valence: value });
+      const text = await mcp.callText("memory_feedback", { memory_ids: ["a"], outcome: 0 });
+      expect(text).toContain("average valence is now 0.00");
+      expect(text).not.toContain("-0.00");
+    },
+  );
+
   it.each([
     ["absent", {}],
     ["null", { avg_valence: null }],

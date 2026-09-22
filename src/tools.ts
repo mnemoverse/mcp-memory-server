@@ -1429,10 +1429,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // concepts only when the request carries query_concepts, which this tool
       // does not send, so the number is always 0 here and a sentence about it
       // would report nothing.
+      //
+      // toFixed keeps the sign of a value that rounds to zero: (-0.001) prints
+      // "-0.00", which reads as a negative valence. Shown as "0.00" instead
+      // (CodeRabbit on #146).
       const avg: unknown = r?.avg_valence;
       const valence =
         typeof avg === "number" && Number.isFinite(avg)
-          ? ` The service reports their average valence is now ${avg.toFixed(2)} (on a scale from -1 to 1).`
+          ? ` The service reports their average valence is now ${avg.toFixed(2).replace(/^-0\.00$/, "0.00")} (on a scale from -1 to 1).`
           : "";
 
       return {
