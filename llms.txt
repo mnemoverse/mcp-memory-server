@@ -106,6 +106,9 @@ Named shortcuts that ask the model to use the tools above; they call nothing the
 - save_insight (insight, optional domain): store the insight with memory_write and confirm what was stored.
 - what_do_you_know (subject): a briefing from memory_read that flags where nothing is stored.
 
+## Resources
+- memory://item/{memory_id}: one saved memory by its id, as JSON {memory_id, content, domain}. Your own store only; a memory from a shared room cannot be opened by id.
+
 ## Setup
 Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
 Transport: stdio

@@ -10,6 +10,7 @@
  *     import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  *     import {
  *       registerMemoryPrompts,
+ *       registerMemoryResources,
  *       registerMemoryTools,
  *       SERVER_INSTRUCTIONS,
  *     } from "@mnemoverse/mcp-memory-server/shared";
@@ -17,6 +18,7 @@
  *     const server = new McpServer({ name, version }, { instructions: SERVER_INSTRUCTIONS });
  *     registerMemoryTools(server, { apiFetch });
  *     registerMemoryPrompts(server);
+ *     registerMemoryResources(server, { apiFetch });
  *
  * `apiFetch` is the server's own way to reach the API (credential, base URL,
  * transport). Its contract is on the `ApiFetch` type: reject with `ApiError`,
@@ -25,6 +27,7 @@
 
 export { registerMemoryTools, type ApiFetch, type MemoryToolDeps } from "./tools.js";
 export { registerMemoryPrompts } from "./prompts.js";
+export { registerMemoryResources } from "./resources.js";
 export { SERVER_INSTRUCTIONS } from "./teaching.js";
 export {
   ApiError,

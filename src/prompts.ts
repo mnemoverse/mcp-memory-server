@@ -23,6 +23,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { exactLiteral, withDomainEscapeLegend } from "./names.js";
 
+/**
+ * Register the three memory prompts on `server`. They call nothing: each
+ * renders a message that asks the model to use memory_read or memory_write.
+ */
 export function registerMemoryPrompts(server: McpServer): void {
   server.registerPrompt(
     "recall",

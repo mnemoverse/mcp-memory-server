@@ -287,6 +287,10 @@ Three named shortcuts for clients that show MCP prompts as commands (Claude Code
 | `save_insight` | `insight`, optional `domain` | Store an insight with `memory_write` and confirm what was stored |
 | `what_do_you_know` | `subject` | A briefing from `memory_read` that flags what is not stored |
 
+### Resources
+
+`memory://item/{memory_id}` opens one saved memory by its id (the `id:` line of a `memory_read` result) for clients that attach MCP resources. It returns the memory's `memory_id`, `content` and `domain` as JSON. It reads your own store only: a memory read from a shared room cannot be opened by id.
+
 ### Tool surface stability
 
 `tools/list` is frozen per released version, so a client can save the list it

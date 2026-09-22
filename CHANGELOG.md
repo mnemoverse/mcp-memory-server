@@ -117,6 +117,19 @@ git history and the GitHub releases are the record.
   before, and one too long to print exactly is refused. The
   withdrawn-claims and domain-normalisation denylists now read the prompts
   too.
+- **An MCP resource, `memory://item/{memory_id}`.** Clients that attach
+  resources can open one saved memory by the id a `memory_read` result
+  shows. It returns only `memory_id`, `content` and `domain` as JSON; the
+  engine's point read also carries scores and metadata a model does not
+  need. It comes from the hosted connector with the same URI template,
+  name and output, and another server registers it with
+  `registerMemoryResources(server, { apiFetch })` from `/shared`. It reads
+  the caller's own store only, because the engine's point read takes no
+  domain, so a memory from a shared room cannot be opened; the
+  description says so. A missing memory answers with MCP's
+  resource-not-found code (-32002) and the engine's detail; any other
+  failure keeps this package's explanation of it. The id is decoded once
+  from the URI and encoded once into the path.
 
 ### Fixed
 

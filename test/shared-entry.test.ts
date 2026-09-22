@@ -16,6 +16,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   registerMemoryPrompts,
+  registerMemoryResources,
   registerMemoryTools,
   SERVER_INSTRUCTIONS,
   type ApiFetch,
@@ -69,6 +70,24 @@ describe("the shared entry point", () => {
     await server.close();
   });
 
+  it("registers the memory resource on a server it did not create, reading through apiFetch (0.11)", async () => {
+    const calls: string[] = [];
+    const apiFetch: ApiFetch = async <T>(path: string) => {
+      calls.push(path);
+      return { id: "m1", content: "c", domain: "d", importance: 0.9 } as T;
+    };
+    const server = new McpServer({ name: "shared-entry-resources", version: "0.0.0" });
+    registerMemoryResources(server, { apiFetch });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "shared-entry-resources-client", version: "0.0.0" });
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const res = await client.readResource({ uri: "memory://item/m1" });
+    expect(calls).toEqual(["/memory/atoms/m1"]);
+    expect(JSON.parse((res.contents[0] as { text: string }).text)).toEqual({ memory_id: "m1", content: "c", domain: "d" });
+    await server.close();
+  });
+
   it("reaches the API only through the injected apiFetch", async () => {
     const calls: string[] = [];
     const apiFetch: ApiFetch = async <T>(path: string) => {
@@ -113,7 +132,8 @@ describe("the shared entry point", () => {
     // main entry opens a stdio transport when imported without
     // MNEMOVERSE_MCP_NO_AUTOSTART, which inside another server would attach
     // this package to that process's stdin and stdout.
-    for (const file of ["../src/shared.ts", "../src/tools.ts"]) {
+    // prompts.ts and resources.ts joined /shared in 0.11 and are read too.
+    for (const file of ["../src/shared.ts", "../src/tools.ts", "../src/prompts.ts", "../src/resources.ts"]) {
       const source = readFileSync(new URL(file, import.meta.url), "utf8");
       expect(source, `${file} imports the stdio entry`).not.toMatch(/from\s+["']\.\/index(\.js)?["']/);
     }
