@@ -172,6 +172,33 @@ export function unreadableAnswerText(
 }
 
 /**
+ * A success result carrying both a text block and `structuredContent`, which
+ * is what a tool with a declared `outputSchema` must return, or the SDK
+ * itself rejects the call. `validateToolOutput` in the installed SDK
+ * (node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js:185-207)
+ * turns a non-error, text-only result into an `isError` "Output validation
+ * error: … has an output schema but no structured content was provided", the
+ * moment a tool declares that schema, even though the same text alone was a
+ * fine answer the day before the schema was added. Pinned against that
+ * installed SDK in test/structured-output.test.ts.
+ *
+ * Deliberately dumb: it does not call `capResult` or `withDomainEscapeLegend`
+ * itself. Every tool already measures and caps its own text with a per-tool
+ * hint and applies the legend after the cap (see memory_read below), so a
+ * helper that capped again would double-truncate; callers pass `text`
+ * already finished.
+ */
+export function structured(
+  text: string,
+  data: Record<string, unknown>,
+): { content: [{ type: "text"; text: string }]; structuredContent: Record<string, unknown> } {
+  return {
+    content: [{ type: "text" as const, text }],
+    structuredContent: data,
+  };
+}
+
+/**
  * Two renderers, and which one a value gets is a decision, not a style choice.
  *
  * `safeInline` (src/render.ts) SANITISES an untrusted display string for inline

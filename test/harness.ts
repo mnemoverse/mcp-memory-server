@@ -130,10 +130,12 @@ export interface Harness {
   requestTo(key: string): StubbedRequest;
   /** Call a tool and return its text blocks joined by "\n". */
   callText(name: string, args?: Record<string, unknown>): Promise<string>;
-  /** Call a tool and return the raw result, including `isError`. */
+  /** Call a tool and return the raw result, including `isError` and, when the
+   *  tool used {@link structured} (src/tools.ts), `structuredContent`. */
   call(name: string, args?: Record<string, unknown>): Promise<{
     isError?: unknown;
     content?: unknown;
+    structuredContent?: unknown;
     text: string;
   }>;
   /** Drop all routes and recorded calls. Use in `beforeEach`. */
