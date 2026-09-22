@@ -128,8 +128,11 @@ git history and the GitHub releases are the record.
   domain, so a memory from a shared room cannot be opened; the
   description says so. A missing memory answers with MCP's
   resource-not-found code (-32002) and the engine's detail; any other
-  failure keeps this package's explanation of it. The id is decoded once
-  from the URI and encoded once into the path.
+  failure keeps this package's explanation of it. A success whose body is
+  not a memory (an empty 204, a missing content or domain) is an error in
+  the words the tools use for an unreadable answer, never a resource made
+  up from the id that was asked for. The id is decoded once from the URI
+  and encoded once into the path.
 
 ### Fixed
 

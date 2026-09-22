@@ -23,10 +23,24 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { ApiError } from "./errors.js";
-import type { MemoryToolDeps } from "./tools.js";
+import { unreadableAnswerText, type MemoryToolDeps } from "./tools.js";
 
 /** MCP's code for a resource that does not exist (spec, "Resources: Error Handling"). */
 const RESOURCE_NOT_FOUND = -32002;
+
+/**
+ * The URI segment as the template hands it over is still percent-encoded.
+ * Decode it once, so the request path encodes the id itself rather than its
+ * encoding; a malformed escape is kept as sent (and then encoded, so it can
+ * never become a path separator).
+ */
+function decodeOnce(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
 
 /**
  * Register the `memory://item/{memory_id}` resource on `server`. It reaches the
@@ -45,33 +59,10 @@ export function registerMemoryResources(server: McpServer, deps: MemoryToolDeps)
       mimeType: "application/json",
     },
     async (uri, variables) => {
-      // The template hands over the segment as it appears in the URI, still
-      // percent-encoded. Decode it once, so the path below encodes the id
-      // itself rather than its encoding; a malformed escape is kept as sent.
-      const raw = String(variables.memory_id);
-      let id = raw;
+      const id = decodeOnce(String(variables.memory_id));
+      let answer: unknown;
       try {
-        id = decodeURIComponent(raw);
-      } catch {
-        id = raw;
-      }
-      try {
-        const atom = await apiFetch<{ id?: string; content?: string; domain?: string }>(
-          `/memory/atoms/${encodeURIComponent(id)}`,
-        );
-        return {
-          contents: [
-            {
-              uri: uri.href,
-              mimeType: "application/json",
-              text: JSON.stringify({
-                memory_id: atom?.id ?? id,
-                content: atom?.content,
-                domain: atom?.domain,
-              }),
-            },
-          ],
-        };
+        answer = await apiFetch<unknown>(`/memory/atoms/${encodeURIComponent(id)}`);
       } catch (err) {
         // The message is the package's own explanation of the failure
         // (src/errors.ts), so a 429 keeps the engine's quota sentence and a
@@ -82,6 +73,36 @@ export function registerMemoryResources(server: McpServer, deps: MemoryToolDeps)
           err instanceof ApiError && err.status === 404 ? RESOURCE_NOT_FOUND : ErrorCode.InternalError;
         throw new McpError(code, message);
       }
+      // A success whose body is not a memory (an empty 204, which apiFetch
+      // returns as {}, or any other shape) is not passed off as one: without
+      // this check it became {"memory_id": "<the id asked for>"}, a resource
+      // made up from the request (Copilot on #149). Content and domain must be
+      // strings, as the engine's AtomDetailSchema requires.
+      const atom = answer as { id?: unknown; content?: unknown; domain?: unknown } | null;
+      if (
+        typeof atom !== "object" ||
+        atom === null ||
+        typeof atom.content !== "string" ||
+        typeof atom.domain !== "string"
+      ) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          unreadableAnswerText("The memory", "the memory", "it is empty or gone"),
+        );
+      }
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              memory_id: typeof atom.id === "string" ? atom.id : id,
+              content: atom.content,
+              domain: atom.domain,
+            }),
+          },
+        ],
+      };
     },
   );
 }

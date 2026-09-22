@@ -136,22 +136,37 @@ function unreadableAnswerReply(
     content: [
       {
         type: "text" as const,
-        // The tail attributes the unreadable 200 to "whatever answered this
-        // call", not to "the memory service" — this client cannot establish
-        // WHO answered: a gateway, a proxy, or the endpoint a mis-set
-        // MNEMOVERSE_API_URL points at produces the same 200 with an
-        // unrecognised body (truth re-verification, 2026-08-09). Pinned in
-        // test/handlers.test.ts.
-        text:
-          `${subject} came back in a shape this client does not recognise — so this ` +
-          `is not ${notA}, and it is not evidence that ${absence}.${extra} Retry; ` +
-          `if it persists, whatever answered this call — the memory service, a ` +
-          `gateway or proxy in front of it, or the endpoint a mis-set ` +
-          `MNEMOVERSE_API_URL points at — is answering in a shape this client ` +
-          `cannot read.`,
+        text: unreadableAnswerText(subject, notA, absence, extra),
       },
     ],
   };
+}
+
+/**
+ * The sentence behind {@link unreadableAnswerReply}, exported so the memory
+ * resource (src/resources.ts) says the same thing about an unreadable answer
+ * rather than keeping its own copy.
+ *
+ * The tail attributes the unreadable 200 to "whatever answered this call", not
+ * to "the memory service" — this client cannot establish WHO answered: a
+ * gateway, a proxy, or the endpoint a mis-set MNEMOVERSE_API_URL points at
+ * produces the same 200 with an unrecognised body (truth re-verification,
+ * 2026-08-09). Pinned in test/handlers.test.ts.
+ */
+export function unreadableAnswerText(
+  subject: string,
+  notA: string,
+  absence: string,
+  extra = "",
+): string {
+  return (
+    `${subject} came back in a shape this client does not recognise — so this ` +
+    `is not ${notA}, and it is not evidence that ${absence}.${extra} Retry; ` +
+    `if it persists, whatever answered this call — the memory service, a ` +
+    `gateway or proxy in front of it, or the endpoint a mis-set ` +
+    `MNEMOVERSE_API_URL points at — is answering in a shape this client ` +
+    `cannot read.`
+  );
 }
 
 /**

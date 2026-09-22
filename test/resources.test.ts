@@ -12,7 +12,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { httpError, startMemoryServer, type Harness } from "./harness.js";
+import { httpError, noContent, startMemoryServer, type Harness } from "./harness.js";
 
 const ID = "3f9c2a1e-7b4d-4c8e-9a1f-2d3e4f5a6b7c";
 const GET_ATOM = `GET /memory/atoms/${ID}`;
@@ -117,6 +117,36 @@ describe("what this package adds", () => {
     const { resourceTemplates } = await mcp.client.listResourceTemplates();
     const t = resourceTemplates.find((r) => r.uriTemplate === "memory://item/{memory_id}");
     expect(t?.description).toContain("a memory read from a shared room cannot be opened by ID");
+  });
+
+  // Copilot on #149: an empty 204 (apiFetch returns {}) or any body that is not
+  // a memory used to come back as {"memory_id": "<the id asked for>"}, a
+  // resource made up from the request. It is an error now, in the words the
+  // tools use for an unreadable answer.
+  it.each([
+    ["an empty 204", noContent()],
+    ["a body without content", { id: ID, domain: "graph-geo" }],
+    ["a body without domain", { id: ID, content: "x" }],
+    ["a non-string content", { id: ID, content: 42, domain: "graph-geo" }],
+    ["a JSON array", [ATOM]],
+  ])("does not pass off %s as a memory", async (_, reply) => {
+    mcp.on(GET_ATOM, reply);
+    const err = (await mcp.client
+      .readResource({ uri: `memory://item/${ID}` })
+      .catch((e: unknown) => e)) as { code?: number; message: string };
+    expect(err.code).toBe(-32603);
+    expect(err.message).toContain("The memory came back in a shape this client does not recognise");
+    expect(err.message).toContain("not evidence that it is empty or gone");
+  });
+
+  it("falls back to the requested id only when the engine omits its own", async () => {
+    mcp.on(GET_ATOM, { content: "c", domain: "d" });
+    const res = await mcp.client.readResource({ uri: `memory://item/${ID}` });
+    expect(JSON.parse((res.contents[0] as { text: string }).text)).toEqual({
+      memory_id: ID,
+      content: "c",
+      domain: "d",
+    });
   });
 
   it("reading one memory makes exactly one request", async () => {
