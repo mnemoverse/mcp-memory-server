@@ -44,6 +44,7 @@ import {
   exactLiteral,
   formatDomainList,
   roomNamePhrase,
+  structuredText,
   withDomainEscapeLegend,
 } from "./names.js";
 import { ApiError } from "./errors.js";
@@ -373,6 +374,35 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
               " memory_list_rooms.",
           ),
       },
+      // Copied from the connector's `memoryWriteOutput` (mnemoverse-mcp-remote,
+      // src/tools/index.ts), field for field and description for description,
+      // with ONE deliberate difference: `memory_id` here is `z.string()`, not
+      // `z.guid()` (decision OD-7, owner, 2026-09-22). This package's ids are
+      // opaque strings, and nothing in the contract promises they are UUIDs;
+      // a guid validator would turn any future id-format change into a
+      // whole-page "Output validation error" instead of a value this client
+      // simply could not shape-check further.
+      outputSchema: {
+        stored: z
+          .boolean()
+          .describe("Whether the memory passed the novelty gate and was stored."),
+        memory_id: z
+          .string()
+          .nullable()
+          .describe("Identifier of the stored memory, or null when it was not stored."),
+        reason: z
+          .string()
+          .optional()
+          .describe(
+            "The memory service's own explanation of this outcome, quoted as sent — when stored is false this is the ONLY statement of WHY, e.g. \"Below importance threshold (0.047 < 0.1)\". Ordinary text is preserved exactly; only control, bidi, zero-width, and repeated-whitespace characters are normalized before display. Absent when the service sent no explanation.",
+          ),
+        importance: z
+          .number()
+          .optional()
+          .describe(
+            "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. A first-generation metric UNDER ACTIVE DEVELOPMENT and known to be unreliable — the same content has measured ~0.08 in Russian against ~0.55 in English, so it under-reads non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
+          ),
+      },
       annotations: {
         title: "Store Memory",
         readOnlyHint: false,
@@ -465,17 +495,47 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         ? (exactLiteral(r.reason, 400)?.literal ?? "(too long to quote exactly)")
         : "";
 
+      // Structured twins of the two text-only values above, for
+      // `structuredContent`: the raw number instead of the two-decimal
+      // string, and the control/bidi/zero-width-normalised text (src/names.ts
+      // `structuredText`) instead of the quoted JSON literal `reasonQuote`
+      // uses, since a `structuredContent` consumer reads `reason` as a plain
+      // string field, not a literal it must decode. Computed once and used on
+      // BOTH verdict branches below, since core can send either on a stored
+      // write too. Core's `superseded` array (the ids this write replaced) is
+      // deliberately not carried in this slice.
+      const reasonStructured = structuredText(r.reason, 400);
+      const importanceStructured = typeof r.importance === "number" ? r.importance : undefined;
+      const optionalStructured = {
+        ...(reasonStructured === undefined ? {} : { reason: reasonStructured }),
+        ...(importanceStructured === undefined ? {} : { importance: importanceStructured }),
+      };
+
       // Narrowed to `true` by the guard above, so this is now the server's stated
       // verdict rather than "the body was not falsy".
       if (r.stored) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Stored (importance: ${importance}). ID: ${r.atom_id ?? "unknown"}`,
-            },
-          ],
-        };
+        // core's WriteResponseSchema carries `atom_id` on every stored write,
+        // so a `stored: true` body without one is not core's answer: the
+        // same class of unreadable 2xx the guard above catches for a missing
+        // `stored`, just discovered one field later. `structuredContent`
+        // needs `memory_id` to be a string (the declared outputSchema), and
+        // there is no honest value to put there for a write whose own result
+        // does not say what was stored.
+        if (typeof r.atom_id !== "string") {
+          return unreadableAnswerReply(
+            "The write result",
+            "confirmation that the memory was stored",
+            "it was refused",
+            " Whether the content reached memory is unknown from here — report the" +
+              " outcome of the RETRY, not of this call, and do not tell the user it" +
+              " was saved or that it was rejected.",
+          );
+        }
+        return structured(`Stored (importance: ${importance}). ID: ${r.atom_id}`, {
+          stored: true,
+          memory_id: r.atom_id,
+          ...optionalStructured,
+        });
       }
       // NOT STORED. The old wording ("Filtered — …") named the mechanism but
       // never the outcome, so a caller could read it as a soft success and move
@@ -493,68 +553,63 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // text ended with "write it again", so a compliant agent looped. It was
       // anti-correlated with the mechanism in exactly the case it was written
       // for: a correction, which is by nature similar to what it corrects.
-      return {
-        content: [
-          {
-            type: "text" as const,
-            // WHAT IS CONDITIONAL HERE, stated exactly, because a previous
-            // version of this comment claimed more than the code does.
-            //
-            // Conditional: the SERVER'S VERDICT and the SCORE. `Server reason:`
-            // is printed only when `reason` came back, and `Novelty score` only
-            // when a numeric `importance` did — a live surface answers
-            // `{"stored":false}` with neither, and quoting a verdict nobody sent
-            // would be a claim on zero evidence.
-            //
-            // Unconditional: the MECHANISM sentence below, and it is not derived
-            // from this response. It is a statement about core: `/memory/write`
-            // refuses for exactly one reason — the importance gate, scoring
-            // geometric novelty against the nearest existing atom in the same
-            // domain, with "Below importance threshold (x < y)" as its only text
-            // (two branches in memory_engine, one reason). The BATCH endpoint has
-            // other failure paths; this client does not call it. So for any
-            // rejection this client can receive, that sentence is true whether or
-            // not the server bothered to say why. The earlier comment here read
-            // "the cause is named only when the server named it", which describes
-            // a draft that did not carry this sentence at all.
-            //
-            // NOT PRESENT AT ALL: a prediction about the retry. "Rewording will
-            // score the same or lower" was asserted as fact and is probably
-            // BACKWARDS — novelty decreases with similarity to the blocking
-            // memory, so a reworded sentence is usually LESS similar and scores
-            // HIGHER. And delete-then-write advice an earlier draft carried was
-            // impossible for a room write even when memory_delete still existed:
-            // the blocker is a room atom, which that tool could not touch either
-            // (reviews, 2026-08-08). Deletion is administrative-only now
-            // (2026-08-20), so this message never suggests it at all.
-            text:
-              `NOT STORED — nothing was saved.` +
-              (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
-              (importance === "unknown"
-                ? ``
-                : ` Novelty score ${importance}. That score is a first-generation` +
-                  ` metric under active development and known to be unreliable —` +
-                  ` identical content has measured ~0.08 in Russian against ~0.55 in` +
-                  ` English — so read it as a rough hint about similarity, not as a` +
-                  ` judgement of whether this memory was worth keeping.`) +
-              (isRoomDomain(domain)
-                ? // ROOM RULE (core#482, 2026-08-13). A room is a message bus:
-                  // the second agent's job is to receive a restatement of what
-                  // the first was told, so a briefing or a status summary STORES
-                  // here. Only a write the embedder cannot distinguish from one
-                  // already present is refused. Telling a caller to "write the
-                  // delta" in a room would be advice against the room's purpose.
-                  ` Restatements are allowed in rooms — this one was refused only` +
-                  ` because it is indistinguishable by embedding from a message` +
-                  ` already there. Similarity is judged on roughly the first 500` +
-                  ` tokens, so a long message that OPENS like an earlier one can` +
-                  ` land here even when its body differs: lead with what is new.`
-                : ` Writes are gated on how much a memory adds over what is already in the` +
-                  ` same domain, so a near-duplicate is refused. If the point is genuinely` +
-                  ` new, write what is DIFFERENT rather than restating the whole fact.`),
-          },
-        ],
-      };
+      // WHAT IS CONDITIONAL HERE, stated exactly, because a previous
+      // version of this comment claimed more than the code does.
+      //
+      // Conditional: the SERVER'S VERDICT and the SCORE. `Server reason:`
+      // is printed only when `reason` came back, and `Novelty score` only
+      // when a numeric `importance` did — a live surface answers
+      // `{"stored":false}` with neither, and quoting a verdict nobody sent
+      // would be a claim on zero evidence.
+      //
+      // Unconditional: the MECHANISM sentence below, and it is not derived
+      // from this response. It is a statement about core: `/memory/write`
+      // refuses for exactly one reason — the importance gate, scoring
+      // geometric novelty against the nearest existing atom in the same
+      // domain, with "Below importance threshold (x < y)" as its only text
+      // (two branches in memory_engine, one reason). The BATCH endpoint has
+      // other failure paths; this client does not call it. So for any
+      // rejection this client can receive, that sentence is true whether or
+      // not the server bothered to say why. The earlier comment here read
+      // "the cause is named only when the server named it", which describes
+      // a draft that did not carry this sentence at all.
+      //
+      // NOT PRESENT AT ALL: a prediction about the retry. "Rewording will
+      // score the same or lower" was asserted as fact and is probably
+      // BACKWARDS — novelty decreases with similarity to the blocking
+      // memory, so a reworded sentence is usually LESS similar and scores
+      // HIGHER. And delete-then-write advice an earlier draft carried was
+      // impossible for a room write even when memory_delete still existed:
+      // the blocker is a room atom, which that tool could not touch either
+      // (reviews, 2026-08-08). Deletion is administrative-only now
+      // (2026-08-20), so this message never suggests it at all.
+      return structured(
+        `NOT STORED — nothing was saved.` +
+          (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
+          (importance === "unknown"
+            ? ``
+            : ` Novelty score ${importance}. That score is a first-generation` +
+              ` metric under active development and known to be unreliable —` +
+              ` identical content has measured ~0.08 in Russian against ~0.55 in` +
+              ` English — so read it as a rough hint about similarity, not as a` +
+              ` judgement of whether this memory was worth keeping.`) +
+          (isRoomDomain(domain)
+            ? // ROOM RULE (core#482, 2026-08-13). A room is a message bus:
+              // the second agent's job is to receive a restatement of what
+              // the first was told, so a briefing or a status summary STORES
+              // here. Only a write the embedder cannot distinguish from one
+              // already present is refused. Telling a caller to "write the
+              // delta" in a room would be advice against the room's purpose.
+              ` Restatements are allowed in rooms — this one was refused only` +
+              ` because it is indistinguishable by embedding from a message` +
+              ` already there. Similarity is judged on roughly the first 500` +
+              ` tokens, so a long message that OPENS like an earlier one can` +
+              ` land here even when its body differs: lead with what is new.`
+            : ` Writes are gated on how much a memory adds over what is already in the` +
+              ` same domain, so a near-duplicate is refused. If the point is genuinely` +
+              ` new, write what is DIFFERENT rather than restating the whole fact.`),
+        { stored: false, memory_id: null, ...optionalStructured },
+      );
     },
   );
 

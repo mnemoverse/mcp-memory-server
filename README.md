@@ -302,7 +302,11 @@ saw and diff it against what the server serves today, by version.
   and what a tool returns, as the CHANGELOG rules state.
 - **Within a MINOR** (x.Y.0): tools and annotation fields may be added, never
   removed or renamed, and no declared annotation field disappears or flips
-  silently. Every addition has a line in the CHANGELOG under that version.
+  silently. Every addition has a line in the CHANGELOG under that version. A
+  MINOR may also add an output schema (`outputSchema`, with
+  `structuredContent` returned alongside the same text) to a tool that did
+  not have one; once declared, that schema's fields are add-only under this
+  same rule.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
   renaming a declared annotation field,** is announced one MINOR ahead: the
   tool (or parameter) stays, its description says

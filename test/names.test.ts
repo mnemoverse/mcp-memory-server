@@ -30,6 +30,7 @@ import {
   exactLiteral,
   formatDomainList,
   roomNamePhrase,
+  structuredText,
   withDomainEscapeLegend,
 } from "../src/names.js";
 import { NAMES } from "./name-cases.js";
@@ -294,5 +295,74 @@ describe("withDomainEscapeLegend", () => {
   it("ignores names it could not print at all", () => {
     expect(withDomainEscapeLegend("msg", "x".repeat(500))).toBe("msg");
     expect(withDomainEscapeLegend("msg", undefined)).toBe("msg");
+  });
+});
+
+describe("structuredText", () => {
+  it("is undefined for a non-string", () => {
+    expect(structuredText(undefined, 100)).toBeUndefined();
+    expect(structuredText(null, 100)).toBeUndefined();
+    expect(structuredText(5, 100)).toBeUndefined();
+    expect(structuredText({}, 100)).toBeUndefined();
+  });
+
+  it("is undefined for a blank string", () => {
+    expect(structuredText("", 100)).toBeUndefined();
+    expect(structuredText("   ", 100)).toBeUndefined();
+    expect(structuredText("\t\n\r", 100)).toBeUndefined();
+  });
+
+  it("preserves ordinary text exactly, parentheses and a comparison operator included", () => {
+    // core's only write-rejection reason. safeInline (src/render.ts) deletes
+    // both parentheses and `<`; structuredText must not.
+    expect(structuredText("Below importance threshold (0.047 < 0.1)", 400)).toBe(
+      "Below importance threshold (0.047 < 0.1)",
+    );
+  });
+
+  it("keeps ordinary punctuation untouched", () => {
+    expect(structuredText("Hello, world! Is this: right?", 100)).toBe(
+      "Hello, world! Is this: right?",
+    );
+  });
+
+  it("turns a tab or a newline into a single space between words, instead of gluing them", () => {
+    expect(structuredText("foo\tbar", 100)).toBe("foo bar");
+    expect(structuredText("foo\nbar", 100)).toBe("foo bar");
+    expect(structuredText("foo\r\nbar", 100)).toBe("foo bar");
+  });
+
+  it("strips C0 and C1 control characters", () => {
+    expect(structuredText("foo\u0000bar", 100)).toBe("foo bar");
+    expect(structuredText("foo\u001fbar", 100)).toBe("foo bar");
+    expect(structuredText("foo\u007fbar", 100)).toBe("foo bar");
+    expect(structuredText("foo\u009fbar", 100)).toBe("foo bar");
+  });
+
+  it("strips the connector's full bidi set: ALM, LRM/RLM, the embedding/override pairs, the isolate pairs", () => {
+    for (const code of [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]) {
+      const ch = String.fromCodePoint(code);
+      expect(structuredText(`foo${ch}bar`, 100), `U+${code.toString(16)}`).toBe("foo bar");
+    }
+  });
+
+  it("drops zero-width characters with no replacement, so a split word rejoins", () => {
+    for (const code of [0x200b, 0x200c, 0x200d, 0x2060, 0xfeff]) {
+      const ch = String.fromCodePoint(code);
+      expect(structuredText(`wo${ch}rd`, 100), `U+${code.toString(16)}`).toBe("word");
+    }
+  });
+
+  it("collapses whitespace runs to a single space and trims the ends", () => {
+    expect(structuredText("  a   b  ", 100)).toBe("a b");
+  });
+
+  it("caps at the given length", () => {
+    const long = "x".repeat(500);
+    expect(structuredText(long, 10)).toBe("x".repeat(10));
+  });
+
+  it("is undefined when only invisible characters remain after normalisation", () => {
+    expect(structuredText("​​", 100)).toBeUndefined();
   });
 });

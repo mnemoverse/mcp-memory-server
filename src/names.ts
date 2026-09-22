@@ -303,3 +303,69 @@ export function withDomainEscapeLegend(
   });
   return needed ? message + DOMAIN_ESCAPE_LEGEND : message;
 }
+
+/**
+ * A third renderer, for values that go into `structuredContent` as the
+ * service sent them rather than into a sentence a reader compares by eye.
+ *
+ * `exactLiteral` is for a value the reader must reproduce byte-for-byte (a
+ * domain name): it either prints the value exactly, quotes included, or
+ * refuses to print it at all (the TEXT path for a write's `reason` keeps
+ * using it, `src/tools.ts`, `reasonQuote`). `structuredContent` is a
+ * different surface: a consumer reads `reason` as a plain string field, not
+ * as a quoted literal it must decode, so the same escaping convention does
+ * not apply. What still applies is CN-032: `reason` is text the memory
+ * service chose, and it reaches a caller's context unquoted, so it must be
+ * stripped of the same instruction-hiding character classes `safeInline`
+ * strips for a display string, while leaving ORDINARY text untouched,
+ * because core's only write-rejection reason,
+ * `"Below importance threshold (0.047 < 0.1)"`, must survive with its
+ * parentheses and `<` intact, which `safeInline` itself does not guarantee
+ * (it deletes both; see the block comment at the top of `src/render.ts`).
+ *
+ * Matches the connector's own field description for this value verbatim:
+ * "Ordinary text is preserved exactly; only control, bidi, zero-width, and
+ * repeated-whitespace characters are normalized before display"
+ * (mnemoverse-mcp-remote, `memoryWriteOutput.reason`). The character classes
+ * are copied from its `safeInline` (src/tools/index.ts) so the two servers
+ * normalise the same bytes the same way:
+ *
+ *   - C0 controls (U+0000-U+001F) and C1 controls (U+007F-U+009F), which
+ *     includes tab, newline and CR, are each replaced with a space, not
+ *     deleted, so removing one cannot glue two words together.
+ *   - Bidi controls (U+061C ALM, U+200E-U+200F LRM/RLM, U+202A-U+202E the
+ *     explicit embedding/override pairs and PDF, and U+2066-U+2069 the
+ *     isolate pairs and PDI) are also replaced with a space.
+ *   - Zero-width format characters (U+200B-U+200D ZWSP/ZWNJ/ZWJ, U+2060 word
+ *     joiner, U+FEFF ZWNBSP/BOM) are dropped with no replacement, since they
+ *     sit inside words rather than between them.
+ *   - Whitespace runs (including the spaces just introduced) are then
+ *     collapsed to one space each, and the result is trimmed.
+ *
+ * Reused by later slices for the other free-text fields the service can
+ * return unquoted: room name, `share_message`, `next_steps`.
+ */
+export function structuredText(s: unknown, cap: number): string | undefined {
+  if (typeof s !== "string" || s.trim() === "") return undefined;
+  let out = "";
+  for (const ch of s) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isControl = code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+    const isBidi =
+      code === 0x061c || // ARABIC LETTER MARK
+      (code >= 0x200e && code <= 0x200f) || // LRM, RLM
+      (code >= 0x202a && code <= 0x202e) || // LRE, RLE, PDF, LRO, RLO
+      (code >= 0x2066 && code <= 0x2069); // LRI, RLI, FSI, PDI
+    const isZeroWidth =
+      code === 0x200b || // ZERO WIDTH SPACE
+      code === 0x200c || // ZWNJ
+      code === 0x200d || // ZWJ
+      code === 0x2060 || // WORD JOINER
+      code === 0xfeff; // ZWNBSP / BOM
+    if (isControl || isBidi) out += " ";
+    else if (isZeroWidth) continue;
+    else out += ch;
+  }
+  const collapsed = out.replace(/\s+/g, " ").trim();
+  return collapsed === "" ? undefined : collapsed.slice(0, cap);
+}
