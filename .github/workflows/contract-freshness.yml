@@ -19,6 +19,9 @@ on:
       - "src/limits.ts"
       - "scripts/generate-limits.mjs"
 
+permissions:
+  contents: read
+
 jobs:
   limits:
     runs-on: ubuntu-latest
