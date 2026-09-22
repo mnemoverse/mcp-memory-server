@@ -10,6 +10,8 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DOMAIN_ESCAPE_LEGEND, exactLiteral } from "../src/names.js";
+import { NAMES } from "./name-cases.js";
 import { startMemoryServer, type Harness } from "./harness.js";
 
 let mcp: Harness;
@@ -73,6 +75,28 @@ describe("what this package adds", () => {
   it("quotes a domain exactly as given, padding and case included", async () => {
     const text = await render("save_insight", { insight: "x", domain: " XRoom:room_01ABC " });
     expect(text).toContain('under the domain " XRoom:room_01ABC "');
+  });
+
+  // Copilot on #148: the domain was pasted between quotes raw, so `say "hi"`
+  // closed the quotes early and a newline or zero-width space vanished into
+  // the text. It now goes through the same exact-literal contract as every
+  // other domain the package names; each case must decode back to its bytes.
+  for (const [label, value] of NAMES.filter(([, v]) => v !== "")) {
+    it(`save_insight names the domain reproducibly: ${label}`, async () => {
+      const text = await render("save_insight", { insight: "x", domain: value });
+      const exact = exactLiteral(value)!;
+      expect(text).toContain(`under the domain ${exact.literal}:`);
+      expect(JSON.parse(exact.literal)).toBe(value);
+      // The legend that says how to decode an escape appears exactly when one
+      // was needed.
+      expect(text.includes(DOMAIN_ESCAPE_LEGEND)).toBe(exact.escaped);
+    });
+  }
+
+  it("save_insight refuses a domain too long to quote exactly, rather than dropping it", async () => {
+    await expect(
+      mcp.client.getPrompt({ name: "save_insight", arguments: { insight: "x", domain: "d".repeat(300) } }),
+    ).rejects.toThrow(/too long to be quoted exactly/);
   });
 
   it("trims the topic, as the connector does", async () => {

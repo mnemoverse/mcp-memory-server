@@ -111,9 +111,12 @@ git history and the GitHub releases are the record.
   itself. They come from the hosted connector with the same names,
   arguments and wording, and another server registers them with
   `registerMemoryPrompts(server)` from `/shared`. One difference: the
-  `domain` of `save_insight` is quoted exactly as given, like every domain
-  this package handles. The withdrawn-claims and domain-normalisation
-  denylists now read the prompts too.
+  `domain` of `save_insight` is printed as an exact JSON literal, like every
+  domain this package names, so a quote, newline or invisible character in
+  it is escaped rather than breaking the message; a plain domain reads as
+  before, and one too long to print exactly is refused. The
+  withdrawn-claims and domain-normalisation denylists now read the prompts
+  too.
 
 ### Fixed
 

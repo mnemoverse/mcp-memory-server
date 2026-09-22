@@ -10,14 +10,18 @@
  * Moved here from the hosted connector (mnemoverse-mcp-remote,
  * src/prompts/index.ts) in step 3c of the ADR-025 plan, with the same names,
  * arguments and wording, so the connector can register these instead of its
- * copy. One difference is deliberate: `domain` in save_insight is quoted
- * exactly as given, like every domain this package handles; the other
+ * copy. One difference is deliberate: `domain` in save_insight is printed as
+ * an exact JSON literal (src/names.ts), like every domain this package names,
+ * because the model has to send it back to memory_write byte for byte. For a
+ * plain domain the message is identical to the connector's. The other
  * arguments are trimmed, as the connector trims them, because a blank topic is
  * not a request.
  */
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { exactLiteral, withDomainEscapeLegend } from "./names.js";
 
 export function registerMemoryPrompts(server: McpServer): void {
   server.registerPrompt(
@@ -63,19 +67,38 @@ export function registerMemoryPrompts(server: McpServer): void {
           .describe("Optional domain/category to file it under (e.g. 'project-x')."),
       },
     },
-    ({ insight, domain }) => ({
-      messages: [
-        {
-          role: "user" as const,
-          content: {
-            type: "text" as const,
-            text: `Use the memory_write tool to store this insight in my long-term memory${
-              domain ? ` under the domain "${domain}"` : ""
-            }: "${insight}". Then confirm exactly what was stored.`,
+    ({ insight, domain }) => {
+      // The domain is an identifier the model must reproduce exactly, so it is
+      // printed as a JSON literal: a quote, backslash, newline or invisible
+      // character inside it is escaped instead of closing the quotes early
+      // (Copilot on #148). A plain domain prints exactly as the connector's
+      // `"${domain}"` did. A domain too long to print exactly is refused
+      // rather than named inexactly or dropped, since dropping it would file
+      // the insight somewhere the user did not ask for.
+      let under = "";
+      if (domain) {
+        const exact = exactLiteral(domain);
+        if (exact === null) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "save_insight: this domain is too long to be quoted exactly in the message. Pass a shorter domain.",
+          );
+        }
+        under = ` under the domain ${exact.literal}`;
+      }
+      const text = `Use the memory_write tool to store this insight in my long-term memory${under}: "${insight}". Then confirm exactly what was stored.`;
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: withDomainEscapeLegend(text, domain),
+            },
           },
-        },
-      ],
-    }),
+        ],
+      };
+    },
   );
 
   server.registerPrompt(

@@ -8,7 +8,11 @@
  * import.
  *
  *     import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
- *     import { registerMemoryTools, SERVER_INSTRUCTIONS } from "@mnemoverse/mcp-memory-server/shared";
+ *     import {
+ *       registerMemoryPrompts,
+ *       registerMemoryTools,
+ *       SERVER_INSTRUCTIONS,
+ *     } from "@mnemoverse/mcp-memory-server/shared";
  *
  *     const server = new McpServer({ name, version }, { instructions: SERVER_INSTRUCTIONS });
  *     registerMemoryTools(server, { apiFetch });
