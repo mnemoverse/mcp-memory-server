@@ -1195,8 +1195,9 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // refusing a non-member, an archived room and a read-only member with
         // a 403 that explain403 names. Any other value changes nothing: the
         // rating goes to the caller's own store, as it does without one. No
-        // format or length check here (ADR-025), and the value is sent exactly
-        // as given, like every other domain this package passes on.
+        // format or length check here (ADR-025). The value is sent untouched,
+        // like every other domain this package passes on, except that an
+        // empty string counts as none (searchedScope, as on memory_read).
         domain: z
           .string()
           .optional()
@@ -1254,9 +1255,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         };
       }
       // `atom_ids` below is the ENGINE's field name for the same list; the
-      // wire contract is unchanged. `domain` is sent only when given, so a
-      // call without it is byte-identical to one from before 0.11 and core
-      // applies its own default.
+      // wire contract is unchanged. `domain` goes through `searchedScope`, as
+      // on memory_read and memory_list_recent: an empty string counts as no
+      // domain and is not sent, so a call without one is byte-identical to one
+      // from before 0.11 and core applies its own default. Any other value is
+      // sent untouched.
+      const scope = searchedScope(domain);
       const r = await apiFetch<{
         updated_count?: number;
         avg_valence?: number;
@@ -1264,7 +1268,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       }>("/memory/feedback", {
         method: "POST",
         body: JSON.stringify(
-          domain === undefined ? { atom_ids, outcome } : { atom_ids, outcome, domain },
+          scope === undefined ? { atom_ids, outcome } : { atom_ids, outcome, domain: scope },
         ),
       });
 
@@ -1355,7 +1359,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
               type: "text" as const,
               text:
                 "No feedback was recorded — none of those ids matched a memory " +
-                `${feedbackScope(domain)}. ${feedbackMissCauses(domain)}`,
+                `${feedbackScope(scope)}. ${feedbackMissCauses(scope)}`,
             },
           ],
         };
@@ -1403,7 +1407,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const mismatch =
         count < atom_ids.length
           ? ` That is fewer than the ${idsSent}: ${atom_ids.length - count} of them ` +
-            `matched nothing ${feedbackScope(domain)}. ${feedbackMissCauses(domain)}`
+            `matched nothing ${feedbackScope(scope)}. ${feedbackMissCauses(scope)}`
           : count > atom_ids.length
             ? ` That is more than the ${idsSent}, so it cannot be a per-id result — ` +
               `read it as the service's own tally, not as how many of your memories ` +

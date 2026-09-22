@@ -70,9 +70,32 @@ describe("memory_feedback takes a room's address as domain", () => {
       httpError(403, envelope("FORBIDDEN", "Read-only membership cannot write to this room")),
     );
     const res = await mcp.call("memory_feedback", { memory_ids: ["a"], outcome: 1, domain: ROOM });
+    // The stub answers by route alone, so prove the room address was sent.
+    expect(mcp.requestTo(FEEDBACK).body).toMatchObject({ domain: ROOM });
     expect(res.isError).toBe(true);
     expect(res.text).toContain("membership in that room is read-only");
     expect(res.text).toContain("The API key is NOT the problem");
+  });
+
+  it("an empty domain counts as none, as on memory_read: nothing is sent", async () => {
+    mcp.on(FEEDBACK, { updated_count: 0, avg_valence: 0 });
+    const text = await mcp.callText("memory_feedback", { memory_ids: ["a"], outcome: 1, domain: "" });
+    expect(mcp.requestTo(FEEDBACK).body).toEqual({ atom_ids: ["a"], outcome: 1 });
+    expect(text).toContain("none of those ids matched a memory in your own domains");
+  });
+
+  it("a domain that is not a room address is sent, and the reply still means your own store", async () => {
+    // Core routes any non-xroom domain to the caller's own store, so the
+    // wording follows the address shape, not the mere presence of a domain.
+    mcp.on(FEEDBACK, { updated_count: 0, avg_valence: 0 });
+    const text = await mcp.callText("memory_feedback", {
+      memory_ids: ["a"],
+      outcome: 1,
+      domain: "engineering",
+    });
+    expect(mcp.requestTo(FEEDBACK).body).toEqual({ atom_ids: ["a"], outcome: 1, domain: "engineering" });
+    expect(text).toContain("none of those ids matched a memory in your own domains");
+    expect(text).not.toContain("in that room");
   });
 
   it("a zero count with a room address says the ids did not match in that room", async () => {
@@ -95,6 +118,10 @@ describe("memory_feedback takes a room's address as domain", () => {
       domain: ROOM,
     });
     expect(text).toContain("1 of them matched nothing in that room");
+    // The valence of the memories that were reached comes before the
+    // shortfall, in the same reply.
+    expect(text).toContain("average valence is now 0.30");
+    expect(text.indexOf("average valence")).toBeLessThan(text.indexOf("fewer than"));
   });
 
   it("advertises domain as optional, for rooms only", async () => {

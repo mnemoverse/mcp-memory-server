@@ -81,7 +81,8 @@ git history and the GitHub releases are the record.
   engine has always routed a rating by `domain`. It refuses a
   non-member, an archived room and a read-only member, and the refusal names
   which one. Without `domain` the request is byte-identical to before and the
-  rating goes to your own memories. When nothing or only part matches, the
+  rating goes to your own memories; an empty `domain` counts as none, as it
+  does on `memory_read`. When nothing or only part matches, the
   reply now says whether it searched the room or your own domains, and gives
   the likely causes for that case.
 - **`memory_feedback` reports the average valence the engine returns.** The

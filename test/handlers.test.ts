@@ -936,7 +936,7 @@ describe("the load-bearing sentences, as returned", () => {
   });
 
   it("a count LARGER than the ids sent is not passed off as a per-id result", async () => {
-    mcp.on(FEEDBACK, { updated_count: 9 });
+    mcp.on(FEEDBACK, { updated_count: 9, avg_valence: -0.4 });
 
     const text = await mcp.callText("memory_feedback", {
       atom_ids: ["a"],
@@ -945,6 +945,8 @@ describe("the load-bearing sentences, as returned", () => {
 
     expect(text).toContain("more than the 1 id you sent");
     expect(text).toContain("cannot be a per-id result");
+    // The valence is the service's report too, and stays in the same reply.
+    expect(text).toContain("average valence is now -0.40");
   });
 
   it("negative feedback promises no fade: out-ranked, not erased (#95)", async () => {
