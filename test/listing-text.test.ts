@@ -63,10 +63,18 @@ describe("listing text directories copy", () => {
   });
 
   it("no surface says the local server needs a key to start", () => {
+    // The server starts and lists its tools without a key (src/index.ts); a
+    // key is needed for tool calls. So "requires … API key" is only true in a
+    // sentence that ties it to calls. The old mcpb line, "Requires a free API
+    // key from https://console…", said it bare and read as a start requirement.
+    const START = /refuses to start without|won't start without|\brequires? an? (?:free )?(?:mnemoverse )?api key\b/i;
+    const CALLS = /\btool calls?\b|\bevery (?:actual )?(?:tool )?call\b|\bto call\b/i;
     for (const [label, text] of LISTING) {
-      expect(text, `${label}: the server starts without a key (src/index.ts)`).not.toMatch(
-        /refuses to start without|won't start without|requires a (?:free )?api key(?! from| at)/i,
-      );
+      for (const s of sentences(text)) {
+        if (START.test(s) && !CALLS.test(s)) {
+          expect.fail(`${label}: "${s.slice(0, 200)}" reads as a key needed to start`);
+        }
+      }
     }
   });
 });

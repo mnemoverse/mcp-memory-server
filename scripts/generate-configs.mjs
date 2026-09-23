@@ -404,7 +404,8 @@ function snippetCursor({ utm = false } = {}) {
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
   const consoleUrl = utm
-    ? "https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
+    ? // /sign-up, not the root: the root redirects to /sign-in and drops the UTM tags.
+      "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
     : "https://console.mnemoverse.com";
   return (
     "**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n" +
