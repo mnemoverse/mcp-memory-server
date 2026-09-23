@@ -15,6 +15,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
+  CURSOR_RE,
   formatReadItem,
   formatRecentPage,
   safeInline,
@@ -1046,10 +1047,17 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         items: z
           .array(z.object(MEMORY_ITEM_OUTPUT))
           .describe("Entries newest-first (creation time descending)."),
+        // Optional, unlike the connector's required field (decision OD-12,
+        // 2026-09-23): the key is ABSENT when the service sent a continuation
+        // token this client will not pass on (CN-032 shape gate, the same one
+        // the text applies), because null would claim the listing is complete.
         next_cursor: z
           .string()
           .nullable()
-          .describe("Pass back as cursor for the next (older) page; null = listing complete."),
+          .optional()
+          .describe(
+            "Pass back as cursor for the next (older) page; null = listing complete. Absent when the service sent a continuation token this client will not pass on; the text then says the token could not be displayed.",
+          ),
       },
       annotations: {
         title: "List Recent Memories",
@@ -1365,10 +1373,17 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           // not fit the budget is absent from `items` too, so pointing past
           // it would both skip entries and contradict the page just shown.
           // `acceptedCursor` is normalised to null in the loop already
-          // (`next === "" ? null : next`) before it ever reaches here; the
-          // `?? null` below is the same normalisation restated for whatever
-          // TypeScript cannot see was already guaranteed.
-          next_cursor: acceptedCursor ?? null,
+          // (`next === "" ? null : next`) before it ever reaches here. One
+          // more gate, the same one the text applies (CURSOR_RE, src/render.ts):
+          // a token of a shape this client will not pass on is withheld from
+          // the data too, and the key is then ABSENT, not null, since null
+          // would claim the listing is complete (decision OD-12, 2026-09-23;
+          // the schema marks the field optional for exactly this case).
+          ...(acceptedCursor == null
+            ? { next_cursor: null }
+            : CURSOR_RE.test(acceptedCursor)
+              ? { next_cursor: acceptedCursor }
+              : {}),
         },
       );
     },
