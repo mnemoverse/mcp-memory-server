@@ -366,3 +366,11 @@ describe("structuredText", () => {
     expect(structuredText("​​", 100)).toBeUndefined();
   });
 });
+
+describe("structuredText: the cap counts code points, not UTF-16 units", () => {
+  it("does not split an astral character at the boundary into a lone surrogate", () => {
+    const out = structuredText("ab\u{1F600}cd", 3);
+    expect(out).toBe("ab\u{1F600}");
+    expect(out?.length).toBe(4);
+  });
+});

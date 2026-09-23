@@ -367,5 +367,8 @@ export function structuredText(s: unknown, cap: number): string | undefined {
     else out += ch;
   }
   const collapsed = out.replace(/\s+/g, " ").trim();
-  return collapsed === "" ? undefined : collapsed.slice(0, cap);
+  // The cap counts code points, as the connector's safeInline does: slicing
+  // the UTF-16 string could cut an astral character at the boundary into a
+  // lone surrogate.
+  return collapsed === "" ? undefined : [...collapsed].slice(0, cap).join("");
 }
