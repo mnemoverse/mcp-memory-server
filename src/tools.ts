@@ -376,7 +376,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       },
       // Copied from the connector's `memoryWriteOutput` (mnemoverse-mcp-remote,
       // src/tools/index.ts), field for field and description for description,
-      // with ONE deliberate difference: `memory_id` here is `z.string()`, not
+      // except that `reason`'s description also states the 400-character cap and
+      // the normalised-to-empty case (the connector's text promises exact
+      // preservation while capping the same way; review, 2026-09-23), and with ONE
+      // deliberate difference in a validator: `memory_id` here is `z.string()`, not
       // `z.guid()` (decision OD-7, owner, 2026-09-22). This package's ids are
       // opaque strings, and nothing in the contract promises they are UUIDs;
       // a guid validator would turn any future id-format change into a
@@ -394,7 +397,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .string()
           .optional()
           .describe(
-            "The memory service's own explanation of this outcome, quoted as sent — when stored is false this is the ONLY statement of WHY, e.g. \"Below importance threshold (0.047 < 0.1)\". Ordinary text is preserved exactly; only control, bidi, zero-width, and repeated-whitespace characters are normalized before display. Absent when the service sent no explanation.",
+            "The memory service's own explanation of this outcome, quoted as sent — when stored is false this is the ONLY statement of WHY, e.g. \"Below importance threshold (0.047 < 0.1)\". Ordinary text is preserved exactly; only control, bidi, zero-width, and repeated-whitespace characters are normalized before display, and the value is capped at 400 characters. Absent when the service sent no explanation, or when nothing remains after that normalization.",
           ),
         importance: z
           .number()
