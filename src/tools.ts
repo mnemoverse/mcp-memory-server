@@ -856,7 +856,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // Every item must carry the three fields core's MemoryItemSchema always
       // sends before this handler may render OR structure it: `atom_id`,
       // `content` and `domain`. A body with items but missing one of those on
-      // any entry is not core's answer to memory_read — the same "unreadable
+      // any entry is not core's answer to memory_read, the same "unreadable
       // 2xx" class the guard above catches one level up, discovered one field
       // later. `structuredItem` (src/render.ts) needs all three to build a
       // schema-honest structuredContent item, and there is no honest value to

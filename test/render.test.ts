@@ -193,7 +193,7 @@ describe("author/date/sanitizer edges", () => {
 });
 
 /**
- * `authorName` (S4, structured-output plan) — the bare sanitised name behind
+ * `authorName` (S4, structured-output plan): the bare sanitised name behind
  * `formatAuthorTag`'s bracketed text, extracted so `structuredItem` can put
  * the same value into `structuredContent.author` without a second
  * derivation. `formatAuthorTag` now builds its text FROM this value, so its
@@ -230,7 +230,7 @@ describe("authorName", () => {
 });
 
 /**
- * `structuredItem` (S4, structured-output plan) — the `structuredContent`
+ * `structuredItem` (S4, structured-output plan): the `structuredContent`
  * twin of `formatReadItem`. PRECONDITION documented on the function itself:
  * `atom_id`/`content`/`domain` are strings, which the handler's item guard
  * (src/tools.ts) enforces before calling this; the fixtures below all satisfy

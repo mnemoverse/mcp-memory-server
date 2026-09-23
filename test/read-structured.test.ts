@@ -6,7 +6,7 @@
  * are ports of the connector's own suite (mnemoverse-mcp-remote/test/mcp-
  * protocol.test.ts) so the two servers pin the SAME structuredContent shape
  * for the SAME core response, where this package's memory_read text allows
- * it — this package's non-empty answer has never carried the connector's
+ * it: this package's non-empty answer has never carried the connector's
  * "Found N matching memories." head sentence (it leads straight with the
  * numbered lines), so the text assertions below pin THIS package's actual
  * wording rather than the connector's.
@@ -62,7 +62,7 @@ describe("memory_read: tools/list carries the output schema", () => {
       required?: string[];
     };
     // The top-level shape has exactly one field, `items`, and it is required
-    // (never optional — a memory_read answer always carries a list, possibly
+    // (never optional: a memory_read answer always carries a list, possibly
     // empty).
     expect(Object.keys(schema.properties ?? {})).toEqual(["items"]);
     expect(schema.required).toEqual(["items"]);
@@ -96,7 +96,7 @@ describe("memory_read: structuredContent, ported from the connector's item shape
       items: [{ memory_id: "atom_7", content: "Rotations preserve symmetry.", domain: "arc" }],
     });
     // THIS package's non-empty memory_read text has no "Found N matching…"
-    // head sentence (that wording belongs to the connector's own copy) — it
+    // head sentence (that wording belongs to the connector's own copy); it
     // leads straight with the numbered line, so the stable substring to pin
     // is the rendered item itself.
     expect(result.text).toContain('1. Rotations preserve symmetry. @"arc"');
@@ -164,7 +164,7 @@ describe("memory_read: created_at in structuredContent", () => {
       items: [
         { atom_id: "a1", content: "x", domain: "general", created_at: "2026-08-02T10:00:00Z" },
         { atom_id: "a2", content: "y", domain: "general" },
-        // A wire value with the wrong TYPE — core's contract is a string; this
+        // A wire value with the wrong TYPE (core's contract is a string); this
         // is the same "degrade the field, not the call" class render.test.ts
         // pins at the unit level for formatDateTag.
         { atom_id: "a3", content: "z", domain: "general", created_at: 1754082281605 },

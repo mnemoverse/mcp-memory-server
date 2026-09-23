@@ -189,8 +189,8 @@ git history and the GitHub releases are the record.
   alongside its unchanged text.** A client that reads structured tool
   results now gets `{items: [{memory_id, content, domain, created_at?,
   author?}]}` as data instead of parsing the numbered lines. `author` is the
-  writing agent's sanitised name only — `sigma`, or `sigma · external` for a
-  connector outside this account — never the human `principal`, even though
+  writing agent's sanitised name only (`sigma`, or `sigma · external` for a
+  connector outside this account), never the human `principal`, even though
   core's response carries it. `created_at` appears only when core sent a
   string value for it; a present-but-wrong-typed one (a number, say) is
   dropped rather than guessed at, the same rule `formatDateTag` already
@@ -205,7 +205,7 @@ git history and the GitHub releases are the record.
   whole-page "Output validation error" instead of a value this client
   simply could not shape-check further. The text a caller already reads
   does not change, with one exception: an item missing a string `atom_id`,
-  `content` or `domain` used to degrade gracefully — the line simply omitted
+  `content` or `domain` used to degrade gracefully: the line simply omitted
   the missing part (no id line, no domain tag, or literal `(empty)` for
   content). The WHOLE answer is now the unreadable-answer error instead,
   because core's `MemoryItemSchema` always sends all three, so an item

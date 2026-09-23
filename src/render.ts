@@ -90,7 +90,7 @@ export function safeInline(s: unknown, cap = 200): string {
 }
 
 /**
- * "X" / "X · external" — agent identity only, never the human `principal`
+ * "X" / "X · external": agent identity only, never the human `principal`
  * (may be an email / PII), even though the response carries it. Empty string
  * when there is no renderable name.
  *
@@ -236,7 +236,7 @@ export function formatReadItem(item: ReadItem, index: number): string {
  * for the 25K-token result-size cap, `structuredContent` is not capped
  * anywhere else in this package either (memory_write's `reason` is the only
  * normalised structured field, and that's control/bidi/zero-width hygiene on
- * a diagnostic string, not a length cap on the memory itself) — a client
+ * a diagnostic string, not a length cap on the memory itself); a client
  * reading structured data reads `content` as the stored memory, and a
  * silently shorter value there would be a different kind of lie than a
  * truncated text block with a notice at the end.

@@ -1004,7 +1004,7 @@ describe("the load-bearing sentences, as returned", () => {
 
   // REWIRED for S4 (structured-output plan, deviation reported to the
   // orchestrator): these 30 items never carried a `domain`, which memory_read's
-  // new item guard (src/tools.ts) now treats as an unreadable body — core's
+  // new item guard (src/tools.ts) now treats as an unreadable body: core's
   // MemoryItemSchema sends `domain` on every item, so a response without one is
   // not core's answer, the same class the pre-existing `items` guard already
   // caught one level up. The truncation-notice wording this case used to pin
@@ -1903,13 +1903,13 @@ describe("a field with the wrong wire type costs that field, not the tool call",
   // REWIRED for S4 (structured-output plan, deviation reported to the
   // orchestrator): these 50 fixtures never carried `domain` either, and
   // memory_read's new item guard (src/tools.ts) treats a missing `domain` on
-  // ANY item as an unreadable body before rendering is even reached — so the
+  // ANY item as an unreadable body before rendering is even reached, so the
   // scenario this case was built to prove ("item 7's mistyped agent_name
   // degrades only item 7") is no longer reachable through this fixture; the
   // guard now fires first, on every item, for a different reason. The
-  // underlying guarantee this case protected — that `formatReadItem` /
+  // underlying guarantee this case protected, that `formatReadItem` /
   // `formatAuthorTag` degrade a wrong-typed `provenance` field instead of
-  // throwing — is still pinned directly in test/render.test.ts ("a broken
+  // throwing, is still pinned directly in test/render.test.ts ("a broken
   // item renders as a line, not as an exception", "formatAuthorTag drops the
   // tag instead of killing the line").
   it("memory_read: an item missing domain is unreadable, not a page with one dropped field", async () => {
