@@ -483,8 +483,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // memory_stats got in this release. A live surface exists that answers
       // {"stored":false} with no reason and no score; printing "0.00" there
       // fabricates the gate's verdict (review, 2026-08-08).
+      // A non-finite number is no score either: JSON can carry `1e400`, which
+      // parses as Infinity, passes a `typeof` check, prints as "Infinity" and
+      // fails the output schema (zod rejects non-finite numbers), so the whole
+      // reply would turn into an SDK validation error (review, 2026-09-23).
       const importance =
-        typeof r?.importance === "number" ? r.importance.toFixed(2) : "unknown";
+        typeof r?.importance === "number" && Number.isFinite(r.importance)
+          ? r.importance.toFixed(2)
+          : "unknown";
 
       // `Server reason:` is a VERBATIM label, and safeInline made it a lie on
       // every occurrence: core's only rejection reason is
@@ -508,7 +514,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // write too. Core's `superseded` array (the ids this write replaced) is
       // deliberately not carried in this slice.
       const reasonStructured = structuredText(r.reason, 400);
-      const importanceStructured = typeof r.importance === "number" ? r.importance : undefined;
+      const importanceStructured =
+        typeof r.importance === "number" && Number.isFinite(r.importance)
+          ? r.importance
+          : undefined;
       const optionalStructured = {
         ...(reasonStructured === undefined ? {} : { reason: reasonStructured }),
         ...(importanceStructured === undefined ? {} : { importance: importanceStructured }),

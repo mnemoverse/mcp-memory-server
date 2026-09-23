@@ -171,9 +171,10 @@ git history and the GitHub releases are the record.
   alongside its unchanged text.** A client that reads structured tool
   results now gets `{stored, memory_id, reason?, importance?}` as data
   instead of parsing the sentence. `reason` (capped at 400 characters, and
-  absent when nothing remains after normalisation) and `importance` appear
-  only when the memory service actually sent them; nothing is defaulted or
-  fabricated for an older core that omits either. `memory_id` is validated
+  absent when nothing remains after normalisation) and `importance` (a
+  non-finite number, which JSON can carry as `1e400`, counts as not sent)
+  appear only when the memory service actually sent them; nothing is
+  defaulted or fabricated for an older core that omits either. `memory_id` is validated
   as a plain string, not a UUID: this package's ids are opaque, nothing in
   the contract promises they are UUIDs, and a stricter check would turn any
   future id-format change into a whole-page "Output validation error"

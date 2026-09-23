@@ -21,7 +21,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { startMemoryServer, type Harness } from "./harness.js";
+import { httpError, startMemoryServer, type Harness } from "./harness.js";
 
 let mcp: Harness;
 
@@ -177,6 +177,25 @@ describe("memory_write: reason normalisation for structuredContent", () => {
 describe("memory_write: importance sent as a string is not a number this client will assert", () => {
   it("carries no importance key in structuredContent, and the text still says \"unknown\" as today", async () => {
     mcp.on(WRITE, { stored: true, atom_id: "atom_1", importance: "0.5" });
+
+    const result = await mcp.call("memory_write", { content: "x" });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ stored: true, memory_id: "atom_1" });
+    expect(result.text).toBe("Stored (importance: unknown). ID: atom_1");
+  });
+});
+
+describe("memory_write: a non-finite score is not a score", () => {
+  it("1e400 in the body (Infinity after parsing) is absent from structuredContent and unknown in the text", async () => {
+    // A plain object cannot carry Infinity through JSON.stringify, so the stub
+    // answers with the raw body text the way a service would send it.
+    mcp.on(
+      WRITE,
+      httpError(200, '{"stored":true,"atom_id":"atom_1","importance":1e400}', {
+        "content-type": "application/json",
+      }),
+    );
 
     const result = await mcp.call("memory_write", { content: "x" });
 
