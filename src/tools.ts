@@ -2298,19 +2298,25 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // this client should hand on as one. Absent when nothing remains.
       const joinUrlSafe = safeInline(r?.join_url, 400);
       const joinUrlStructured = joinUrlSafe === "" ? undefined : joinUrlSafe;
-      const codeStructured = typeof r?.code === "string" ? safeInline(r.code) : undefined;
-      const scopeStructured = typeof r?.scope === "string" ? safeInline(r.scope) : undefined;
-      const roomAddressStructured =
-        typeof r?.room_address === "string" ? safeInline(r.room_address) : undefined;
-      // `expires_at` "as sent" (OD-13 note above): utcInstant only VALIDATES
-      // that the value parses as an instant; the value stored is the raw
-      // string core sent, not utcInstant's own possibly-reformatted return.
+      // The other machine fields the same way: safeInline returns "" for a
+      // non-string, an empty string and a string with nothing it may keep,
+      // and "" is not a usable code, scope or address, so the key is absent
+      // (CodeRabbit, review round 2). Present only when something remains.
+      const codeSafe = safeInline(r?.code);
+      const codeStructured = codeSafe === "" ? undefined : codeSafe;
+      const scopeSafe = safeInline(r?.scope);
+      const scopeStructured = scopeSafe === "" ? undefined : scopeSafe;
+      const roomAddressSafe = safeInline(r?.room_address);
+      const roomAddressStructured = roomAddressSafe === "" ? undefined : roomAddressSafe;
+      // `expires_at` through utcInstant's RETURN, the rule memory_read's
+      // `created_at` already follows (S4): a value that states its offset is
+      // carried exactly as sent, an offset-less one, which this package reads
+      // as UTC by contract, is re-emitted as the UTC ISO-8601 instant, so a
+      // structured consumer lands on the instant this client used rather than
+      // reading the naive string as local time (CodeRabbit, review round 2).
+      // `null` when core sent null; absent when the value does not parse.
       const expiresAtStructured =
-        r?.expires_at === null
-          ? null
-          : typeof r?.expires_at === "string" && utcInstant(r.expires_at) !== null
-            ? r.expires_at
-            : undefined;
+        r?.expires_at === null ? null : (utcInstant(r?.expires_at) ?? undefined);
       return structured(text, {
         share_message: shareMessageStructured,
         ...(joinUrlStructured === undefined ? {} : { join_url: joinUrlStructured }),
@@ -2425,6 +2431,9 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // nothing; it is built from safe, already-sanitised parts and never
       // actually empties.
       const nextStepsStructured = structuredText(usage, 500) ?? usage;
+      // `scope` absent when safeInline leaves nothing, as on invite.
+      const scopeSafe = safeInline(r?.scope);
+      const scopeStructured = scopeSafe === "" ? undefined : scopeSafe;
       return structured(
         // Legend after the cap, same ordering rule as everywhere else.
         withDomainEscapeLegend(capResult(`${prefix}\n${usage}`), r?.name),
@@ -2432,7 +2441,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           room_id: roomId,
           address,
           ...(nameStructured === undefined ? {} : { name: nameStructured }),
-          ...(typeof r?.scope === "string" ? { scope: safeInline(r.scope) } : {}),
+          ...(scopeStructured === undefined ? {} : { scope: scopeStructured }),
           ...(typeof r?.already_member === "boolean"
             ? { already_member: r.already_member }
             : {}),

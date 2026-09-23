@@ -318,6 +318,43 @@ describe("memory_invite_to_room: structuredContent", () => {
     });
   });
 
+  it("expires_at: an offset-less value is re-emitted as the UTC instant; an offset-bearing one is carried as sent", async () => {
+    mcp.on(INVITE, { share_message: "Join my room.", expires_at: "2026-07-17T00:00:00" });
+
+    const naive = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(naive.isError).toBeFalsy();
+    expect(naive.structuredContent).toEqual({
+      share_message: "Join my room.",
+      expires_at: "2026-07-17T00:00:00.000Z",
+    });
+
+    mcp.reset();
+    mcp.on(INVITE, { share_message: "Join my room.", expires_at: "2026-07-17T02:00:00+02:00" });
+
+    const offset = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(offset.isError).toBeFalsy();
+    expect(offset.structuredContent).toEqual({
+      share_message: "Join my room.",
+      expires_at: "2026-07-17T02:00:00+02:00",
+    });
+  });
+
+  it("code, scope and room_address that sanitise to nothing are absent, never empty strings", async () => {
+    mcp.on(INVITE, {
+      share_message: "Join my room.",
+      code: "",
+      scope: "\u0007",
+      room_address: "   ",
+    });
+
+    const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ share_message: "Join my room." });
+  });
+
   it('expires_at: "not-a-date" is absent, not passed through', async () => {
     mcp.on(INVITE, { share_message: "Join my room.", expires_at: "not-a-date" });
 
@@ -507,6 +544,18 @@ describe("memory_join_room: structuredContent", () => {
 });
 
 // ---------------------------------------------------------------------------
+
+describe("memory_join_room: scope that sanitises to nothing", () => {
+  it("is absent from the data, never an empty string", async () => {
+    mcp.on(JOIN, { room_id: "room_x", address: "xroom:room_x", name: "team", scope: "" });
+
+    const result = await mcp.call("memory_join_room", { code: "mnvr_x" });
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as Record<string, unknown>;
+    expect("scope" in sc).toBe(false);
+  });
+});
 
 describe("caps: structuredText truncates the free-text fields", () => {
   it("a 300-character room name from the wire is capped at 200 in the data (create)", async () => {
