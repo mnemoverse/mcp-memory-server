@@ -37,11 +37,30 @@
  * so it is `null` here rather than a guess — `new Date(1754082281605)` is a
  * perfectly good date for a field whose contract says it is text.
  */
+/** An explicit UTC marker or numeric offset at the end of an ISO-8601 value. */
+const OFFSET_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
 export function parseAsUtc(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const s = value.trim();
-  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
+  const hasOffset = OFFSET_RE.test(s);
   const isDateTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s);
   const t = Date.parse(isDateTime && !hasOffset ? `${s.replace(" ", "T")}Z` : s);
   return Number.isNaN(t) ? null : t;
+}
+
+/**
+ * The instant `parseAsUtc` reads, as a string a structured consumer can trust:
+ * a value that states its own offset (`Z` or `+hh:mm`) is returned exactly as
+ * sent, so the common core value stays byte-identical; an offset-less value,
+ * which this package reads as UTC by contract, is re-emitted as the UTC
+ * ISO-8601 instant the text renders, because a consumer parsing the naive
+ * string by the ISO-8601 rule would read it as LOCAL time and land on a
+ * different instant than the text shows (review, 2026-09-23). `null` for
+ * anything `parseAsUtc` cannot read.
+ */
+export function utcInstant(value: unknown): string | null {
+  const t = parseAsUtc(value);
+  if (t === null || typeof value !== "string") return null;
+  return OFFSET_RE.test(value.trim()) ? value : new Date(t).toISOString();
 }

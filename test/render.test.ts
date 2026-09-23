@@ -311,6 +311,25 @@ describe("structuredItem", () => {
     });
     expect("created_at" in out).toBe(false);
   });
+
+  it("carries a created_at that states its offset exactly as sent", () => {
+    for (const v of ["2026-08-02T10:00:00Z", "2026-08-02T10:00:00.250Z", "2026-08-02T12:00:00+02:00"]) {
+      const out = structuredItem({ atom_id: "a1", content: "c", domain: "d", created_at: v });
+      expect(out.created_at, v).toBe(v);
+    }
+  });
+
+  it("re-emits an offset-less created_at as the UTC instant the text renders, not the naive string", () => {
+    // Naive = UTC by contract (src/time.ts); a consumer parsing the naive string
+    // by the ISO-8601 rule would read it as local time.
+    for (const v of ["2026-08-02T10:00:00", "2026-08-02 10:00:00"]) {
+      const out = structuredItem({ atom_id: "a1", content: "c", domain: "d", created_at: v });
+      expect(out.created_at, v).toBe("2026-08-02T10:00:00.000Z");
+      expect(formatReadItem({ atom_id: "a1", content: "c", domain: "d", created_at: v }, 0)).toContain(
+        "2026-08-02 10:00Z",
+      );
+    }
+  });
 });
 
 /**

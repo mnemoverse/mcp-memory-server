@@ -194,7 +194,12 @@ git history and the GitHub releases are the record.
   core's response carries it. `created_at` appears only when core sent a
   string that parses as a date; a wrong-typed one (a number, say) or an
   unparseable string is dropped rather than guessed at, the rule
-  `formatDateTag` already applies to the text. `content` is carried exactly as core sent it, with no
+  `formatDateTag` already applies to the text. A value that states its
+  offset (`Z` or `+hh:mm`) is carried exactly as sent; an offset-less
+  one, which this package reads as UTC by contract, is re-emitted as the
+  UTC ISO-8601 instant the text renders, because a structured consumer
+  would otherwise read the naive string as local time and land on a
+  different instant than the text shows. `content` is carried exactly as core sent it, with no
   cap and no normalisation: unlike the text, which `capResult` truncates for
   the 25K-token result-size limit, `structuredContent` is not capped
   anywhere else in this package either, so a capped page still carries every

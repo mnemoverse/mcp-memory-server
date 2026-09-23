@@ -168,6 +168,9 @@ describe("memory_read: created_at in structuredContent", () => {
         // is the same "degrade the field, not the call" class render.test.ts
         // pins at the unit level for formatDateTag.
         { atom_id: "a3", content: "z", domain: "general", created_at: 1754082281605 },
+        // Offset-less: UTC by contract, re-emitted as the UTC instant the text
+        // renders so a consumer cannot read it as local time.
+        { atom_id: "a4", content: "w", domain: "general", created_at: "2026-08-02T10:00:00" },
       ],
       search_time_ms: 1,
     });
@@ -186,6 +189,13 @@ describe("memory_read: created_at in structuredContent", () => {
     expect(sc.items[1]).not.toHaveProperty("created_at");
     expect(sc.items[2]).toEqual({ memory_id: "a3", content: "z", domain: "general" });
     expect(sc.items[2]).not.toHaveProperty("created_at");
+    expect(sc.items[3]).toEqual({
+      memory_id: "a4",
+      content: "w",
+      domain: "general",
+      created_at: "2026-08-02T10:00:00.000Z",
+    });
+    expect(result.text).toContain("2026-08-02 10:00Z");
   });
 });
 

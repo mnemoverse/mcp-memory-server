@@ -12,7 +12,7 @@
  */
 
 import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
-import { parseAsUtc } from "./time.js";
+import { parseAsUtc, utcInstant } from "./time.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
@@ -249,16 +249,18 @@ export function structuredItem(item: ReadItem): {
   author?: string;
 } {
   const author = authorName(item.provenance);
+  const created = utcInstant(item.created_at);
   return {
     memory_id: item.atom_id as string,
     content: item.content as string,
     domain: item.domain as string,
     // The rule the text already applies through formatDateTag: a value that
     // does not parse as a date is no creation instant, whatever its type, and
-    // the field promises ISO-8601. Carried as sent when it does parse.
-    ...(typeof item.created_at === "string" && parseAsUtc(item.created_at) !== null
-      ? { created_at: item.created_at }
-      : {}),
+    // the field promises a UTC ISO-8601 instant. A value that states its
+    // offset is carried as sent; an offset-less one (UTC by contract) is
+    // re-emitted as the UTC instant the text renders, since a consumer
+    // would otherwise read it as local time (src/time.ts, utcInstant).
+    ...(created !== null ? { created_at: created } : {}),
     ...(author ? { author } : {}),
   };
 }
