@@ -67,7 +67,7 @@ describe("memory_feedback: tools/list carries the output schema", () => {
 
 describe("memory_feedback: structuredContent, ported from the connector's own suite", () => {
   it("forwards the live avg_valence and zero coactivation outcome without inventing edges", async () => {
-    mcp.on(FEEDBACK, { updated_count: 2, avg_valence: 0.35, coactivation_edges: 0 });
+    mcp.on(FEEDBACK, { updated_count: 2, avg_valence: 0.42, coactivation_edges: 0 });
 
     const result = await mcp.call("memory_feedback", {
       memory_ids: ["a", "b"],
@@ -77,7 +77,7 @@ describe("memory_feedback: structuredContent, ported from the connector's own su
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toEqual({
       updated_count: 2,
-      avg_valence: 0.35,
+      avg_valence: 0.42,
       coactivation_edges: 0,
     });
     // The text is unchanged by this slice: still the sentence, not the plain
@@ -86,7 +86,7 @@ describe("memory_feedback: structuredContent, ported from the connector's own su
   });
 });
 
-describe("memory_feedback: count === 0 carries only updated_count (plus avg_valence when sent)", () => {
+describe("memory_feedback: count === 0 carries updated_count (plus avg_valence and coactivation_edges when sent)", () => {
   it("{updated_count: 0} alone produces {updated_count: 0} and the unchanged miss text", async () => {
     mcp.on(FEEDBACK, { updated_count: 0 });
 
@@ -98,6 +98,16 @@ describe("memory_feedback: count === 0 carries only updated_count (plus avg_vale
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toEqual({ updated_count: 0 });
     expect(result.text).toContain("No feedback was recorded");
+  });
+
+  it("{updated_count: 0, coactivation_edges: 3} carries the edges too: the zero-count path forwards the field like every other path", async () => {
+    mcp.on(FEEDBACK, { updated_count: 0, coactivation_edges: 3 });
+
+    const result = await mcp.call("memory_feedback", { memory_ids: ["m1"], outcome: 1 });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ updated_count: 0, coactivation_edges: 3 });
+    expect(result.text).not.toContain("coactivation");
   });
 });
 

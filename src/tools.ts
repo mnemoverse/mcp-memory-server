@@ -1612,6 +1612,24 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           ? avgValenceRaw
           : undefined;
 
+      // Structured twin of `coactivation_edges`, left out of the TEXT below
+      // for the reason the comment on `valence` gives (this tool sends no
+      // query_concepts, so the number is always 0 here and a sentence about
+      // it would report nothing) but not out of structuredContent, where the
+      // connector's schema carries it as a genuine data field, on every
+      // path, the count===0 one included (review, 2026-09-23). Forwarded
+      // only when it is a non-negative integer, the shape the schema itself
+      // requires, so a value core could never send in that shape is simply
+      // absent here rather than turning this whole reply into an SDK
+      // "Output validation error".
+      const coactivationRaw: unknown = r?.coactivation_edges;
+      const coactivationEdges =
+        typeof coactivationRaw === "number" &&
+        Number.isInteger(coactivationRaw) &&
+        coactivationRaw >= 0
+          ? coactivationRaw
+          : undefined;
+
       // Direction is echoed for every outcome, including the ones with no count
       // to report: the same four words for +1 and -1 gave a caller no evidence
       // the loop did anything, which is why nobody calls it twice.
@@ -1686,6 +1704,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           {
             updated_count: 0,
             ...(avgValenceStructured === undefined ? {} : { avg_valence: avgValenceStructured }),
+            ...(coactivationEdges === undefined ? {} : { coactivation_edges: coactivationEdges }),
           },
         );
       }
@@ -1763,23 +1782,6 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         typeof avg === "number" && Number.isFinite(avg)
           ? ` The service reports their average valence is now ${avg.toFixed(2).replace(/^-0\.00$/, "0.00")} (on a scale from -1 to 1).`
           : "";
-
-      // Structured twin of `coactivation_edges`, left out of the TEXT above
-      // for the reason the comment on `valence` gives (this tool sends no
-      // query_concepts, so the number is always 0 here and a sentence about
-      // it would report nothing) but not out of structuredContent, where the
-      // connector's schema carries it as a genuine data field. Forwarded
-      // only when it is a non-negative integer, the shape the schema itself
-      // requires, so a value core could never send in that shape is simply
-      // absent here rather than turning this whole reply into an SDK
-      // "Output validation error".
-      const coactivationRaw: unknown = r?.coactivation_edges;
-      const coactivationEdges =
-        typeof coactivationRaw === "number" &&
-        Number.isInteger(coactivationRaw) &&
-        coactivationRaw >= 0
-          ? coactivationRaw
-          : undefined;
 
       // Order: what was sent, what the service reported, what that means
       // for the ids — then the advice. Putting `pickADirection` before the
