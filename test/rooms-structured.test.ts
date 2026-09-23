@@ -207,6 +207,22 @@ describe("memory_create_room: structuredContent", () => {
     });
   });
 
+  it("a body without name omits the key; the text still echoes the name the caller chose", async () => {
+    mcp.on(CREATE_ROOM, { room_id: "room_01ABC", address: "xroom:room_01ABC" });
+
+    const result = await mcp.call("memory_create_room", { name: "team" });
+
+    expect(result.isError).toBeFalsy();
+    // TEXT: unchanged, the caller's own spelling (roomNamePhrase falls back
+    // to the request when core's body has no name).
+    expect(result.text).toContain('Created shared room "team". Address: xroom:room_01ABC');
+    // DATA: "as stored" means from the response only; no evidence, no key.
+    expect(result.structuredContent).toEqual({
+      room_id: "room_01ABC",
+      address: "xroom:room_01ABC",
+    });
+  });
+
   it("a name with control and bidi characters is normalised in the data; the text keeps an exact (escaped) literal, never the raw bytes", async () => {
     const rawName = "Olya\u0007Room‮X";
     mcp.on(CREATE_ROOM, { room_id: "room_abc", address: "xroom:room_abc", name: rawName });
@@ -304,6 +320,62 @@ describe("memory_invite_to_room: structuredContent", () => {
 
   it('expires_at: "not-a-date" is absent, not passed through', async () => {
     mcp.on(INVITE, { share_message: "Join my room.", expires_at: "not-a-date" });
+
+    const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ share_message: "Join my room." });
+  });
+
+  it("an empty share_message beside a usable join_url is isError: the text forwards the blank it always did, and the data never carries a message the text did not show", async () => {
+    mcp.on(INVITE, {
+      share_message: "",
+      join_url: "https://console.mnemoverse.com/join/mnvr_code123",
+    });
+
+    const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(result.isError).toBe(true);
+    // TEXT: byte-identical to before this schema existed: `??` keeps the
+    // empty string, so the forwarded message is blank, not the join_url.
+    expect(result.text).toBe(
+      "Invite ready. Forward this message to the person you're inviting:\n\n",
+    );
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it("a whitespace-only share_message beside a usable join_url is isError for the same reason", async () => {
+    mcp.on(INVITE, {
+      share_message: " \u0007 ",
+      join_url: "https://console.mnemoverse.com/join/mnvr_code123",
+    });
+
+    const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe(
+      "Invite ready. Forward this message to the person you're inviting:\n\n \u0007 ",
+    );
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it("join_url in the data goes through safeInline: a control character is dropped, a clean URL is carried unchanged", async () => {
+    mcp.on(INVITE, {
+      share_message: "Join my room.",
+      join_url: "https://console.mnemoverse.com/join/mnvr_code123\u0007",
+    });
+
+    const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({
+      share_message: "Join my room.",
+      join_url: "https://console.mnemoverse.com/join/mnvr_code123",
+    });
+  });
+
+  it("a join_url that sanitises to nothing is absent from the data", async () => {
+    mcp.on(INVITE, { share_message: "Join my room.", join_url: "\u0007" });
 
     const result = await mcp.call("memory_invite_to_room", { room_id: "room_abc" });
 

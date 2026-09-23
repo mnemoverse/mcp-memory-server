@@ -2174,7 +2174,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           isError: true as const,
         };
       }
-      const nameStructured = structuredText(rawName, 200);
+      // STRUCTURED `name` comes from the RESPONSE only, never from the
+      // request's `name` the text above falls back to: the schema says "as
+      // stored", and a body that omits `name` gives this client no evidence
+      // of what core stored, so the key is absent rather than an echo of the
+      // caller's own spelling dressed up as core's answer (Copilot, review
+      // round 2). The text keeps its fallback: it is written for the caller
+      // who chose the name and stays byte-identical.
+      const nameStructured = structuredText(r?.name, 200);
       return structured(finalText, {
         room_id: roomId,
         address,
@@ -2259,26 +2266,38 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         method: "POST",
         body: JSON.stringify({ scope, expires_in_days, max_uses }),
       });
+      // ONE selection feeds both surfaces (Copilot, review round 2): the
+      // message the text forwards is core's share_message when the body has
+      // one (its raw value, exactly as before this schema existed), else
+      // join_url, else the "(no message returned)" sentence.
+      const rawMessage = r?.share_message ?? r?.join_url;
       const text = capResult(
         `Invite ready. Forward this message to the person you're inviting:\n\n` +
-          `${r?.share_message ?? r?.join_url ?? "(no message returned)"}`,
+          `${rawMessage ?? "(no message returned)"}`,
       );
       // Shown to the room OWNER (who minted it), not a foreign principal, so
       // the core-generated share_message is fine as-is; capResult only bounds
       // its length for the Connectors-Directory 25K cap. STRUCTURED
-      // `share_message` (S8-4, owner, 2026-09-23) mirrors the same fallback:
-      // core's share_message when usable, else join_url as the forwardable
-      // message, since that is what the text above is already showing. A
-      // body with a usable value for NEITHER is not this tool's success case
-      // any more: the "(no message returned)" sentence above is now the
-      // whole reply, isError: true, since there is no honest
+      // `share_message` (S8-4, owner, 2026-09-23) is that SAME selected
+      // value, normalised through structuredText, so the data never carries
+      // a message the text did not show. A selected value that normalises to
+      // nothing (no share_message and no join_url, or a share_message that is
+      // empty, whitespace-only or not a string at all) is not this tool's
+      // success case any more: the text above is unchanged (the blank or the
+      // "(no message returned)" sentence, as before) and the reply is
+      // isError: true, since there is no honest
       // structuredContent.share_message to pair it with.
-      const shareMessageStructured =
-        structuredText(r?.share_message, 800) ?? structuredText(r?.join_url, 800);
+      const shareMessageStructured = structuredText(rawMessage, 800);
       if (shareMessageStructured === undefined) {
         return { content: [{ type: "text" as const, text }], isError: true as const };
       }
-      const joinUrlStructured = typeof r?.join_url === "string" ? r.join_url : undefined;
+      // `join_url` through safeInline with the connector's own cap of 400,
+      // as the connector does (mnemoverse-mcp-remote, memory_invite_to_room):
+      // core builds it as `<base>/<code>`, which safeInline's character class
+      // carries unchanged; anything else it would have to alter is not a URL
+      // this client should hand on as one. Absent when nothing remains.
+      const joinUrlSafe = safeInline(r?.join_url, 400);
+      const joinUrlStructured = joinUrlSafe === "" ? undefined : joinUrlSafe;
       const codeStructured = typeof r?.code === "string" ? safeInline(r.code) : undefined;
       const scopeStructured = typeof r?.scope === "string" ? safeInline(r.scope) : undefined;
       const roomAddressStructured =
@@ -2391,8 +2410,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           content: [
             {
               type: "text" as const,
-              text: withDomainEscapeLegend(capResult(`${prefix}
-${usage}`), r?.name),
+              text: withDomainEscapeLegend(capResult(`${prefix}\n${usage}`), r?.name),
             },
           ],
           isError: true as const,
