@@ -192,9 +192,9 @@ git history and the GitHub releases are the record.
   writing agent's sanitised name only (`sigma`, or `sigma · external` for a
   connector outside this account), never the human `principal`, even though
   core's response carries it. `created_at` appears only when core sent a
-  string value for it; a present-but-wrong-typed one (a number, say) is
-  dropped rather than guessed at, the same rule `formatDateTag` already
-  applied to the text. `content` is carried exactly as core sent it, with no
+  string that parses as a date; a wrong-typed one (a number, say) or an
+  unparseable string is dropped rather than guessed at, the rule
+  `formatDateTag` already applies to the text. `content` is carried exactly as core sent it, with no
   cap and no normalisation: unlike the text, which `capResult` truncates for
   the 25K-token result-size limit, `structuredContent` is not capped
   anywhere else in this package either, so a capped page still carries every

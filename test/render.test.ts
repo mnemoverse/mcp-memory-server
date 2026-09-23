@@ -295,6 +295,22 @@ describe("structuredItem", () => {
       author: "codex",
     });
   });
+
+  it("drops a created_at that does not parse as a date, the same rule the text applies", () => {
+    const out = structuredItem({ atom_id: "a1", content: "c", domain: "d", created_at: "not-a-date" });
+    expect(out).toEqual({ memory_id: "a1", content: "c", domain: "d" });
+    expect("created_at" in out).toBe(false);
+  });
+
+  it("drops a wrong-typed created_at (a number) instead of guessing", () => {
+    const out = structuredItem({
+      atom_id: "a1",
+      content: "c",
+      domain: "d",
+      created_at: 1754082281605 as unknown as string,
+    });
+    expect("created_at" in out).toBe(false);
+  });
 });
 
 /**

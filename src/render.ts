@@ -253,7 +253,10 @@ export function structuredItem(item: ReadItem): {
     memory_id: item.atom_id as string,
     content: item.content as string,
     domain: item.domain as string,
-    ...(typeof item.created_at === "string" && item.created_at
+    // The rule the text already applies through formatDateTag: a value that
+    // does not parse as a date is no creation instant, whatever its type, and
+    // the field promises ISO-8601. Carried as sent when it does parse.
+    ...(typeof item.created_at === "string" && parseAsUtc(item.created_at) !== null
       ? { created_at: item.created_at }
       : {}),
     ...(author ? { author } : {}),
