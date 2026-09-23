@@ -13,8 +13,10 @@
  * with every rating and the package dropped it. The connector's own tests pin
  * the rule these follow ("forwards the live value, never defaults a missing
  * one to 0, never invents coactivation edges", mcp-protocol.test.ts in
- * mnemoverse-mcp-remote); here it is the text, since the package has no
- * structured output yet.
+ * mnemoverse-mcp-remote); here it is the text. The same values now also
+ * reach `structuredContent` (test/feedback-structured.test.ts pins that
+ * shape); the text pins below stay, since the sentence is what a reader
+ * of a plain client sees.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";

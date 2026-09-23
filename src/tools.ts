@@ -1460,11 +1460,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           ),
       },
       // Copied from the connector's `memoryFeedbackOutput` (mnemoverse-mcp-remote,
-      // src/tools/index.ts), field for field and description for description
-      // verbatim, including "This connector does not send query_concepts" in
-      // `coactivation_edges`'s description, which is true of this tool's own
-      // request body too (the POST above carries only atom_ids, outcome and
-      // domain). `updated_count` is required, matching both the connector's
+      // src/tools/index.ts), field for field and description for description,
+      // with one noun changed: the connector's `coactivation_edges` text says
+      // "This connector does not send query_concepts"; here it says "This
+      // server", since the fact holds for this tool's own request body (the
+      // POST above carries only atom_ids, outcome and domain) and the noun was
+      // wrong for a local stdio server. `updated_count` is required, matching both the connector's
       // schema and core's FeedbackResponseSchema (decision OD-8, owner,
       // 2026-09-23): a body without a usable count is not core's answer. See
       // the unknown-count branch below, which is `isError` for exactly that
@@ -1489,7 +1490,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .nonnegative()
           .optional()
           .describe(
-            "Number of feedback-driven query/result concept co-activation edges changed by the service. This is separate from ordinary Hebbian strengthening among a memory's own concepts. This connector does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.",
+            "Number of feedback-driven query/result concept co-activation edges changed by the service. This is separate from ordinary Hebbian strengthening among a memory's own concepts. This server does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.",
           ),
       },
       annotations: {
