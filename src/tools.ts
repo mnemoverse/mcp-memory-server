@@ -18,6 +18,7 @@ import {
   formatReadItem,
   formatRecentPage,
   safeInline,
+  structuredItem,
   type ReadItem,
   type RecentItem,
 } from "./render.js";
@@ -696,6 +697,40 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
               "shortcut is planned.",
           ),
       },
+      // Copied from the connector's `memoryReadOutput` (mnemoverse-mcp-remote,
+      // src/tools/index.ts), field for field and description for description,
+      // with the SAME ONE deliberate difference memory_write's outputSchema
+      // above already carries: `memory_id` here is `z.string()`, not
+      // `z.guid()` (decision OD-7, owner, 2026-09-22). This package's ids are
+      // opaque strings, and nothing in the contract promises they are UUIDs;
+      // a guid validator would turn any future id-format change into a
+      // whole-page "Output validation error" instead of a value this client
+      // simply could not shape-check further.
+      outputSchema: {
+        items: z
+          .array(
+            z.object({
+              memory_id: z
+                .string()
+                .describe("Identifier needed to rate or manage this saved memory."),
+              content: z.string().describe("Stored memory content."),
+              domain: z.string().describe("User-defined memory namespace or domain."),
+              created_at: z
+                .string()
+                .optional()
+                .describe(
+                  "UTC creation instant, ISO-8601; absent on legacy memories without a timestamp.",
+                ),
+              author: z
+                .string()
+                .optional()
+                .describe(
+                  "Sanitized AGENT identity of the writer (never the human principal) — attribution in shared rooms.",
+                ),
+            }),
+          )
+          .describe("Matching memories, ordered per order_by."),
+      },
       annotations: {
         title: "Search Memories",
         readOnlyHint: true,
@@ -755,26 +790,22 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         // filtered head uses the same sentence; no stats probe, no broaden
         // hint). Unscoped, it also has to name the rooms it never looked in.
         const scopeNote = readScopeNote(await probeScope(searched));
-        return {
-          content: [
-            {
-              type: "text" as const,
-              // The scope is IN the sentence, not appended after it. This
-              // branch was already the honest one in 0.8.0 — it names its
-              // filters — and it is the model the feed's copy now follows.
-              //
-              // The legend wraps the WHOLE message and is added at most once:
-              // `scopeNote` may itself have named a store (a case-twin), and one
-              // explanation of the escaping per answer is the point of it.
-              text: withDomainEscapeLegend(
-                `Nothing in ${scopeLabel(searched)} matches within the given time/author filters.` +
-                  futureSinceNote(since, Date.now()) +
-                  scopeNote,
-                searched,
-              ),
-            },
-          ],
-        };
+        // The scope is IN the sentence, not appended after it. This branch
+        // was already the honest one in 0.8.0 — it names its filters — and
+        // it is the model the feed's copy now follows.
+        //
+        // The legend wraps the WHOLE message and is added at most once:
+        // `scopeNote` may itself have named a store (a case-twin), and one
+        // explanation of the escaping per answer is the point of it.
+        return structured(
+          withDomainEscapeLegend(
+            `Nothing in ${scopeLabel(searched)} matches within the given time/author filters.` +
+              futureSinceNote(since, Date.now()) +
+              scopeNote,
+            searched,
+          ),
+          { items: [] },
+        );
       }
 
       if (items.length === 0) {
@@ -809,24 +840,40 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             }),
           scope,
         );
-        return {
-          content: [
-            {
-              type: "text" as const,
-              // NO legend wrapper here, on purpose — `withDomainEscapeLegend(
-              // text, searched)` stood on this line and was dead code that
-              // looked load-bearing (tests-lens F9, 2026-08-08): every arm of
-              // buildReadEmptyResponse either names no store at all (fixed
-              // sentences), or names it inside a note that appends its own
-              // legend (the case-twin diagnosis, src/scope.ts) — and the
-              // unscoped path passes `searched === undefined`, which can never
-              // need one. So there was no input on which the wrapper fired.
-              // Pinned by "the plain-empty read is legended by its notes" in
-              // test/handlers.test.ts.
-              text,
-            },
-          ],
-        };
+        // NO legend wrapper here, on purpose — `withDomainEscapeLegend(
+        // text, searched)` stood on this line and was dead code that
+        // looked load-bearing (tests-lens F9, 2026-08-08): every arm of
+        // buildReadEmptyResponse either names no store at all (fixed
+        // sentences), or names it inside a note that appends its own
+        // legend (the case-twin diagnosis, src/scope.ts) — and the
+        // unscoped path passes `searched === undefined`, which can never
+        // need one. So there was no input on which the wrapper fired.
+        // Pinned by "the plain-empty read is legended by its notes" in
+        // test/handlers.test.ts.
+        return structured(text, { items: [] });
+      }
+
+      // Every item must carry the three fields core's MemoryItemSchema always
+      // sends before this handler may render OR structure it: `atom_id`,
+      // `content` and `domain`. A body with items but missing one of those on
+      // any entry is not core's answer to memory_read — the same "unreadable
+      // 2xx" class the guard above catches one level up, discovered one field
+      // later. `structuredItem` (src/render.ts) needs all three to build a
+      // schema-honest structuredContent item, and there is no honest value to
+      // put in a required field this response did not send.
+      if (
+        items.some(
+          (it) =>
+            typeof it?.atom_id !== "string" ||
+            typeof it?.content !== "string" ||
+            typeof it?.domain !== "string",
+        )
+      ) {
+        return unreadableAnswerReply(
+          "The search result",
+          "a list of matches",
+          "nothing matched",
+        );
       }
 
       // Rendering lives in src/render.ts (testable): each line carries the
@@ -844,28 +891,25 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const searchMs = (r?.search_time_ms ?? 0).toFixed(0);
       const text = lines.join("\n\n") + `\n\n(${searchMs}ms)`;
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            // Each line's `@"domain"` tag is an exact literal; the legend that
-            // explains an escape belongs to the answer, not to twenty tags.
-            //
-            // Legend AFTER the cap, never before. capResult truncates from the
-            // END, and the legend is appended at the end — so applied first it
-            // was the first thing the cap ate, on exactly the pages long enough
-            // to need both: a hundred escaped tags left with nothing saying that
-            // \u00a0 is ONE character, not six (truth F6, 2026-08-08). Applied
-            // to the CAPPED text the legend survives; and since it fires only
-            // when an escaped literal is still on the page, a cap that removed
-            // every escaped name drops the legend with it.
-            text: withDomainEscapeLegend(
-              capResult(text),
-              ...items.map((it) => it?.domain),
-            ),
-          },
-        ],
-      };
+      // Each line's `@"domain"` tag is an exact literal; the legend that
+      // explains an escape belongs to the answer, not to twenty tags.
+      //
+      // Legend AFTER the cap, never before. capResult truncates from the
+      // END, and the legend is appended at the end — so applied first it
+      // was the first thing the cap ate, on exactly the pages long enough
+      // to need both: a hundred escaped tags left with nothing saying that
+      // \u00a0 is ONE character, not six (truth F6, 2026-08-08). Applied
+      // to the CAPPED text the legend survives; and since it fires only
+      // when an escaped literal is still on the page, a cap that removed
+      // every escaped name drops the legend with it.
+      //
+      // `structuredContent` carries every item, uncapped (OD-11): the cap
+      // and its legend are TEXT-side concerns, and `structuredItem`
+      // (src/render.ts) is deliberately not run through either.
+      return structured(
+        withDomainEscapeLegend(capResult(text), ...items.map((it) => it?.domain)),
+        { items: items.map(structuredItem) },
+      );
     },
   );
 

@@ -185,6 +185,32 @@ git history and the GitHub releases are the record.
   unreadable-answer error (`isError`), because core sends `atom_id` on
   every stored write, so a body without one is not core's answer and there
   is no honest `memory_id` to return for it.
+- **`memory_read` declares an output schema and returns `structuredContent`
+  alongside its unchanged text.** A client that reads structured tool
+  results now gets `{items: [{memory_id, content, domain, created_at?,
+  author?}]}` as data instead of parsing the numbered lines. `author` is the
+  writing agent's sanitised name only — `sigma`, or `sigma · external` for a
+  connector outside this account — never the human `principal`, even though
+  core's response carries it. `created_at` appears only when core sent a
+  string value for it; a present-but-wrong-typed one (a number, say) is
+  dropped rather than guessed at, the same rule `formatDateTag` already
+  applied to the text. `content` is carried exactly as core sent it, with no
+  cap and no normalisation: unlike the text, which `capResult` truncates for
+  the 25K-token result-size limit, `structuredContent` is not capped
+  anywhere else in this package either, so a capped page still carries every
+  item in `structuredContent`. `memory_id` is validated as a plain string,
+  not a UUID, for the same reason as `memory_write`'s (decision OD-7): this
+  package's ids are opaque, nothing in the contract promises they are UUIDs,
+  and a stricter check would turn any future id-format change into a
+  whole-page "Output validation error" instead of a value this client
+  simply could not shape-check further. The text a caller already reads
+  does not change, with one exception: an item missing a string `atom_id`,
+  `content` or `domain` used to degrade gracefully — the line simply omitted
+  the missing part (no id line, no domain tag, or literal `(empty)` for
+  content). The WHOLE answer is now the unreadable-answer error instead,
+  because core's `MemoryItemSchema` always sends all three, so an item
+  missing one is not core's answer and there is no honest `structuredContent`
+  item to build from it.
 
 ### Fixed
 

@@ -107,7 +107,12 @@ const CASES: Array<[tool: string, route: string, reply: unknown]> = [
   [
     "memory_read",
     "POST /memory/read",
-    { items: [{ atom_id: "a1", content: "hit" }], search_time_ms: 3 },
+    // `domain` added for S4 (structured-output plan): memory_read's item guard
+    // (src/tools.ts) now answers isError for an item missing it, and this
+    // table's whole point is the WIRE, not the response — a domain-less
+    // fixture would fail at `mcp.callText` before the request body is even
+    // inspected.
+    { items: [{ atom_id: "a1", content: "hit", domain: "general" }], search_time_ms: 3 },
   ],
   [
     "memory_list_recent",
@@ -183,8 +188,9 @@ describe("memory_list_recent", () => {
 
 describe("memory_read", () => {
   it("advertises the temporal filters, and they are not dropped", async () => {
+    // `domain` added for S4 — see the CASES table comment above.
     const { declared, body } = await bodySentFor("memory_read", "POST /memory/read", {
-      items: [{ atom_id: "a1", content: "hit" }],
+      items: [{ atom_id: "a1", content: "hit", domain: "general" }],
     });
     for (const p of ["since", "until", "exclude_author"]) {
       expect(declared, `${p} is no longer advertised`).toContain(p);
@@ -220,7 +226,11 @@ describe("a domain crosses the handler untouched", () => {
   });
 
   it("memory_read omits an empty domain rather than sending one", async () => {
-    mcp.on("POST /memory/read", { items: [{ atom_id: "a1", content: "hit" }] });
+    // The RESPONSE item's `domain: "general"` (added for S4) is unrelated to
+    // what this case checks — the REQUEST must omit `domain` for an empty
+    // input string, and the item needs a domain only to satisfy memory_read's
+    // item guard so the call completes.
+    mcp.on("POST /memory/read", { items: [{ atom_id: "a1", content: "hit", domain: "general" }] });
     await mcp.callText("memory_read", { query: "q", domain: "" });
     expect(mcp.requestTo("POST /memory/read").body).not.toHaveProperty("domain");
   });
