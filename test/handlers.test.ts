@@ -1002,26 +1002,29 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).not.toContain("get used together");
   });
 
-  // REWIRED for S4 (structured-output plan, deviation reported to the
-  // orchestrator): these 30 items never carried a `domain`, which memory_read's
-  // new item guard (src/tools.ts) now treats as an unreadable body: core's
-  // MemoryItemSchema sends `domain` on every item, so a response without one is
-  // not core's answer, the same class the pre-existing `items` guard already
-  // caught one level up. The truncation-notice wording this case used to pin
-  // ("Use a more specific query…", no "top_k") is still exercised, on items
-  // that DO carry a domain, by "a capped read still carries every item in
-  // structuredContent, not just the text" in test/read-structured.test.ts.
-  it("a read whose items have no domain is unreadable, not a truncated answer", async () => {
+  it("a truncated read recommends only the control that works — no top_k advice", async () => {
+    // Overflow the 96K-char cap so capResult appends its notice: 30 items of
+    // ~4000 chars each render well past MAX_RESULT_CHARS.
+    // `domain` on every item since S4: memory_read's item guard treats a
+    // missing domain as an unreadable body (core sends it on every item), and
+    // that case is pinned in test/read-structured.test.ts; this case is about
+    // the truncation wording, so its items carry the field.
     const items = Array.from({ length: 30 }, (_, i) => ({
       atom_id: `atom_${i}`,
       content: "x".repeat(4000),
+      domain: "general",
     }));
     mcp.on(READ, { items, search_time_ms: 12 });
 
-    const result = await mcp.call("memory_read", { query: "everything" });
+    const text = await mcp.callText("memory_read", { query: "everything" });
 
-    expect(result.isError).toBe(true);
-    expect(result.text).toContain("shape this client does not recognise");
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text).toContain("Use a more specific query to see all results.");
+    // The old hint also said "or smaller top_k" — but this same tool's top_k
+    // description says raising or lowering it does not reliably shape the
+    // result set (1/5/20 returned 6/7/4 in dogfooding). A truncation notice
+    // must not recommend the knob the schema refutes (truth review F7).
+    expect(text).not.toContain("top_k");
   });
 });
 
@@ -1900,22 +1903,13 @@ describe("the room lifecycle tools, invoked", () => {
  * the other call sites answer with something a reader can use.
  */
 describe("a field with the wrong wire type costs that field, not the tool call", () => {
-  // REWIRED for S4 (structured-output plan, deviation reported to the
-  // orchestrator): these 50 fixtures never carried `domain` either, and
-  // memory_read's new item guard (src/tools.ts) treats a missing `domain` on
-  // ANY item as an unreadable body before rendering is even reached, so the
-  // scenario this case was built to prove ("item 7's mistyped agent_name
-  // degrades only item 7") is no longer reachable through this fixture; the
-  // guard now fires first, on every item, for a different reason. The
-  // underlying guarantee this case protected, that `formatReadItem` /
-  // `formatAuthorTag` degrade a wrong-typed `provenance` field instead of
-  // throwing, is still pinned directly in test/render.test.ts ("a broken
-  // item renders as a line, not as an exception", "formatAuthorTag drops the
-  // tag instead of killing the line").
-  it("memory_read: an item missing domain is unreadable, not a page with one dropped field", async () => {
+  it("memory_read: one broken item does not take the other forty-nine with it", async () => {
     const items = Array.from({ length: 50 }, (_, i) => ({
       atom_id: `atom_${i}`,
       content: `note ${i}`,
+      // `domain` since S4: the item guard needs it on every item; the subject
+      // of this case is item 7's mistyped provenance, not a missing field.
+      domain: "general",
       // Item 7 is the hostile/buggy connector: `agent_name` typed as a string,
       // sent as a number.
       ...(i === 7 ? { provenance: { agent_name: 12345, is_external: true } } : {}),
@@ -1924,8 +1918,11 @@ describe("a field with the wrong wire type costs that field, not the tool call",
 
     const res = await mcp.call("memory_read", { query: "everything" });
 
-    expect(res.isError).toBe(true);
-    expect(res.text).toContain("shape this client does not recognise");
+    expect(res.isError).toBeFalsy();
+    expect(res.text).toContain("1. note 0");
+    expect(res.text).toContain("8. note 7");
+    expect(res.text).toContain("50. note 49");
+    expect(res.text).not.toContain("is not a function");
   });
 
   it("memory_join_room: an unusable address is said to be missing, not thrown", async () => {
