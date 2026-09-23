@@ -247,6 +247,33 @@ git history and the GitHub releases are the record.
   mechanism `memory_write` and `memory_read`'s unreadable-answer replies
   already use, so this is that same escape hatch reached from a new branch,
   not a new one.
+- **`memory_feedback` declares an output schema and returns
+  `structuredContent` alongside its unchanged text.** A client that reads
+  structured tool results now gets `{updated_count, avg_valence?,
+  coactivation_edges?}` as data instead of parsing the sentence. `avg_valence`
+  is the RAW number, not the text's two-decimal string and not its "-0.00" to
+  "0.00" mapping: a structured consumer reads a value, not a display string,
+  so it gets the number the service actually sent. `coactivation_edges` is
+  forwarded as data even though the text still says nothing about it: the
+  existing comment above `valence` in the handler explains why (this tool
+  sends no `query_concepts`, so the number this tool would ever receive is
+  always 0, and a sentence reporting a 0 that can never be anything else
+  would say nothing), and that reasoning was always about the TEXT, not about
+  a data field a structured consumer can still read and record. Both optional
+  fields follow the same rule as `updated_count`: a value the service did not
+  send, or sent in a shape the schema could not hold (a non-finite
+  `avg_valence`, a non-integer or negative `coactivation_edges`), is absent
+  from `structuredContent`, never defaulted to 0. The text a caller already
+  reads does not change, with one exception: the UNKNOWN-count reply (the
+  service acknowledged the call but reported no usable `updated_count`) used
+  to be a non-error text saying so and telling the caller not to re-send the
+  same rating; it is now the same sentence returned as `isError` (decision
+  OD-8, owner, 2026-09-23), for the same reason `memory_list_recent`'s
+  bare-404 reply became `isError` in this same release (OD-9): `updated_count`
+  is REQUIRED in this schema, matching core's own `FeedbackResponseSchema`,
+  so a body that sent no usable count is not core's answer and there is no
+  honest `structuredContent` to build for it. `isError` is the shape the
+  SDK's own `validateToolOutput` exempts from requiring one.
 
 ### Fixed
 

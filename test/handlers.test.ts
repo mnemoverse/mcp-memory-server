@@ -878,7 +878,7 @@ describe("the load-bearing sentences, as returned", () => {
     expect(neutral).not.toContain("should fade");
   });
 
-  it("a count the service did not send is UNKNOWN, not zero", async () => {
+  it("a count the service did not send is UNKNOWN, not zero, and the reply is now isError (OD-8)", async () => {
     // `r?.updated_count ?? 0` folded six different "no usable number" shapes
     // onto the ZERO branch — the branch that states outright that nothing was
     // recorded and then offers three causes for it. That is an absence claim
@@ -886,6 +886,15 @@ describe("the load-bearing sentences, as returned", () => {
     // memory_stats fixed with `num()`: a field the server did not send is
     // unknown, not zero. And it can be a flat lie — the rating may well have
     // been applied by core's async path while the ack said nothing usable.
+    //
+    // REWIRED for S6 (structured-output plan, OD-8, owner, 2026-09-23): this
+    // reply is now `isError`, not a silent non-error text (see the comment on
+    // this branch in src/tools.ts). `updated_count` is REQUIRED in the new
+    // outputSchema, matching core's own FeedbackResponseSchema, and there is
+    // no honest value to put there for a body that sent none. The test
+    // switches from `callText` (which throws on `isError`) to `call`, and
+    // asserts `isError` in addition to the SAME text expectations this test
+    // already pinned.
     for (const [label, reply] of [
       ["the field absent", {}],
       ["an explicit null", { updated_count: null }],
@@ -900,11 +909,13 @@ describe("the load-bearing sentences, as returned", () => {
       ["a negative", { updated_count: -2 }],
     ] as Array<[string, Route]>) {
       mcp.reset().on(FEEDBACK, reply);
-      const text = await mcp.callText("memory_feedback", {
+      const result = await mcp.call("memory_feedback", {
         atom_ids: ["a"],
         outcome: 1,
       });
+      const text = result.text;
 
+      expect(result.isError, label).toBe(true);
       expect(text, label).toContain("Rating sent: +1 (helpful).");
       expect(text, label).toContain("did not report how many memories it updated");
       // No absence claim, and none of the zero branch's diagnosis: the body
