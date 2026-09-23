@@ -325,9 +325,11 @@ saw and diff it against what the server serves today, by version.
   not have one; once declared, that schema's fields are add-only under this
   same rule. Where this server's output schema deliberately differs from the
   hosted connector's, the CHANGELOG entry says so; today that is
+  `memory_id` in every output schema, a plain string here and a
+  GUID-validated string there (this package's ids are opaque);
   `memory_list_recent`'s `next_cursor`, optional here (absent when the
   service sent a continuation token this client will not pass on) and
-  required there, and `memory_stats`, which carries five optional fields
+  required there; and `memory_stats`, which carries five optional fields
   (`episodes`, `prototypes`, `hebbian_edges`, `avg_valence`,
   `avg_importance`) the connector's schema does not declare.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
