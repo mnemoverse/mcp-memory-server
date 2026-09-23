@@ -1379,9 +1379,11 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           // the data too, and the key is then ABSENT, not null, since null
           // would claim the listing is complete (decision OD-12, 2026-09-23;
           // the schema marks the field optional for exactly this case).
+          // `typeof` first: the wire value is declared a string but a number
+          // would pass the regex by coercion and then fail the schema.
           ...(acceptedCursor == null
             ? { next_cursor: null }
-            : CURSOR_RE.test(acceptedCursor)
+            : typeof acceptedCursor === "string" && CURSOR_RE.test(acceptedCursor)
               ? { next_cursor: acceptedCursor }
               : {}),
         },

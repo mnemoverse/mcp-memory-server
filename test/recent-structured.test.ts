@@ -312,3 +312,21 @@ describe("memory_list_recent: a continuation token this client will not pass on"
     expect(result.text).toContain("continuation token could not be displayed");
   });
 });
+
+describe("memory_list_recent: a continuation token that is not a string", () => {
+  it("fails the gate on both surfaces instead of being coerced: no key in the data, the text says the token could not be displayed", async () => {
+    mcp.on(RECENT, {
+      items: [{ atom_id: "a1", content: "x", domain: "general" }],
+      next_cursor: 123,
+    });
+
+    const result = await mcp.call("memory_list_recent", { limit: 1 });
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as { items: unknown[]; next_cursor?: unknown };
+    expect(sc.items).toHaveLength(1);
+    expect("next_cursor" in sc).toBe(false);
+    expect(result.text).toContain("continuation token could not be displayed");
+    expect(result.text).not.toContain("pass cursor: 123");
+  });
+});
