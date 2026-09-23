@@ -28,5 +28,10 @@ CHANGELOG.md
 Dockerfile
 .dockerignore
 glama.json
+# Gemini CLI gallery manifest and its context file (2026-09-23): the gallery only
+# lists repositories GitHub code search has indexed, and gemini-extension (created
+# 2026-08-13) is not indexed, so the manifest also lives here. Not for the bundle.
+gemini-extension.json
+GEMINI.md
 tsconfig.test.json
 *.mcpb

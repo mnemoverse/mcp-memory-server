@@ -1,0 +1,11 @@
+{
+  "name": "mnemoverse-memory",
+  "version": "1.0.0",
+  "description": "Persistent memory for AI agents, shared across tools: write a memory in one MCP client, recall it in another. OAuth sign-in, no API key to paste.",
+  "mcpServers": {
+    "mnemoverse": {
+      "httpUrl": "https://mcp.mnemoverse.com/mcp"
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}

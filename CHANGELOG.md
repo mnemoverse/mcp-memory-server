@@ -413,6 +413,12 @@ file's tool-surface rule each change is announced here and none is silent.
 - **npm keywords** add `mcp-server`, `long-term-memory`, `agent-memory`,
   `claude-code` and `memory-rooms`, the terms npm search and the MCP directories
   that read package.json match on. Metadata only.
+- **Gemini CLI gallery manifest in the repository root** (`gemini-extension.json`,
+  `GEMINI.md`, the same files as `mnemoverse/gemini-extension`). The gallery lists
+  only repositories that GitHub code search has indexed, and no mnemoverse
+  repository created since 2026-07-18 is indexed, so the extension repository
+  cannot appear; this one is. Not shipped: npm publishes only `files`, and
+  `.mcpbignore` excludes both from the `.mcpb` bundle.
 - **`memory_write`, `memory_read`, `memory_list_recent`, `memory_list_rooms` and
   `vault_list`: a 2xx body this client cannot read now comes back as a tool
   error, not a text-only reply.** The sentence itself is unchanged, the one
