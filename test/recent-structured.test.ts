@@ -67,9 +67,8 @@ describe("memory_list_recent: tools/list carries the output schema", () => {
       };
       required?: string[];
     };
-    // Exactly two top-level fields, both required (a memory_list_recent
-    // answer always carries a list, possibly empty, and a cursor value,
-    // possibly null).
+    // Exactly two top-level fields; only `items` is required (a
+    // memory_list_recent answer always carries a list, possibly empty).
     expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["items", "next_cursor"]);
     // `next_cursor` is optional (OD-12): absent when the service sent a token
     // this client will not pass on; see the case at the end of this file.
@@ -328,5 +327,23 @@ describe("memory_list_recent: a continuation token that is not a string", () => 
     expect("next_cursor" in sc).toBe(false);
     expect(result.text).toContain("continuation token could not be displayed");
     expect(result.text).not.toContain("pass cursor: 123");
+  });
+});
+
+describe("memory_list_recent: a rejected continuation token is not passed back to the service", () => {
+  it("stops paging at it: one request, the items shown, no next_cursor key, the could-not-be-displayed sentence", async () => {
+    mcp.on(RECENT, {
+      items: [{ atom_id: "a1", content: "x", domain: "general" }],
+      next_cursor: "not a valid cursor!",
+    });
+
+    const result = await mcp.call("memory_list_recent", { limit: 40 });
+
+    expect(result.isError).toBeFalsy();
+    expect(mcp.calls.filter((c) => c.key === RECENT)).toHaveLength(1);
+    const sc = result.structuredContent as { items: unknown[]; next_cursor?: unknown };
+    expect(sc.items).toHaveLength(1);
+    expect("next_cursor" in sc).toBe(false);
+    expect(result.text).toContain("continuation token could not be displayed");
   });
 });

@@ -1206,7 +1206,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           // Only "" is normalised: any other non-null value still reaches the
           // renderer, which says entries exist but refuses to print the token.
           acceptedCursor = next === "" ? null : next;
-          position = typeof next === "string" && next ? next : undefined;
+          // The same gate the two surfaces apply (CURSOR_RE, src/render.ts):
+          // a token this client will not print or carry is not passed back
+          // to the service either, so paging stops here and the page says
+          // the token could not be displayed (Copilot, #159).
+          position =
+            typeof next === "string" && next && CURSOR_RE.test(next) ? next : undefined;
           // No cursor: the feed ended, and the page says so. No entries: the
           // server is not advancing, so continuing would spend requests on the
           // same nothing. Ceiling reached: the caller's count is spent.

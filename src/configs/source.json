@@ -3,7 +3,7 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Hosted AI agent memory: learns from outcomes, shared rooms, one key for Claude, Cursor & ChatGPT.",
+  "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
   "websiteUrl": "https://mnemoverse.com",
   "type": "stdio",
   "command": "npx",
@@ -59,7 +59,7 @@
       "name": "Mnemoverse",
       "url": "https://github.com/mnemoverse"
     },
-    "longDescription": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read. The same memory is shared everywhere you use your Mnemoverse API key — Claude, Cursor, VS Code, and any MCP client. Requires a free API key from https://console.mnemoverse.com.",
+    "longDescription": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools, and learns from outcomes: tell it a recalled memory helped or misled, and it re-ranks what comes back next. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read; share a memory pool with other agents through rooms. The same memory is shared everywhere you use your Mnemoverse account — Claude, Cursor, VS Code, and any MCP client. The server starts and lists its tools without a key; every tool call needs a free API key from https://console.mnemoverse.com.",
     "privacyPolicies": [
       "https://mnemoverse.com/privacy"
     ],

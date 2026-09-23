@@ -1,6 +1,6 @@
 # Mnemoverse Memory
 
-**Persistent memory for AI agents over MCP.** Tell it a recalled memory helped or misled, and it re-ranks what comes back next. One key across Claude Code, Cursor, VS Code and ChatGPT.
+**Persistent memory for AI agents over MCP.** Tell it a recalled memory helped or misled, and it re-ranks what comes back next. Shared rooms let several agents work from one memory. One key or OAuth across Claude Code, Cursor, VS Code and ChatGPT.
 
 `@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
@@ -13,13 +13,13 @@
 
 ## What is Mnemoverse Memory?
 
-Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. Mnemoverse stores what your agents learn — decisions, preferences, lessons — and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with a single API key. Mnemoverse re-ranks recall from outcomes: report that a recalled memory helped and a Rescorla-Wagner update on the prediction error raises it, report that it misled and it sinks — a different mechanism from similarity scoring, usable alongside it.
+Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. Mnemoverse stores what your agents learn — decisions, preferences, lessons — and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an API key in a local config, or an OAuth sign-in on the hosted endpoint. Mnemoverse re-ranks recall from outcomes: report that a recalled memory helped and a Rescorla-Wagner update on the prediction error raises it, report that it misled and it sinks — a different mechanism from similarity scoring, usable alongside it.
 
-**What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier; there is no self-hosted build of the engine.
+**What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier. Self-hosting the engine is available on Enterprise plans by agreement, when security or compliance requirements call for it; by default we run it for you.
 
 ## How it compares
 
-Most agent memory today lives in one of three places. Per-tool instruction files — `CLAUDE.md`, `.cursorrules`, `AGENTS.md` — are versioned and readable, but each copy belongs to one repo and one tool, and nothing follows you to the next window. A vector store behind RAG retrieves by similarity, and similarity never changes because advice helped or misled. Local-first memory servers win on privacy and latency, and ask you to run and update the infrastructure yourself. Mnemoverse is the managed, cross-tool option in that landscape: nothing to deploy, one key everywhere, and ranking that moves with reported outcomes. If you need memory inside your own perimeter, a local-first server is the better choice — this one is hosted by design.
+Most agent memory today lives in one of three places. Per-tool instruction files — `CLAUDE.md`, `.cursorrules`, `AGENTS.md` — are versioned and readable, but each copy belongs to one repo and one tool, and nothing follows you to the next window. A vector store behind RAG retrieves by similarity, and similarity never changes because advice helped or misled. Local-first memory servers win on privacy and latency, and ask you to run and update the infrastructure yourself. Mnemoverse is the managed, cross-tool option in that landscape: nothing to deploy, one account everywhere, and ranking that moves with reported outcomes. If you need memory inside your own perimeter, a local-first server is the better choice; this one is hosted by default, with Enterprise self-hosting by agreement.
 
 The consolidation stage of the engine — HDBSCAN clustering with Von Restorff protection, so distinctive memories are not absorbed into the average — is designed in and currently switched off on the hosted service; our docs say so rather than hide it.
 
@@ -27,9 +27,26 @@ The consolidation stage of the engine — HDBSCAN clustering with Von Restorff p
 
 ## Quick Start
 
+### No key: the hosted endpoint
+
+If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
+
+Claude Code:
+```bash
+claude mcp add -s user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
+```
+Then run `/mcp` in a session, select `mnemoverse` and choose **Authenticate**.
+
+Cursor, in `.cursor/mcp.json`:
+```json
+{ "mcpServers": { "mnemoverse": { "url": "https://mcp.mnemoverse.com/mcp" } } }
+```
+
+Claude Desktop, Windsurf, VS Code and ChatGPT: [Remote MCP setup](https://mnemoverse.com/docs/api/remote-mcp-server). The local server below is the other path: it runs on your machine and reads an API key.
+
 ### 1. Get a free API key
 
-Sign up at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
+Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
 **Check the key before you put it in a config.** Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in your shell history nor in the process list.
 
@@ -82,7 +99,7 @@ claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEM
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
 
-The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
+The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
 
 ```json
 {
@@ -371,7 +388,7 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 - [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
-- [Console (get API key)](https://console.mnemoverse.com?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server)
+- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server)
 
 **Background reading**
 

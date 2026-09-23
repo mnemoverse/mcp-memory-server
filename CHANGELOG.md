@@ -332,12 +332,29 @@ file's tool-surface rule each change is announced here and none is silent.
   which agents read to learn the tools, names `memory_ids` too, and a test now
   holds every parameter listed there, with its type and whether it is
   required, to the schema the server registers.
-- **Registry description names shared rooms.** The one-line description in
-  `src/configs/source.json` (and the `server.json` / `manifest.json` generated
-  from it) now reads "Hosted AI agent memory: learns from outcomes, shared
-  rooms, one key for Claude, Cursor & ChatGPT." Rooms have shipped for several releases, and
-  the line that directories such as Glama and PulseMCP show did not mention
-  them. It stays under the registry's 100-character limit (97). Text only.
+- **Listing text: shared rooms named, and the "one key … ChatGPT" claim withdrawn.**
+  The registry line in `src/configs/source.json` (and the `server.json` /
+  `manifest.json` generated from it) now reads "Hosted AI agent memory that
+  learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT." (99
+  of the registry's 100 characters). Rooms have shipped for several releases
+  and the line directories show did not mention them. The previous line, in
+  every registry version since 0.3.10, said "one key … ChatGPT", which
+  mnemoverse-docs `data/facts.json` `access.chatgptRule` rules out: ChatGPT's
+  MCP path is OAuth-only, and its API-key path is a Custom GPT action. The same
+  claim is corrected where it also stood: the npm `description` (now "one key or
+  OAuth", and it names rooms), the README lead and "What is Mnemoverse Memory?"
+  (one account: an API key locally, an OAuth sign-in on the hosted endpoint),
+  and `mcpb.longDescription`, which also stops saying the server requires a key
+  (it starts and lists its tools without one; tool calls need it). The README's
+  "no self-hosted build" becomes the pricing page's position: Enterprise
+  self-hosting by agreement, managed by default (facts.json
+  `tiers.enterprise.selfHosting`, owner decision 2026-09-21). The Quick Start
+  now opens with the no-key path, the hosted endpoint over OAuth, and the
+  console links go to `/sign-up`, where the UTM tags survive (the console root
+  redirects to `/sign-in` and drops them). `test/listing-text.test.ts` keeps
+  these four surfaces from carrying the bare key-and-ChatGPT claim again, holds
+  the registry line to 100 characters, and requires npm and the registry to
+  name outcomes and rooms. Text only.
 - **`memory_write`, `memory_read`, `memory_list_recent`, `memory_list_rooms` and
   `vault_list`: a 2xx body this client cannot read now comes back as a tool
   error, not a text-only reply.** The sentence itself is unchanged, the one
