@@ -53,7 +53,7 @@ const ROOM = {
 };
 
 describe("memory_list_recent: tools/list carries the output schema", () => {
-  it("declares the SAME item shape as memory_read's (memory_id/content/domain/created_at/author), plus next_cursor (string | null), required exactly items+next_cursor", async () => {
+  it("declares the SAME item shape as memory_read's (memory_id/content/domain/created_at/author), plus next_cursor (string | null, optional), required exactly items", async () => {
     const { tools } = await mcp.client.listTools();
     const recent = tools.find((t) => t.name === "memory_list_recent");
     const read = tools.find((t) => t.name === "memory_read");
@@ -71,7 +71,9 @@ describe("memory_list_recent: tools/list carries the output schema", () => {
     // answer always carries a list, possibly empty, and a cursor value,
     // possibly null).
     expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["items", "next_cursor"]);
-    expect(schema.required?.slice().sort()).toEqual(["items", "next_cursor"]);
+    // `next_cursor` is optional (OD-12): absent when the service sent a token
+    // this client will not pass on; see the case at the end of this file.
+    expect(schema.required).toEqual(["items"]);
     expect(schema.properties?.items?.type).toBe("array");
 
     const itemSchema = schema.properties?.items?.items;
@@ -290,5 +292,23 @@ describe("memory_list_recent: a capped page still carries every accepted item in
       domain: "general",
     });
     expect(sc.next_cursor).toBeNull();
+  });
+});
+
+describe("memory_list_recent: a continuation token this client will not pass on", () => {
+  it("is withheld from structuredContent too: the key is absent, not null, and the items still come", async () => {
+    mcp.on(RECENT, {
+      items: [{ atom_id: "a1", content: "x", domain: "general" }],
+      next_cursor: "not a valid cursor! <script>alert(1)</script>",
+    });
+
+    const result = await mcp.call("memory_list_recent", { limit: 1 });
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as { items: unknown[]; next_cursor?: unknown };
+    expect(sc.items).toHaveLength(1);
+    expect("next_cursor" in sc).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("<script>");
+    expect(result.text).toContain("continuation token could not be displayed");
   });
 });

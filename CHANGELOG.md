@@ -194,7 +194,12 @@ git history and the GitHub releases are the record.
   core's response carries it. `created_at` appears only when core sent a
   string that parses as a date; a wrong-typed one (a number, say) or an
   unparseable string is dropped rather than guessed at, the rule
-  `formatDateTag` already applies to the text. `content` is carried exactly as core sent it, with no
+  `formatDateTag` already applies to the text. A value that states its
+  offset (`Z` or `+hh:mm`) is carried exactly as sent; an offset-less
+  one, which this package reads as UTC by contract, is re-emitted as the
+  UTC ISO-8601 instant the text renders, because a structured consumer
+  would otherwise read the naive string as local time and land on a
+  different instant than the text shows. `content` is carried exactly as core sent it, with no
   cap and no normalisation: unlike the text, which `capResult` truncates for
   the 25K-token result-size limit, `structuredContent` is not capped
   anywhere else in this package either, so a capped page still carries every
@@ -228,8 +233,13 @@ git history and the GitHub releases are the record.
   answer has nothing to continue from, never core's newest-seen cursor,
   since a batch that did not fit the page is also absent from `items`, and
   pointing past it would both skip entries and contradict the page just
-  shown. The text a caller already reads does not change, with two
-  exceptions. First, the same item guard `memory_read` got in this release:
+  shown. One difference from the connector's schema: `next_cursor` is
+  optional here. The text already refuses to print a server-supplied
+  token whose shape this client will not pass on (CN-032) and says so;
+  the data now applies the same gate, and in that case the key is absent
+  rather than null, because null would claim the listing is complete
+  (decision OD-12, 2026-09-23). The text a caller already reads does not
+  change, with two exceptions. First, the same item guard `memory_read` got in this release:
   an accepted entry missing a string `atom_id`, `content` or `domain` used
   to degrade gracefully in the rendered line; the WHOLE answer is now the
   unreadable-answer error instead, for the same reason (core's

@@ -12,7 +12,7 @@
  */
 
 import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
-import { parseAsUtc } from "./time.js";
+import { parseAsUtc, utcInstant } from "./time.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
 export type Provenance = {
@@ -249,16 +249,18 @@ export function structuredItem(item: ReadItem): {
   author?: string;
 } {
   const author = authorName(item.provenance);
+  const created = utcInstant(item.created_at);
   return {
     memory_id: item.atom_id as string,
     content: item.content as string,
     domain: item.domain as string,
     // The rule the text already applies through formatDateTag: a value that
     // does not parse as a date is no creation instant, whatever its type, and
-    // the field promises ISO-8601. Carried as sent when it does parse.
-    ...(typeof item.created_at === "string" && parseAsUtc(item.created_at) !== null
-      ? { created_at: item.created_at }
-      : {}),
+    // the field promises a UTC ISO-8601 instant. A value that states its
+    // offset is carried as sent; an offset-less one (UTC by contract) is
+    // re-emitted as the UTC instant the text renders, since a consumer
+    // would otherwise read it as local time (src/time.ts, utcInstant).
+    ...(created !== null ? { created_at: created } : {}),
     ...(author ? { author } : {}),
   };
 }
@@ -279,6 +281,15 @@ export function formatRecentItem(item: RecentItem, index: number): string {
   )}${formatAuthorTag(item?.provenance)}`;
   return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
 }
+
+/**
+ * The shape of a continuation token this client is willing to pass on
+ * (CN-032): the server-supplied cursor is opaque, so this is an allowlist
+ * of bytes, not a format. One constant for BOTH surfaces, the text (below)
+ * and `structuredContent.next_cursor` (src/tools.ts), so they cannot
+ * disagree about which token is passable.
+ */
+export const CURSOR_RE = /^[A-Za-z0-9_=-]{1,512}$/;
 
 /**
  * Full feed page: items newest-first + how to continue / that it's over.
@@ -314,7 +325,7 @@ export function formatRecentPage(items: RecentItem[], nextCursor?: string | null
   let tail: string;
   if (nextCursor == null) {
     tail = `\n\n(end of feed — nothing older)`;
-  } else if (/^[A-Za-z0-9_=-]{1,512}$/.test(nextCursor)) {
+  } else if (CURSOR_RE.test(nextCursor)) {
     tail = `\n\nMore older entries exist — pass cursor: ${nextCursor}`;
   } else {
     tail = `\n\nMore entries exist but the continuation token could not be displayed — narrow the window with since/until instead`;
