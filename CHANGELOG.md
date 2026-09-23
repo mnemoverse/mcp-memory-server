@@ -211,6 +211,42 @@ git history and the GitHub releases are the record.
   because core's `MemoryItemSchema` always sends all three, so an item
   missing one is not core's answer and there is no honest `structuredContent`
   item to build from it.
+- **`memory_list_recent` declares an output schema and returns
+  `structuredContent` alongside its unchanged text.** A client that reads
+  structured tool results now gets `{items: [...], next_cursor}` as data
+  instead of parsing the page. Each item has the SAME shape memory_read's
+  `structuredContent` items already have, `{memory_id, content, domain,
+  created_at?, author?}` (the two tools now share one item schema in
+  `src/tools.ts`, so this is a code-sharing change for `memory_read`, not a
+  schema change: its emitted `tools/list` entry is byte-identical to before).
+  `next_cursor` is the SAME field the hosted connector already returns under
+  that name, but derived differently: this package pages through several
+  core requests per call to stay under its own page-size budget
+  (`LIST_PAGE_CHAR_BUDGET`), so `next_cursor` is the cursor of the last
+  FULLY ACCEPTED batch, the same value the text's "More older entries exist"
+  line prints, and `null` once the feed is exhausted or a filtered/empty
+  answer has nothing to continue from, never core's newest-seen cursor,
+  since a batch that did not fit the page is also absent from `items`, and
+  pointing past it would both skip entries and contradict the page just
+  shown. The text a caller already reads does not change, with two
+  exceptions. First, the same item guard `memory_read` got in this release:
+  an accepted entry missing a string `atom_id`, `content` or `domain` used
+  to degrade gracefully in the rendered line; the WHOLE answer is now the
+  unreadable-answer error instead, for the same reason (core's
+  `MemoryItemSchema` always sends all three). Second, and different from
+  `memory_read`'s change: a bare 404 from `/memory/recent` (no error `code`
+  in the body, today's sign of an undeployed feed endpoint) used to be a
+  quiet non-error text pointing the caller at `memory_read` instead; it is
+  now the same sentence returned as `isError` (decision OD-9, owner,
+  2026-09-23). This was the one branch left that could not honestly produce
+  `structuredContent` once the schema was declared: `{items: [], next_cursor:
+  null}` is a SCHEMA-VALID EMPTY PAGE, which would tell a structured
+  consumer the feed was checked and found empty, when the truth is this
+  client could not check it at all. `isError` is the shape the SDK's own
+  `validateToolOutput` exempts from requiring `structuredContent`, the same
+  mechanism `memory_write` and `memory_read`'s unreadable-answer replies
+  already use, so this is that same escape hatch reached from a new branch,
+  not a new one.
 
 ### Fixed
 

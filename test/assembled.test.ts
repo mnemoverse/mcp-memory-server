@@ -420,6 +420,13 @@ interface Situation {
   bounds: Bounds;
   /** What the answer must MEAN, beyond the universal properties. */
   meaning?: (text: string) => void;
+  /**
+   * This situation's reply is `isError` (S5, structured-output plan: the
+   * feed's bare-404 degrade, OD-9). Every other situation in the table must
+   * stay a non-error reply, which this field lets the runner assert rather
+   * than assume.
+   */
+  expectError?: boolean;
 }
 
 const SITUATIONS: readonly Situation[] = [
@@ -1053,6 +1060,10 @@ const SITUATIONS: readonly Situation[] = [
     args: {},
     routes: { [RECENT]: httpError(404, "Not Found") },
     bounds: { surface: "other", mustNotProbe: [ROOMS, STATS] },
+    // S5 (structured-output plan, OD-9): this reply is now `isError`; see
+    // the comment at this branch in src/tools.ts. The text itself, and every
+    // property asserted below, is unchanged.
+    expectError: true,
     meaning(text) {
       // No absence claim of any kind, and a route to the same data. The wording
       // is NOT pinned: it attributes the 404 to the service, which a gateway or
@@ -1135,7 +1146,18 @@ describe("the assembled answer, situation by situation", () => {
   for (const s of SITUATIONS) {
     it(`(${s.id}) ${s.what}`, async () => {
       for (const [key, reply] of Object.entries(s.routes)) mcp.on(key, reply);
-      const text = await mcp.callText(s.tool, s.args);
+      // `mcp.call`, not `callText`: callText throws on `isError`, and one
+      // situation (S5's bare-404 degrade, OD-9) now returns isError: true.
+      // The explicit comparison against `expectError` keeps the loud failure
+      // callText gave every OTHER situation: an unexpected isError here
+      // fails with the text in the assertion message instead of silently
+      // being treated as a normal answer.
+      const result = await mcp.call(s.tool, s.args);
+      expect(
+        result.isError ?? false,
+        `(${s.id}) isError mismatch (expected ${!!s.expectError}):\n${result.text}`,
+      ).toBe(!!s.expectError);
+      const text = result.text;
       expectHonestAnswer(text, s.bounds);
       s.meaning?.(text);
     });
@@ -1157,7 +1179,9 @@ describe("properties that only hold across situations", () => {
     for (const s of SITUATIONS) {
       mcp.reset();
       for (const [key, reply] of Object.entries(s.routes)) mcp.on(key, reply);
-      out.push({ id: s.id, text: await mcp.callText(s.tool, s.args) });
+      // `mcp.call`, not `callText`; see the per-situation runner above for
+      // why (S5's bare-404 situation is isError now).
+      out.push({ id: s.id, text: (await mcp.call(s.tool, s.args)).text });
     }
     return out;
   }

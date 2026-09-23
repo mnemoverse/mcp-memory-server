@@ -289,6 +289,40 @@ function roomScopeVerdict(scope: string | undefined): "read_write" | "read" | "u
 const PROBE_TIMEOUT_MS = 4000;
 
 /**
+ * The memory-item shape shared by memory_read's `outputSchema` and
+ * memory_list_recent's (S5, structured-output plan): copied from the
+ * connector's `memoryItemOutput` (mnemoverse-mcp-remote, src/tools/index.ts),
+ * field for field and description for description, with the SAME ONE
+ * deliberate difference memory_write's outputSchema already carries:
+ * `memory_id` here is `z.string()`, not `z.guid()` (decision OD-7, owner,
+ * 2026-09-22). This package's ids are opaque strings, and nothing in the
+ * contract promises they are UUIDs; a guid validator would turn any future
+ * id-format change into a whole-page "Output validation error" instead of a
+ * value this client simply could not shape-check further.
+ *
+ * A raw shape, not a `z.object(...)`, so both tools can build their own
+ * object around it (`z.object(MEMORY_ITEM_OUTPUT)`) without importing a
+ * schema instance neither owns, so memory_read's emitted JSON schema
+ * stays byte-identical to what it was before this constant existed
+ * (test/read-structured.test.ts pins it unchanged).
+ */
+const MEMORY_ITEM_OUTPUT = {
+  memory_id: z.string().describe("Identifier needed to rate or manage this saved memory."),
+  content: z.string().describe("Stored memory content."),
+  domain: z.string().describe("User-defined memory namespace or domain."),
+  created_at: z
+    .string()
+    .optional()
+    .describe("UTC creation instant, ISO-8601; absent on legacy memories without a timestamp."),
+  author: z
+    .string()
+    .optional()
+    .describe(
+      "Sanitized AGENT identity of the writer (never the human principal) — attribution in shared rooms.",
+    ),
+};
+
+/**
  * Register the ten memory tools on `server`. Call once per server instance.
  * `deps.apiFetch` is the only way the tools reach the API.
  */
@@ -697,38 +731,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
               "shortcut is planned.",
           ),
       },
-      // Copied from the connector's `memoryReadOutput` (mnemoverse-mcp-remote,
-      // src/tools/index.ts), field for field and description for description,
-      // with the SAME ONE deliberate difference memory_write's outputSchema
-      // above already carries: `memory_id` here is `z.string()`, not
-      // `z.guid()` (decision OD-7, owner, 2026-09-22). This package's ids are
-      // opaque strings, and nothing in the contract promises they are UUIDs;
-      // a guid validator would turn any future id-format change into a
-      // whole-page "Output validation error" instead of a value this client
-      // simply could not shape-check further.
+      // Item shape is MEMORY_ITEM_OUTPUT (above), shared with
+      // memory_list_recent's outputSchema as of S5; see that constant's
+      // comment for provenance and the OD-7 id-type note.
       outputSchema: {
         items: z
-          .array(
-            z.object({
-              memory_id: z
-                .string()
-                .describe("Identifier needed to rate or manage this saved memory."),
-              content: z.string().describe("Stored memory content."),
-              domain: z.string().describe("User-defined memory namespace or domain."),
-              created_at: z
-                .string()
-                .optional()
-                .describe(
-                  "UTC creation instant, ISO-8601; absent on legacy memories without a timestamp.",
-                ),
-              author: z
-                .string()
-                .optional()
-                .describe(
-                  "Sanitized AGENT identity of the writer (never the human principal) — attribution in shared rooms.",
-                ),
-            }),
-          )
+          .array(z.object(MEMORY_ITEM_OUTPUT))
           .describe("Matching memories, ordered per order_by."),
       },
       annotations: {
@@ -1027,6 +1035,22 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             "Opaque cursor from a previous page's 'More older entries exist' line — continues the listing without skips or duplicates.",
           ),
       },
+      // Item shape is MEMORY_ITEM_OUTPUT, shared with memory_read's
+      // outputSchema (S5, structured-output plan; see that constant's
+      // comment). `next_cursor` copies the connector's own field, same name
+      // and meaning (mnemoverse-mcp-remote `memoryListRecentOutput`), but
+      // this package derives it differently, because it pages through
+      // several core requests per call instead of one; see the comment on
+      // `acceptedCursor` where the value is produced, below.
+      outputSchema: {
+        items: z
+          .array(z.object(MEMORY_ITEM_OUTPUT))
+          .describe("Entries newest-first (creation time descending)."),
+        next_cursor: z
+          .string()
+          .nullable()
+          .describe("Pass back as cursor for the next (older) page; null = listing complete."),
+      },
       annotations: {
         title: "List Recent Memories",
         readOnlyHint: true,
@@ -1111,6 +1135,16 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           // envelope instead, so the prose and the branch can no longer collide.
           const bare404 = e instanceof ApiError && e.isBare404;
           if (bare404) {
+            // OD-9 (owner, 2026-09-23): this reply is now `isError`, not a
+            // silent success. Once this tool declares an outputSchema (S5),
+            // the SDK's own `validateToolOutput` (see the comment on
+            // `structured()` above) rejects a non-error result with no
+            // `structuredContent`, and there is no honest structuredContent
+            // to give it: `{items: [], next_cursor: null}` would be a
+            // schema-valid EMPTY PAGE, exactly the absence claim about the
+            // feed this sentence exists to avoid making. `isError` is the one
+            // shape the SDK exempts from that check, so it is the shape this
+            // reply takes now. The sentence itself is unchanged.
             return {
               content: [
                 {
@@ -1120,6 +1154,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
                     "Use memory_read with order_by: 'recency' as an approximation.",
                 },
               ],
+              isError: true as const,
             };
           }
           throw e;
@@ -1207,6 +1242,33 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       }
 
       const items = accepted;
+
+      // Every ACCEPTED item must carry the three fields core's
+      // MemoryItemSchema always sends before this handler may render OR
+      // structure it: `atom_id`, `content` and `domain`; same guard as
+      // memory_read's (S4), added here for S5. A body with items but missing
+      // one of those on any entry is not core's answer, the same "unreadable
+      // 2xx" class the batch guard above catches one request earlier;
+      // `structuredItem` (src/render.ts) needs all three to build a
+      // schema-honest structuredContent item, and there is no honest value to
+      // put in a required field a batch did not send. Trivially satisfied
+      // when `items` is empty, so this runs before the zero-length branch
+      // rather than only inside the non-empty one.
+      if (
+        items.some(
+          (it) =>
+            typeof it?.atom_id !== "string" ||
+            typeof it?.content !== "string" ||
+            typeof it?.domain !== "string",
+        )
+      ) {
+        return unreadableAnswerReply(
+          "The recent-entries feed",
+          "an empty feed",
+          "there is nothing to list",
+        );
+      }
+
       if (items.length === 0) {
         // THE SENTENCE ITSELF carries the scope — and it is selected by EVERY
         // filter that narrowed the window, not by `since` alone.
@@ -1253,48 +1315,62 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             : since || until || exclude_author
               ? `Nothing in ${where} matches within the given time/author filters.`
               : `No memories in ${where} yet.`;
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: withDomainEscapeLegend(
-                head + futureSinceNote(since, Date.now()) + scopeNote,
-                searched,
-              ),
-            },
-          ],
-        };
+        // `structuredContent.next_cursor` is unconditionally null on this
+        // branch: none of the four heads above ever prints a NEW cursor to
+        // continue from (a `cursor` in the args is the caller's OWN, already
+        // spent; the others are absence claims over the whole scope), so
+        // there is no cursor value the text could be said to agree with.
+        return structured(
+          withDomainEscapeLegend(
+            head + futureSinceNote(since, Date.now()) + scopeNote,
+            searched,
+          ),
+          { items: [], next_cursor: null },
+        );
       }
-      return {
-        content: [
-          {
-            type: "text" as const,
-            // The page body comes from src/render.ts; the escape legend is
-            // applied HERE, to the CAPPED text. formatRecentPage used to append
-            // it itself, which put it before capResult — and capResult truncates
-            // from the end, so the one sentence explaining the escapes was the
-            // first casualty on every page long enough to be capped (truth F6,
-            // 2026-08-08). Same order as memory_read's result page, same
-            // automatic drop: a cap that removed every escaped name removes the
-            // reason for the legend too.
-            //
-            // The cursor is the last ACCEPTED batch's, never the newest one
-            // seen: a batch that did not fit the budget was not returned, so
-            // pointing past it would skip every entry in it.
-            text: withDomainEscapeLegend(
-              capResult(
-                formatRecentPage(items, acceptedCursor) +
-                  (stoppedEarly ? LIST_PAGE_EARLY_STOP_NOTE : ""),
-                // Still true, and now only reachable when ONE entry is larger
-                // than the whole budget — the case `limit` cannot fix and the
-                // global cap has to.
-                "Lower `limit` or add a `domain` for smaller pages.",
-              ),
-              ...items.map((it) => it?.domain),
-            ),
-          },
-        ],
-      };
+      return structured(
+        // The page body comes from src/render.ts; the escape legend is
+        // applied HERE, to the CAPPED text. formatRecentPage used to append
+        // it itself, which put it before capResult, and capResult truncates
+        // from the end, so the one sentence explaining the escapes was the
+        // first casualty on every page long enough to be capped (truth F6,
+        // 2026-08-08). Same order as memory_read's result page, same
+        // automatic drop: a cap that removed every escaped name removes the
+        // reason for the legend too.
+        //
+        // The cursor is the last ACCEPTED batch's, never the newest one
+        // seen: a batch that did not fit the budget was not returned, so
+        // pointing past it would skip every entry in it.
+        withDomainEscapeLegend(
+          capResult(
+            formatRecentPage(items, acceptedCursor) +
+              (stoppedEarly ? LIST_PAGE_EARLY_STOP_NOTE : ""),
+            // Still true, and now only reachable when ONE entry is larger
+            // than the whole budget: the case `limit` cannot fix and the
+            // global cap has to.
+            "Lower `limit` or add a `domain` for smaller pages.",
+          ),
+          ...items.map((it) => it?.domain),
+        ),
+        {
+          items: items.map(structuredItem),
+          // Same field name and meaning as the connector's `next_cursor`
+          // (mnemoverse-mcp-remote `memoryListRecentOutput`): the cursor a
+          // client can safely pass back to continue, null when the feed is
+          // finished. DIFFERENT derivation, because this package pages
+          // through several core requests per call (LIST_PAGE_CHAR_BUDGET)
+          // instead of one: it is `acceptedCursor`, the cursor of the last
+          // FULLY accepted batch (set above, same value `formatRecentPage`
+          // just printed), not core's newest-seen cursor: a batch that did
+          // not fit the budget is absent from `items` too, so pointing past
+          // it would both skip entries and contradict the page just shown.
+          // `acceptedCursor` is normalised to null in the loop already
+          // (`next === "" ? null : next`) before it ever reaches here; the
+          // `?? null` below is the same normalisation restated for whatever
+          // TypeScript cannot see was already guaranteed.
+          next_cursor: acceptedCursor ?? null,
+        },
+      );
     },
   );
 

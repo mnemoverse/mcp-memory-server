@@ -583,12 +583,16 @@ describe("a 404 names the room — and rules out the domain, which is the wrong 
     // here instead.
     mcp.on(RECENT, httpError(404, "Not Found"));
 
-    const text = await mcp.callText("memory_list_recent", {});
+    // REWIRED for S5 (structured-output plan, OD-9): this reply is now
+    // `isError` once memory_list_recent declares an outputSchema; see the
+    // comment at this branch in src/tools.ts. The sentence is unchanged.
+    const result = await mcp.call("memory_list_recent", {});
 
-    expect(text).toContain(
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(
       "The memory service does not support the recent-entries feed yet.",
     );
-    expect(text).not.toContain("MNEMOVERSE_API_URL");
+    expect(result.text).not.toContain("MNEMOVERSE_API_URL");
   });
 
   it("the degrade also fires for the REAL body an undeployed endpoint sends", async () => {
@@ -598,12 +602,15 @@ describe("a 404 names the room — and rules out the domain, which is the wrong 
     // errored out with room guidance instead of degrading.
     mcp.on(RECENT, httpError(404, '{"detail":"Not Found"}'));
 
-    const text = await mcp.callText("memory_list_recent", {});
+    // REWIRED for S5 (structured-output plan, OD-9): see the sibling test
+    // above; same reason, same sentence, now `isError`.
+    const result = await mcp.call("memory_list_recent", {});
 
-    expect(text).toContain(
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(
       "The memory service does not support the recent-entries feed yet.",
     );
-    expect(text).not.toContain("room address");
+    expect(result.text).not.toContain("room address");
   });
 
   it("and a coded 404 on the feed is still the error it is, now stated usefully", async () => {

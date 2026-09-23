@@ -117,7 +117,10 @@ const CASES: Array<[tool: string, route: string, reply: unknown]> = [
   [
     "memory_list_recent",
     "POST /memory/recent",
-    { items: [{ atom_id: "a1", content: "hit" }], next_cursor: null },
+    // `domain` added for S5 (structured-output plan): memory_list_recent's
+    // item guard (src/tools.ts) now answers isError for an accepted item
+    // missing it, same reason as memory_read's fixture above.
+    { items: [{ atom_id: "a1", content: "hit", domain: "general" }], next_cursor: null },
   ],
   ["memory_write", "POST /memory/write", { stored: true, atom_id: "a1", importance: 0.7 }],
 ];
@@ -174,7 +177,12 @@ describe("memory_list_recent", () => {
     // matters is one-sided: asking the server for MORE entries than the caller
     // allowed is the defect — it would fetch entries the page then has to
     // discard, and a caller who asked for 3 would pay for 10.
-    const reply = { items: [{ atom_id: "a1", content: "hit" }], next_cursor: null };
+    // `domain` required (S5): the handler's item guard now rejects any
+    // accepted entry missing it.
+    const reply = {
+      items: [{ atom_id: "a1", content: "hit", domain: "general" }],
+      next_cursor: null,
+    };
     for (const asked of [1, 3, 11, 100]) {
       mcp.reset().on("POST /memory/recent", reply);
       await mcp.callText("memory_list_recent", { limit: asked });

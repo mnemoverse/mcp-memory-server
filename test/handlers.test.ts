@@ -1739,12 +1739,18 @@ describe("the recent feed's 404s: a missing endpoint and a per-request error are
     // no JSON error envelope.
     mcp.on(RECENT, httpError(404, "Not Found"));
 
-    const text = await mcp.callText("memory_list_recent", {});
+    // REWIRED for S5 (structured-output plan, OD-9): this reply is now
+    // `isError`: the tool's new outputSchema means a non-error reply needs
+    // `structuredContent`, and there is no honest one for an unsupported
+    // endpoint (see the comment at this branch in src/tools.ts). The SENTENCE
+    // itself is unchanged; only the envelope around it is.
+    const result = await mcp.call("memory_list_recent", {});
 
-    expect(text).toContain(
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(
       "The memory service does not support the recent-entries feed yet.",
     );
-    expect(text).toContain("memory_read");
+    expect(result.text).toContain("memory_read");
   });
 
   it("a 404 WITH an error code in the body is surfaced as the error it is", async () => {

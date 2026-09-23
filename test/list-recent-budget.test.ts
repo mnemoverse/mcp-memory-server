@@ -54,17 +54,23 @@ beforeEach(() => {
 interface Entry {
   atom_id: string;
   content: string;
+  domain: string;
 }
 
 /**
  * `n` entries whose content is `body` and whose marker is unique and
  * delimited — `ITEM-1|` is not a prefix of `ITEM-10|`, so a `toContain` on one
  * cannot pass because of the other.
+ *
+ * `domain` is required (S5, structured-output plan): the handler's item guard
+ * now rejects any accepted entry missing `domain`, so every fixture here
+ * carries one, `"general"`, matching what S4 did for memory_read's fixtures.
  */
 function entries(n: number, chars: number, offset = 0): Entry[] {
   return Array.from({ length: n }, (_, i) => ({
     atom_id: `atom_${offset + i}`,
     content: `ITEM-${offset + i}|${"x".repeat(chars)}`,
+    domain: "general",
   }));
 }
 
@@ -205,7 +211,11 @@ describe("one entry larger than the whole budget", () => {
   it("is returned whole, as a page of one, without looping", async () => {
     // Per-entry truncation would need a fetch-one-by-id verb that does not
     // exist yet (#104), so the budget yields rather than losing the entry.
-    const huge: Entry = { atom_id: "atom_huge", content: `HUGE|${"x".repeat(60_000)}` };
+    const huge: Entry = {
+      atom_id: "atom_huge",
+      content: `HUGE|${"x".repeat(60_000)}`,
+      domain: "general",
+    };
     mcp.on(RECENT, pagingFeed([huge, ...entries(20, 50, 1)]));
 
     const text = await mcp.callText("memory_list_recent", { limit: 20 });
