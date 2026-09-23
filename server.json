@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
   "title": "Mnemoverse Memory",
-  "description": "Hosted AI agent memory: learns from outcomes, shared rooms, one key for Claude, Cursor & ChatGPT.",
+  "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
   "websiteUrl": "https://mnemoverse.com",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
