@@ -1597,7 +1597,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // belong to a reported zero, not to a number we never received.
       const reported: unknown = r?.updated_count;
       const count =
-        typeof reported === "number" && Number.isInteger(reported) && reported >= 0
+        // isSafeInteger, not isInteger: the output schema is z.number().int(),
+        // and zod 4 rejects an integer above 2^53 - 1, so such a count would
+        // turn the whole reply into an SDK validation error (review, 2026-09-23).
+        typeof reported === "number" && Number.isSafeInteger(reported) && reported >= 0
           ? reported
           : undefined;
 
@@ -1627,7 +1630,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const coactivationRaw: unknown = r?.coactivation_edges;
       const coactivationEdges =
         typeof coactivationRaw === "number" &&
-        Number.isInteger(coactivationRaw) &&
+        Number.isSafeInteger(coactivationRaw) &&
         coactivationRaw >= 0
           ? coactivationRaw
           : undefined;

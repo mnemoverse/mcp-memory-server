@@ -130,6 +130,7 @@ describe("memory_feedback: the unknown-count reply is now isError, with the unch
     ["a string", { updated_count: "2" }],
     ["a negative", { updated_count: -1 }],
     ["a float", { updated_count: 1.5 }],
+    ["an integer above 2^53 - 1, which the schema's int() rejects", { updated_count: 9007199254740992 }],
   ])("body with %s: isError true, same guidance not to re-send", async (label, reply) => {
     mcp.on(FEEDBACK, reply);
 
@@ -196,5 +197,16 @@ describe("memory_feedback: avg_valence in a shape structuredContent cannot hold 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toEqual({ updated_count: 1 });
     expect(result.text).not.toContain("valence");
+  });
+});
+
+describe("memory_feedback: an integer above 2^53 - 1 is not a value the schema accepts", () => {
+  it("coactivation_edges: 2^53 is absent from structuredContent, the reply is not an error", async () => {
+    mcp.on(FEEDBACK, { updated_count: 1, coactivation_edges: 9007199254740992 });
+
+    const result = await mcp.call("memory_feedback", { memory_ids: ["m1"], outcome: 1 });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ updated_count: 1 });
   });
 });
