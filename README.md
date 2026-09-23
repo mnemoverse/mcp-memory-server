@@ -323,7 +323,11 @@ saw and diff it against what the server serves today, by version.
   MINOR may also add an output schema (`outputSchema`, with
   `structuredContent` returned alongside the same text) to a tool that did
   not have one; once declared, that schema's fields are add-only under this
-  same rule.
+  same rule. Where this server's output schema deliberately differs from the
+  hosted connector's, the CHANGELOG entry says so; today that is
+  `memory_list_recent`'s `next_cursor`, optional here (absent when the
+  service sent a continuation token this client will not pass on) and
+  required there.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
   renaming a declared annotation field,** is announced one MINOR ahead: the
   tool (or parameter) stays, its description says
@@ -338,7 +342,7 @@ saw and diff it against what the server serves today, by version.
 - Any difference between two servers of the same version is a bug. Report it
   with both `tools/list` outputs.
 
-The list above is the 0.10 surface: ten tools, each declaring all four hints.
+The list above is the 0.11 surface: ten tools, each declaring all four hints.
 The hosted connector at `mcp.mnemoverse.com/mcp` serves the same ten.
 
 **If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in the Quick Start, reaches the same memory and does not depend on that session's sign-in.

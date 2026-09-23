@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-23
+
 ### Added
 
 - **`@mnemoverse/mcp-memory-server/shared`: the ten memory tools as one function
