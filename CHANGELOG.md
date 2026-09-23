@@ -238,7 +238,9 @@ git history and the GitHub releases are the record.
   token whose shape this client will not pass on (CN-032) and says so;
   the data now applies the same gate, and in that case the key is absent
   rather than null, because null would claim the listing is complete
-  (decision OD-12, 2026-09-23). The text a caller already reads does not
+  (decision OD-12, 2026-09-23). A token that is not a string at all
+  counts the same, on both surfaces: the shape check is made after a
+  type check, so a number cannot pass it by coercion. The text a caller already reads does not
   change, with two exceptions. First, the same item guard `memory_read` got in this release:
   an accepted entry missing a string `atom_id`, `content` or `domain` used
   to degrade gracefully in the rendered line; the WHOLE answer is now the

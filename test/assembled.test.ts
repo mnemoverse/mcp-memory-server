@@ -1153,6 +1153,9 @@ describe("the assembled answer, situation by situation", () => {
       // fails with the text in the assertion message instead of silently
       // being treated as a normal answer.
       const result = await mcp.call(s.tool, s.args);
+      // callText also failed on an unstubbed request (the fall-open branch
+      // reads like the "nothing there" branch); keep that check here.
+      expect(mcp.unrouted, `(${s.id}) unstubbed request(s): ${mcp.unrouted.join(", ")}`).toEqual([]);
       expect(
         result.isError ?? false,
         `(${s.id}) isError mismatch (expected ${!!s.expectError}):\n${result.text}`,
@@ -1181,7 +1184,9 @@ describe("properties that only hold across situations", () => {
       for (const [key, reply] of Object.entries(s.routes)) mcp.on(key, reply);
       // `mcp.call`, not `callText`; see the per-situation runner above for
       // why (S5's bare-404 situation is isError now).
-      out.push({ id: s.id, text: (await mcp.call(s.tool, s.args)).text });
+      const result = await mcp.call(s.tool, s.args);
+      expect(mcp.unrouted, `(${s.id}) unstubbed request(s): ${mcp.unrouted.join(", ")}`).toEqual([]);
+      out.push({ id: s.id, text: result.text });
     }
     return out;
   }
