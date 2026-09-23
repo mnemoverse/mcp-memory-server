@@ -15,7 +15,7 @@
 
 Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. Mnemoverse stores what your agents learn — decisions, preferences, lessons — and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with a single API key. Mnemoverse re-ranks recall from outcomes: report that a recalled memory helped and a Rescorla-Wagner update on the prediction error raises it, report that it misled and it sinks — a different mechanism from similarity scoring, usable alongside it.
 
-**What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier; there is no self-hosted build of the engine.
+**What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier.
 
 ## How it compares
 
