@@ -56,6 +56,59 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`memory_stats` declares an output schema and returns `structuredContent`
+  alongside its unchanged text.** A client that reads structured tool results
+  now gets `{memory_count, domains, episodes?, prototypes?, hebbian_edges?,
+  avg_valence?, avg_importance?}` as data instead of parsing the four lines.
+  `memory_count` and `domains` are copied from the connector's own
+  `memoryStatsOutput` (mnemoverse-mcp-remote), field for field and
+  description for description, under the CONNECTOR's naming rather than
+  core's (`total_atoms`): the same structured consumer reads both servers,
+  and a data field spelled differently between them would defeat the point
+  of one shared shape (decision Q3, owner, 2026-09-23). Both are required.
+  The other five fields are this package's own addition, the rest of what
+  this tool's text already reports, each optional and present only when
+  core sent a usable number for it: the three counts use the same
+  non-negative-safe-integer rule `updated_count` already applies, and the
+  two averages use `Number.isFinite`, so a value in a shape the schema
+  could not hold (a string, a non-integer count, a non-finite average) is
+  simply absent, never defaulted to 0 or fabricated.
+  `domains` in `structuredContent` is FILTERED, not an error: a non-string
+  element (core can only ever send an array of strings, but this client does
+  not assume it) is dropped from the data rather than turning the whole
+  reply into `isError`, since the text's own `Domains:` line already counts
+  such an element in its "not shown, cannot be printed exactly" clause
+  (`formatDomainList`, unchanged). The drop is not silent, though: it is
+  reported once per call on stderr, in this package's existing
+  startup-diagnostic style (the "Mnemoverse: ..." lines in src/index.ts),
+  naming how many entries were dropped, because a structured consumer reading
+  only `structuredContent` has no other way to learn that the array it got
+  is shorter than what core sent. `structuredContent.domains` is also not
+  capped, unlike the text's `Domains:` line (`MAX_DOMAIN_LIST_CHARS`): an
+  account with thousands of domains gets every name in the data even where
+  the text truncates.
+  The text a caller already reads does not change, with two exceptions.
+  First, `memory_count` and `domains` are now REQUIRED for a non-error
+  reply: a body without a usable `total_atoms` (a non-negative safe integer)
+  or without an ARRAY `domains` used to degrade gracefully into this tool's
+  own "unknown" numbers and "none reported" domains; it is now the
+  unreadable-answer error (`isError`), the same OD-8 precedent
+  `memory_feedback` took above, because there is no honest
+  `structuredContent` to build for either shape. Second, the malformed
+  OPTIONAL fields are a disclosed text/data divergence rather than a text
+  change: `episodes`, `prototypes`, `hebbian_edges`, `avg_valence` and
+  `avg_importance` keep printing whatever the existing `num()`/`dec()`
+  helpers print for a value in any shape at all (they are `typeof`-only, by
+  design, so the text is byte-identical to before), while `structuredContent`
+  omits the same value whenever it fails the stricter check above. So a
+  service that sends `episodes: 1.5` still prints "1.5 episodes" in the
+  text, and a service that sends `avg_valence: 1e400` (parsed as `Infinity`)
+  still prints "valence Infinity" in the text, while neither reaches
+  `structuredContent` at all, the same kind of divergence S5 disclosed for
+  its cursor semantics.
+
 ## [0.11.0] — 2026-09-23
 
 ### Added
@@ -288,57 +341,6 @@ git history and the GitHub releases are the record.
   so a body that sent no usable count is not core's answer and there is no
   honest `structuredContent` to build for it. `isError` is the shape the
   SDK's own `validateToolOutput` exempts from requiring one.
-- **`memory_stats` declares an output schema and returns `structuredContent`
-  alongside its unchanged text.** A client that reads structured tool results
-  now gets `{memory_count, domains, episodes?, prototypes?, hebbian_edges?,
-  avg_valence?, avg_importance?}` as data instead of parsing the four lines.
-  `memory_count` and `domains` are copied from the connector's own
-  `memoryStatsOutput` (mnemoverse-mcp-remote), field for field and
-  description for description, under the CONNECTOR's naming rather than
-  core's (`total_atoms`): the same structured consumer reads both servers,
-  and a data field spelled differently between them would defeat the point
-  of one shared shape (decision Q3, owner, 2026-09-23). Both are required.
-  The other five fields are this package's own addition, the rest of what
-  this tool's text already reports, each optional and present only when
-  core sent a usable number for it: the three counts use the same
-  non-negative-safe-integer rule `updated_count` already applies, and the
-  two averages use `Number.isFinite`, so a value in a shape the schema
-  could not hold (a string, a non-integer count, a non-finite average) is
-  simply absent, never defaulted to 0 or fabricated.
-  `domains` in `structuredContent` is FILTERED, not an error: a non-string
-  element (core can only ever send an array of strings, but this client does
-  not assume it) is dropped from the data rather than turning the whole
-  reply into `isError`, since the text's own `Domains:` line already counts
-  such an element in its "not shown, cannot be printed exactly" clause
-  (`formatDomainList`, unchanged). The drop is not silent, though: it is
-  reported once per call on stderr, in this package's existing
-  startup-diagnostic style (the "Mnemoverse: ..." lines in src/index.ts),
-  naming how many entries were dropped, because a structured consumer reading
-  only `structuredContent` has no other way to learn that the array it got
-  is shorter than what core sent. `structuredContent.domains` is also not
-  capped, unlike the text's `Domains:` line (`MAX_DOMAIN_LIST_CHARS`): an
-  account with thousands of domains gets every name in the data even where
-  the text truncates.
-  The text a caller already reads does not change, with two exceptions.
-  First, `memory_count` and `domains` are now REQUIRED for a non-error
-  reply: a body without a usable `total_atoms` (a non-negative safe integer)
-  or without an ARRAY `domains` used to degrade gracefully into this tool's
-  own "unknown" numbers and "none reported" domains; it is now the
-  unreadable-answer error (`isError`), the same OD-8 precedent
-  `memory_feedback` took above, because there is no honest
-  `structuredContent` to build for either shape. Second, the malformed
-  OPTIONAL fields are a disclosed text/data divergence rather than a text
-  change: `episodes`, `prototypes`, `hebbian_edges`, `avg_valence` and
-  `avg_importance` keep printing whatever the existing `num()`/`dec()`
-  helpers print for a value in any shape at all (they are `typeof`-only, by
-  design, so the text is byte-identical to before), while `structuredContent`
-  omits the same value whenever it fails the stricter check above. So a
-  service that sends `episodes: 1.5` still prints "1.5 episodes" in the
-  text, and a service that sends `avg_valence: 1e400` (parsed as `Infinity`)
-  still prints "valence Infinity" in the text, while neither reaches
-  `structuredContent` at all, the same kind of divergence S5 disclosed for
-  its cursor semantics.
-
 ### Fixed
 
 - **`memory_list_recent` no longer says "More entries exist" when the feed has
