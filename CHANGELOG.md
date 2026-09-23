@@ -254,6 +254,9 @@ file's tool-surface rule each change is announced here and none is silent.
   these four surfaces from carrying the bare key-and-ChatGPT claim again, holds
   the registry line to 100 characters, and requires npm and the registry to
   name outcomes and rooms. Text only.
+- **npm keywords** add `mcp-server`, `long-term-memory`, `agent-memory`,
+  `claude-code` and `memory-rooms`, the terms npm search and the MCP directories
+  that read package.json match on. Metadata only.
 - **`memory_write`, `memory_read`, `memory_list_recent`, `memory_list_rooms` and
   `vault_list`: a 2xx body this client cannot read now comes back as a tool
   error, not a text-only reply.** The sentence itself is unchanged, the one

@@ -60,7 +60,12 @@
     "cross-tool",
     "model-context-protocol",
     "hosted-memory",
-    "vendor-neutral"
+    "vendor-neutral",
+    "mcp-server",
+    "long-term-memory",
+    "agent-memory",
+    "claude-code",
+    "memory-rooms"
   ],
   "author": "Mnemoverse <hello@mnemoverse.com>",
   "license": "MIT",
