@@ -2380,15 +2380,20 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             : verdict === "read"
               ? `Use it: pass domain="${address}" on memory_read or memory_list_recent to read it; this membership is read-only, so memory_write to that address will be refused.`
               : `Use it: pass domain="${address}" on memory_read or memory_list_recent to read it — the server did not report this membership's write access, so whether memory_write to that address would succeed is unknown.`;
-      // No usable address or room_id: the degrade sentence above is the
-      // whole reply now, isError: true, dropping the "Joined ..." prefix on
-      // purpose, since claiming a join succeeded is not honest without a
-      // usable room_id/address to back it up, and there is no honest
-      // structuredContent for this case either.
+      // No usable address or room_id: the reply is the same text as before
+      // this schema existed (the prefix line plus the degrade sentence), now
+      // isError: true, since there is no honest structuredContent for a join
+      // whose room this client cannot address. The text stays byte-identical
+      // on purpose: whether this reply should stop saying "Joined" is a
+      // wording decision for the owner, not for this slice.
       if (!address || !roomId) {
         return {
           content: [
-            { type: "text" as const, text: withDomainEscapeLegend(capResult(usage), r?.name) },
+            {
+              type: "text" as const,
+              text: withDomainEscapeLegend(capResult(`${prefix}
+${usage}`), r?.name),
+            },
           ],
           isError: true as const,
         };

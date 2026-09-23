@@ -1950,16 +1950,17 @@ describe("a field with the wrong wire type costs that field, not the tool call",
 
   it("memory_join_room: an unusable address is said to be missing, not thrown", async () => {
     // No room_id at all, and `address` is a number, not a string: both fail
-    // the S8-2 gate (owner, 2026-09-23), which now makes this isError: true
-    // rather than a "Joined ..." success claiming a membership this client
-    // cannot back with a usable room_id/address. It still does not throw
-    // "is not a function": the wrong-typed fields degrade to the same
-    // sentence the missing-address case always used, not a crash.
+    // the S8-2 gate (owner, 2026-09-23), which now makes this isError: true.
+    // The text is the same as before the schema existed (the "Joined" line
+    // plus the degrade sentence). It still does not throw "is not a
+    // function": the wrong-typed fields degrade to the same sentence the
+    // missing-address case always used, not a crash.
     mcp.on(JOIN, { address: 123, name: "me-and-olya", scope: { level: "read" } });
 
     const res = await mcp.call("memory_join_room", { code: "mnvr_abc" });
 
     expect(res.isError).toBe(true);
+    expect(res.text).toContain('Joined "me-and-olya" (member).');
     expect(res.text).toContain("The server did not return a room address");
     expect(res.text).not.toContain('domain="123"');
     expect(res.text).not.toContain("is not a function");
