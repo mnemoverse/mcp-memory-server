@@ -341,6 +341,7 @@ git history and the GitHub releases are the record.
   so a body that sent no usable count is not core's answer and there is no
   honest `structuredContent` to build for it. `isError` is the shape the
   SDK's own `validateToolOutput` exempts from requiring one.
+
 ### Fixed
 
 - **`memory_list_recent` no longer says "More entries exist" when the feed has
