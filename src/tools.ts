@@ -608,6 +608,12 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             : ` Writes are gated on how much a memory adds over what is already in the` +
               ` same domain, so a near-duplicate is refused. If the point is genuinely` +
               ` new, write what is DIFFERENT rather than restating the whole fact.`),
+        // `memory_id` is a literal null on a refusal, per the field's own
+        // description ("null when it was not stored"); the connector's refusal
+        // fixtures carry `atom_id: null` as well. The connector forwards
+        // `res.atom_id` on both verdicts; this package does not forward an id
+        // for a write that was not stored, since a refusal carrying one would
+        // be a body this client cannot vouch for.
         { stored: false, memory_id: null, ...optionalStructured },
       );
     },

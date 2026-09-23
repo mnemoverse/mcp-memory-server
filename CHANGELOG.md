@@ -177,7 +177,12 @@ git history and the GitHub releases are the record.
   the contract promises they are UUIDs, and a stricter check would turn any
   future id-format change into a whole-page "Output validation error"
   instead of a value this client simply could not shape-check further. The
-  text a caller already reads does not change by a single character.
+  text a caller already reads does not change, with one exception: a
+  `stored: true` body that carries no string `atom_id` used to print
+  `Stored (importance: N). ID: unknown` as a success; it is now the
+  unreadable-answer error (`isError`), because core sends `atom_id` on
+  every stored write, so a body without one is not core's answer and there
+  is no honest `memory_id` to return for it.
 
 ### Fixed
 
