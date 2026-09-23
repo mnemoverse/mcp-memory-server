@@ -1816,6 +1816,55 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       description:
         "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before writing to it, or when the user asks what you remember. Read-only — changes nothing.",
       inputSchema: {},
+      // `memory_count` and `domains` are copied from the connector's
+      // `memoryStatsOutput` (mnemoverse-mcp-remote, src/tools/index.ts), field
+      // for field and description for description, under the CONNECTOR's
+      // naming rather than core's (`total_atoms`): the same structured
+      // consumer can read both servers, and a data field spelled differently
+      // between them would defeat the point of one shared shape (decision Q3,
+      // owner, 2026-09-23). Both are required, matching the connector: a body
+      // without a usable value for either is not core's answer (see the guard
+      // in the handler below). The other five fields are this package's own
+      // addition, the rest of what this tool's own text already reports,
+      // each optional, present only when core sent a usable number for it.
+      outputSchema: {
+        memory_count: z
+          .number()
+          .int()
+          .nonnegative()
+          .describe("Number of saved memories."),
+        domains: z.array(z.string()).describe("User-defined memory domains."),
+        episodes: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Number of episodic (not yet consolidated) memories."),
+        prototypes: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Number of consolidated prototype memories."),
+        hebbian_edges: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe(
+            "Number of Hebbian concept-to-concept links, learned from concepts that occur together as memories are stored and used.",
+          ),
+        avg_valence: z
+          .number()
+          .optional()
+          .describe(
+            "Average valence of stored memories: how well recalls turned out, on a scale from -1 to 1.",
+          ),
+        avg_importance: z
+          .number()
+          .optional()
+          .describe("Average importance of stored memories, on a scale from 0 to 1."),
+      },
       annotations: {
         title: "Memory Statistics",
         readOnlyHint: true,
@@ -1834,6 +1883,34 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         avg_valence?: number;
         avg_importance?: number;
       }>("/memory/stats");
+
+      // REQUIRED-FIELD GUARD (OD-8 precedent, owner, 2026-09-23): `memory_count`
+      // and `domains` are REQUIRED in the outputSchema above, matching the
+      // connector's own `memoryStatsOutput`, so a body without a usable
+      // `total_atoms` (a non-negative safe integer) or without an ARRAY
+      // `domains` is not core's answer and there is no honest
+      // structuredContent to build for it. Before this schema existed, both
+      // degraded silently into this tool's own "unknown" numbers / "none
+      // reported" domains text; now they are `isError`, the same shape every
+      // other unreadable-answer reply in this file takes. isSafeInteger, not
+      // isInteger, for the same reason memory_feedback's count check gives:
+      // the schema is z.number().int(), and zod 4 rejects an integer above
+      // 2^53 - 1.
+      const totalAtomsRaw: unknown = r?.total_atoms;
+      const memoryCount =
+        typeof totalAtomsRaw === "number" &&
+        Number.isSafeInteger(totalAtomsRaw) &&
+        totalAtomsRaw >= 0
+          ? totalAtomsRaw
+          : undefined;
+      const domainsRaw = r?.domains;
+      if (memoryCount === undefined || !Array.isArray(domainsRaw)) {
+        return unreadableAnswerReply(
+          "The stats answer",
+          "the memory store's statistics",
+          "the store is empty",
+        );
+      }
 
       // A field the server did not send is UNKNOWN, not zero. Rendering it as
       // "0" is the same class of lie as an empty search claiming emptiness:
@@ -1886,35 +1963,85 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         "Counts cover your own domains. Shared rooms are separate stores and are not included — see memory_list_rooms.",
       ].join("\n");
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            // Array.isArray, not `?? []`: `domains` is typed as a string[] but
-            // arrives over the wire, and spreading a non-iterable object would
-            // throw here — turning a malformed payload into a dead tool instead
-            // of the "none reported" it degrades to two lines up.
-            //
-            // capResult is the second belt, not the mechanism: the domain list is
-            // already bounded above, so this only fires if some future line grows
-            // unboundedly. It stays because this was the ONE tool result with no
-            // cap at all, and "every surface is capped" is worth being an
-            // invariant rather than an argument about which surfaces can grow.
-            // Its hint names a control this no-input tool actually has — none —
-            // rather than the read tool's "use a more specific query".
-            //
-            // Legend AFTER the cap, as everywhere else: it must describe the names
-            // that SURVIVED, and it is appended at the end, where the cap cuts.
-            text: withDomainEscapeLegend(
-              capResult(
-                text,
-                "The domain list was truncated — some domain names are not shown.",
-              ),
-              ...(Array.isArray(r?.domains) ? r.domains : []),
-            ),
-          },
-        ],
-      };
+      // STRUCTURED TWIN of the optional numeric fields, following the same
+      // rule memory_feedback's does: a value core did not send, or sent in a
+      // shape the schema could not hold, is absent from structuredContent,
+      // never defaulted to 0. Int fields use isSafeInteger for the reason the
+      // guard above gives (the schema is z.number().int(), and zod 4 rejects
+      // an integer above 2^53 - 1); the two averages use isFinite, so an
+      // Infinity smuggled through a raw body (e.g. avg_valence: 1e400) never
+      // reaches a structured consumer as data. The TEXT above keeps printing
+      // whatever num()/dec() print for the same malformed value, and that
+      // text/data divergence is disclosed in the CHANGELOG, as S5 disclosed
+      // its cursor semantics.
+      const safeIntOrUndefined = (v: unknown): number | undefined =>
+        typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : undefined;
+      const finiteOrUndefined = (v: unknown): number | undefined =>
+        typeof v === "number" && Number.isFinite(v) ? v : undefined;
+      const episodesStructured = safeIntOrUndefined(r?.episodes);
+      const prototypesStructured = safeIntOrUndefined(r?.prototypes);
+      const hebbianEdgesStructured = safeIntOrUndefined(r?.hebbian_edges);
+      const avgValenceStructured = finiteOrUndefined(r?.avg_valence);
+      const avgImportanceStructured = finiteOrUndefined(r?.avg_importance);
+
+      // DOMAINS FOR structuredContent: FILTERED, not an error and not zeroed
+      // (decisions S7-1/S7-2, owner, 2026-09-23). A non-string element is
+      // dropped rather than turning the whole reply into isError, and the
+      // TEXT above already counts it in formatDomainList's "not shown, cannot
+      // be printed exactly" clause, so the count is not silently lost, only
+      // moved off the surface a structured consumer reads. What a structured
+      // consumer would silently lose is the fact that anything was dropped at
+      // all, so the drop is also reported once on stderr, in this package's
+      // existing startup-diagnostic style ("Mnemoverse: ..." in src/index.ts),
+      // the operator's channel rather than the model's: putting this in the
+      // tool text would surface an implementation detail to the agent reading it.
+      const domainsStructured = domainsRaw.filter((d): d is string => typeof d === "string");
+      const droppedDomains = domainsRaw.length - domainsStructured.length;
+      if (droppedDomains > 0) {
+        console.error(
+          `Mnemoverse: memory_stats dropped ${droppedDomains} non-string domain ` +
+            `entr${droppedDomains === 1 ? "y" : "ies"} from structuredContent.domains ` +
+            `(still counted in the text's "not shown" total).`,
+        );
+      }
+
+      return structured(
+        // Array.isArray, not `?? []`: `domains` is typed as a string[] but
+        // arrives over the wire, and spreading a non-iterable object would
+        // throw here — turning a malformed payload into a dead tool instead
+        // of the "none reported" it degrades to two lines up.
+        //
+        // capResult is the second belt, not the mechanism: the domain list is
+        // already bounded above, so this only fires if some future line grows
+        // unboundedly. It stays because this was the ONE tool result with no
+        // cap at all, and "every surface is capped" is worth being an
+        // invariant rather than an argument about which surfaces can grow.
+        // Its hint names a control this no-input tool actually has — none —
+        // rather than the read tool's "use a more specific query".
+        //
+        // Legend AFTER the cap, as everywhere else: it must describe the names
+        // that SURVIVED, and it is appended at the end, where the cap cuts.
+        withDomainEscapeLegend(
+          capResult(
+            text,
+            "The domain list was truncated — some domain names are not shown.",
+          ),
+          ...(Array.isArray(r?.domains) ? r.domains : []),
+        ),
+        {
+          memory_count: memoryCount,
+          domains: domainsStructured,
+          ...(episodesStructured === undefined ? {} : { episodes: episodesStructured }),
+          ...(prototypesStructured === undefined ? {} : { prototypes: prototypesStructured }),
+          ...(hebbianEdgesStructured === undefined
+            ? {}
+            : { hebbian_edges: hebbianEdgesStructured }),
+          ...(avgValenceStructured === undefined ? {} : { avg_valence: avgValenceStructured }),
+          ...(avgImportanceStructured === undefined
+            ? {}
+            : { avg_importance: avgImportanceStructured }),
+        },
+      );
     },
   );
 

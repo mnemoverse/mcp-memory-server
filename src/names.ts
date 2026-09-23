@@ -199,7 +199,12 @@ export const MAX_DOMAIN_LIST_CHARS = 90_000;
  * dropping it would make this list assert that a store does not exist, on the
  * one surface whose job is the opposite. An absent or empty list keeps the
  * existing "none reported", which is honest about both of the states core can
- * produce (no key on a non-core 200, or a genuinely empty bucket).
+ * produce (no key on a non-core 200, or a genuinely empty bucket). The
+ * NON-ARRAY half of that first branch is unreachable from `memory_stats`
+ * (S7, 2026-09-23): its handler now returns `isError` before calling this
+ * function when `domains` is not an array at all, since its outputSchema
+ * requires one; it stays here for the direct unit tests below and as
+ * defense in depth for any other caller.
  *
  * `maxChars` bounds the NAMES, and it is the reason memory_stats is no longer
  * the one tool result that could exceed the 25K-token Connectors Directory cap.
