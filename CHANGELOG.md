@@ -75,9 +75,11 @@ git history and the GitHub releases are the record.
   config file, the keys console, or a key at all (the 403 room-permission
   causes speak about "this account" rather than "this key", and the opaque
   403 declines to blame "the sign-in"), and each says what an OAuth user
-  can actually do instead (reconnect, sign in again); 429 needed no change,
-  since none of its three sentences ever named the credential type. The
-  404, 409, 422/400, 5xx, network and unreadable-body explanations are
+  can actually do instead (reconnect, sign in again); the per-minute 429
+  likewise says "this account is hitting its rate limit" rather than "this
+  key" under oauth, and the quota and unknown 429 sentences never named the
+  credential. The 404, 409, 422/400, 5xx, network and unreadable-body
+  explanations are
   unchanged under either mode; where they mention a key it is only to rule
   it out as the cause.
   `keysUrl` replaces the console URL the api-key vocabulary prints,

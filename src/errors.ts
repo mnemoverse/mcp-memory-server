@@ -374,8 +374,8 @@ function explain401(env: ErrorEnvelope, wording: ResolvedWording): string {
   }
   if (wording.auth === "oauth") {
     return (
-      "Mnemoverse: the user's sign-in was rejected (401). This is not " +
-      "something they fix by editing a key — tell them to disconnect and " +
+      "Mnemoverse: the user's sign-in was rejected (401). There is no " +
+      "credential for them to edit — tell them to disconnect and " +
       "reconnect the app, or sign in again, to refresh their session. Do " +
       "not retry until they do."
     );
@@ -630,16 +630,21 @@ function explain404(f: ApiFailure, env: ErrorEnvelope): string {
 
 /** 429: three causes, opposite advice. The envelope's `retryable` is the
  *  discriminator, because it is the only thing the engine states outright. */
-function explain429(f: ApiFailure, env: ErrorEnvelope): string {
+function explain429(f: ApiFailure, env: ErrorEnvelope, wording: ResolvedWording): string {
   const secs = retryAfterSeconds(f.retryAfter);
   const wait = secs === undefined ? "about a minute" : `${secs} seconds`;
   if (env.retryable === true) {
+    // The one 429 sentence that names the credential holder (Sigma, review
+    // round 2 on the wording slice): "this key" for an API-key caller, "this
+    // account" for an OAuth user who holds no key. The other two branches
+    // speak about the account and the plan already.
+    const holder = wording.auth === "oauth" ? "this account" : "this key";
     return (
       "Mnemoverse: rate-limited (429). This is the per-minute request limit and " +
       `it clears by itself. Wait ${wait}, then make AT MOST ONE more attempt — ` +
       "do not retry in a loop and do not fan out into more calls, which is what " +
       "turns a one-minute limit into a sustained one. If the retry also fails, " +
-      "stop and tell the user this key is hitting its rate limit."
+      `stop and tell the user ${holder} is hitting its rate limit.`
     );
   }
   if (env.retryable === false) {
@@ -681,7 +686,7 @@ export function explainApiFailure(f: ApiFailure, wording?: Wording): string {
   } else if (f.status === 404) {
     guidance = explain404(f, env);
   } else if (f.status === 429) {
-    guidance = explain429(f, env);
+    guidance = explain429(f, env, resolved);
   } else if (f.status === 400 || f.status === 422) {
     guidance =
       "Mnemoverse: the engine rejected the CONTENTS of this request " +

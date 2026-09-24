@@ -151,10 +151,10 @@ sentences and the founder-endorsed generic one:
 > https://console.mnemoverse.com/dashboard/keys. Do not retry until they
 > replace it."
 >
-> oauth: "Mnemoverse: the user's sign-in was rejected (401). This is not
-> something they fix by editing a key — tell them to disconnect and
-> reconnect the app, or sign in again, to refresh their session. Do not
-> retry until they do."
+> oauth: "Mnemoverse: the user's sign-in was rejected (401). There is no
+> credential for them to edit — tell them to disconnect and reconnect the
+> app, or sign in again, to refresh their session. Do not retry until they
+> do."
 
 **401, "caller org not identified".** This branch is about tenant
 identification, not about a key, so it fires under either mode, worded for
@@ -191,12 +191,13 @@ URL).** One word changes: the branch declines to blame "the key" under
 api-key and "the sign-in" under oauth; the rest is identical, because the
 module cannot tell who refused the request either way.
 
-**429, all three branches (per-minute limit, daily quota, unknown).**
-Unchanged by `auth`. None of the three 429 sentences ever named
-`MNEMOVERSE_API_KEY`, an environment variable, an MCP config file, or the
-keys console; "wait for the retry window" and "check the account's plan"
-(the quota branch already points at the usage console) already read
-correctly for an OAuth user with no changes.
+**429, per-minute limit.** One noun changes: the closing sentence "stop
+and tell the user this key is hitting its rate limit" says "this account"
+under oauth. **429, daily quota and unknown.** Identical under both modes:
+neither sentence ever named `MNEMOVERSE_API_KEY`, an environment variable,
+an MCP config file, the keys console or a key; "wait for the retry window"
+and "check the account's plan" (the quota branch already points at the
+usage console) already read correctly for an OAuth user.
 
 `auth` has no effect on 404, 409, 422/400, 5xx, or the network- and
 unreadable-body-failure explanations. Several of those sentences mention a

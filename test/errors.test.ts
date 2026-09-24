@@ -1205,6 +1205,9 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(text).not.toContain("MCP client config");
     expect(text).not.toContain("console.mnemoverse.com/dashboard/keys");
     expect(text).not.toContain("mk_live_");
+    // Round 2: not the word "key" in any form either (the first oauth
+    // sentence said "not something they fix by editing a key").
+    expect(text).not.toMatch(/keys?/i);
   });
 
   it("401 without 'caller org not identified' always reads the same reconnect sentence, whatever the body says", () => {
@@ -1221,8 +1224,8 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     );
     for (const t of texts) {
       expect(t).toBe(
-        "Mnemoverse: the user's sign-in was rejected (401). This is not " +
-          "something they fix by editing a key — tell them to disconnect and " +
+        "Mnemoverse: the user's sign-in was rejected (401). There is no " +
+          "credential for them to edit — tell them to disconnect and " +
           "reconnect the app, or sign in again, to refresh their session. Do " +
           "not retry until they do.",
       );
@@ -1245,6 +1248,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(text).toContain("do NOT tell the user to reconnect over this");
     expect(text).not.toContain("MNEMOVERSE_API_KEY");
     expect(text).not.toContain("replace it");
+    expect(text).not.toMatch(/keys?/i);
   });
 
   /** Every 403 cause the engine actually sends (mirrors "a 403 names the
@@ -1318,16 +1322,17 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(oauthText).toBe(apiKeyText.replace("so do not blame the key and", "so do not blame the sign-in and"));
   });
 
-  /** 429 already names no key in api-key mode either (verified above); this
-   *  pins that `wording` changes nothing about it, so the same three cases
-   *  are safe under oauth too: the assertion this whole block promises. */
+  /** The per-minute 429 ends "tell the user this key is hitting its rate
+   *  limit", the one 429 sentence that names the holder; under oauth it says
+   *  "this account" (Sigma, review round 2). The quota and unknown branches
+   *  never named the credential and are identical under both modes. */
   const failures429: ReadonlyArray<readonly [string, string, string | null]> = [
     ["per-minute limit", envelope("RATE_LIMITED", "Rate limit exceeded (60/min)", true), "30"],
     ["daily quota", envelope("RATE_LIMITED", "Daily limit reached (1000/1000)", false), null],
     ["body says nothing", "Too Many Requests", null],
   ];
 
-  it.each(failures429)("429, %s: no key/env-var/config-file/console mention, and unchanged by wording", (_label, body, retryAfter) => {
+  it.each(failures429)("429, %s: no key/env-var/config-file/console mention; only the holder noun changes under oauth", (_label, body, retryAfter) => {
     const withoutWording = explainApiFailure({
       status: 429,
       body,
@@ -1349,7 +1354,15 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(withoutWording).not.toContain(banned);
       expect(withOauth).not.toContain(banned);
     }
-    expect(withOauth).toBe(withoutWording);
+    expect(withOauth).not.toMatch(/keys?/i);
+    // Exactly one noun differs, and only in the per-minute branch: for the
+    // other two bodies the replacement is a no-op and the texts are identical.
+    expect(withOauth).toBe(
+      withoutWording.replace(
+        "tell the user this key is hitting its rate limit",
+        "tell the user this account is hitting its rate limit",
+      ),
+    );
   });
 });
 
