@@ -351,6 +351,10 @@ The hosted connector at `mcp.mnemoverse.com/mcp` serves the same ten.
 
 **If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in the Quick Start, reaches the same memory and does not depend on that session's sign-in.
 
+### Building a second MCP server on this package
+
+`@mnemoverse/mcp-memory-server/shared` is the entry point another server registers these same tools from, instead of keeping its own copy (ADR-025, mnemoverse-core). It exports `registerMemoryTools`/`registerMemoryPrompts`/`registerMemoryResources`, the three typed error classes (`ApiError`, `NetworkError`, `UnreadableBodyError`), `MAX_RESULT_CHARS`/`capResult`, and two optional dependencies a hosted deployment injects to speak in its own voice: `wording` (its own server noun and error vocabulary, including an OAuth-safe mode that never names an API key) and `writeAuthor` (vouching for the end user behind a write). See [`docs/shared.md`](./docs/shared.md) for the full contract.
+
 ## Use cases
 
 The pattern that pays off first is cross-tool continuity: a decision made while pairing in Claude Code is there when you open Cursor an hour later, and the preference you stated in VS Code holds in a ChatGPT session that evening. Teams use shared rooms the same way — one place where an agent's lessons about a codebase accumulate instead of being re-taught per seat. And because recall re-ranks from feedback, the memories that keep proving useful surface first, which matters once a store grows past what anyone curates by hand.
