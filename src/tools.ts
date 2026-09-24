@@ -42,6 +42,7 @@ import {
   recentRequestBody,
   writeRequestBody,
   searchedScope,
+  type WriteAuthor,
 } from "./requests.js";
 import {
   exactLiteral,
@@ -53,7 +54,7 @@ import {
   withDomainEscapeLegend,
   withEscapeLegendAt,
 } from "./names.js";
-import { ApiError } from "./errors.js";
+import { ApiError, type Wording } from "./errors.js";
 // Field limits, generated from core's contract (src/limits.ts, ADR-025).
 import { CORE_LIMITS } from "./limits.js";
 // For the invite's `expires_at` (S8, structured-output plan): the same
@@ -73,9 +74,44 @@ import { utcInstant } from "./time.js";
  */
 export type ApiFetch = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 
-/** What a server supplies when it registers the memory tools. */
+/**
+ * What a server supplies when it registers the memory tools.
+ *
+ * `wording` and `writeAuthor` (STEP4-2/3/5, owner decisions 2026-09-24) are
+ * both optional, and both default to exactly this server's own behaviour: a
+ * consumer that supplies neither gets byte-identical descriptions, error
+ * text and write bodies to every release before this one. They exist for a
+ * SECOND server registering these same tools (the hosted connector,
+ * ADR-025) that needs to say "this connector" instead of "this server",
+ * speak to an OAuth user who never sees an API key, and vouch for the
+ * end user it is writing on behalf of.
+ */
 export interface MemoryToolDeps {
   apiFetch: ApiFetch;
+  /** How this registration wants its own tool descriptions and error
+   *  explanations worded. See {@link Wording} for each field. Read at
+   *  registration time for the three descriptions that name the server;
+   *  NOT threaded into `apiFetch`'s own errors automatically — a consumer
+   *  that wants its `ApiError`/`NetworkError`/`UnreadableBodyError`
+   *  instances to speak this same wording passes the same value to their
+   *  constructors from inside its own `apiFetch` implementation. */
+  wording?: Wording;
+  /**
+   * Supplier-vouched authorship for `memory_write` (STEP4-5). Called once
+   * per write, with no arguments; a returned value is sent as the request
+   * body's `author` field EXACTLY as returned (this package applies no
+   * normalisation beyond a `typeof` guard — core re-normalises server-side,
+   * see {@link WriteAuthor}). Returning `undefined`, or omitting this
+   * dependency entirely, sends the body this package has always sent — the
+   * stdio server's own requests are exactly this case, and do not change.
+   *
+   * Core honours `author` ONLY for a SERVICE/supplier caller and IGNORES it
+   * for an OIDC end-user (mnemoverse-core src/mnemo/api/routes.py:211-276,
+   * `_get_provenance`, verified 2026-09-24) — so this dependency is useful
+   * only to a server that authenticates to core as a supplier vouching for
+   * someone else, not to an end-user's own key.
+   */
+  writeAuthor?: () => WriteAuthor | undefined;
 }
 
 // Hard cap on tool result size — required by Claude Connectors Directory
@@ -360,7 +396,19 @@ const MEMORY_ITEM_OUTPUT = {
  * `deps.apiFetch` is the only way the tools reach the API.
  */
 export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): void {
-  const { apiFetch } = deps;
+  const { apiFetch, wording, writeAuthor } = deps;
+
+  // Read once, defensively: `wording` crosses a public package boundary a
+  // caller controls only at compile time (STEP4-2, owner 2026-09-24). A
+  // strict-equality check rather than a truthiness check, so any value other
+  // than the one literal "this connector" — including a typo, a boolean, or
+  // a stale value from a future third option — falls back to the default
+  // rather than being printed. Defaults to today's wording exactly, so a
+  // server that supplies no `wording` at all gets byte-identical descriptions.
+  const serverNoun = wording?.serverNoun === "this connector" ? "this connector" : "this server";
+  // Same value, sentence-initial capitalisation, for the one description that
+  // opens a second sentence with it rather than sitting mid-clause.
+  const serverNounCap = serverNoun === "this connector" ? "This connector" : "This server";
 
   // ANNOTATIONS, decided once for every server that registers these tools
   // (owner, 2026-09-21; the stdio server and the hosted connector had answered
@@ -508,6 +556,20 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // returns, needs room addresses deliberately EXEMPT and zero-width
       // characters handled (JS trim() does not strip them — verified, contrary
       // to what an earlier comment here asserted).
+      //
+      // `writeAuthor` (STEP4-5): called once, here, only for this one write —
+      // never for a read or a probe. `typeof` first, not a shape check: this
+      // dependency crosses a public package boundary a caller controls only
+      // at compile time, so a runtime value that is not an object (a string,
+      // a number, `null`) is treated the same as "no author", rather than
+      // reaching JSON.stringify as a field core would then have to reject.
+      // Whatever IS an object is sent exactly as returned — no field-level
+      // normalisation here, because core re-normalises server-side (see
+      // {@link WriteAuthor}), and this package cannot know the sixth field a
+      // future core release adds any better than core's own validator does.
+      const authorRaw: unknown = writeAuthor?.();
+      const author: WriteAuthor | undefined =
+        typeof authorRaw === "object" && authorRaw !== null ? authorRaw : undefined;
       const r = await apiFetch<{
         stored?: boolean;
         atom_id?: string | null;
@@ -515,7 +577,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         reason?: string;
       }>("/memory/write", {
         method: "POST",
-        body: JSON.stringify(writeRequestBody({ content, concepts, domain })),
+        body: JSON.stringify(writeRequestBody({ content, concepts, domain }, author)),
       });
 
       // `stored` MUST BE A BOOLEAN before either verdict below may be printed.
@@ -721,7 +783,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .max(CORE_LIMITS.readTopK.maximum)
           .optional()
           .describe(
-            "Requested number of results (default: 5, what this server asks for when you omit it; the engine's own default of 10 never applies, because the field is always sent). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.",
+            `Requested number of results (default: 5, what ${serverNoun} asks for when you omit it; the engine's own default of 10 never applies, because the field is always sent). ⚠️ Not a hard cap: association expansion can return MORE than this, and the relevance floor can return fewer — raising it does not reliably widen the result set. For a complete, exactly-bounded listing use memory_list_recent instead.`,
           ),
         domain: z
           .string()
@@ -1562,7 +1624,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .nonnegative()
           .optional()
           .describe(
-            "Number of feedback-driven query/result concept co-activation edges changed by the service. This is separate from ordinary Hebbian strengthening among a memory's own concepts. This server does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.",
+            `Number of feedback-driven query/result concept co-activation edges changed by the service. This is separate from ordinary Hebbian strengthening among a memory's own concepts. ${serverNounCap} does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.`,
           ),
       },
       annotations: {
@@ -2757,7 +2819,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
     "vault_list",
     {
       description:
-        "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you, and no tool on this server returns it. Use this to check WHICH secrets the user has stored and under what alias (e.g. the user says 'do I have a GitHub token saved?'). Only YOUR account's secrets are listed.",
+        `List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you, and no tool on ${serverNoun} returns it. Use this to check WHICH secrets the user has stored and under what alias (e.g. the user says 'do I have a GitHub token saved?'). Only YOUR account's secrets are listed.`,
       inputSchema: {},
       outputSchema: {
         secrets: z.array(

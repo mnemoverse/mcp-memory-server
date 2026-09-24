@@ -63,6 +63,30 @@ export interface WriteArgs {
 }
 
 /**
+ * Supplier-vouched authorship for a write (STEP4-5, owner 2026-09-24),
+ * mirroring core's `ProvenanceWriteSchema` field for field
+ * (mnemoverse-core src/mnemo/api/schemas.py:123-150): `principal`, `agent`,
+ * `agent_name`, `client_env` and `is_external`, all optional.
+ *
+ * Core honours this ONLY for a SERVICE/supplier caller (`author` in the
+ * write body) and IGNORES it entirely for an OIDC end-user, who is stamped
+ * solely from their own verified token (`routes._get_provenance`,
+ * mnemoverse-core src/mnemo/api/routes.py:211-276) — so a caller supplying
+ * this for a plain end-user key gets no error, just a silently dropped
+ * value. Core also RE-NORMALISES every field server-side (an allow-list on
+ * `client_env`, length caps, `is_external` coerced to a real boolean), so
+ * this package does not re-validate the shape beyond the `typeof` guard at
+ * the one call site that reads it — that is core's job, not this one's.
+ */
+export interface WriteAuthor {
+  principal?: string;
+  agent?: string;
+  agent_name?: string;
+  client_env?: string;
+  is_external?: boolean;
+}
+
+/**
  * The scope actually searched: what core receives, and therefore the only value
  * any message about the result may describe.
  *
@@ -101,13 +125,22 @@ export function recentRequestBody(a: RecentArgs): Record<string, unknown> {
   };
 }
 
-/** memory_write. `"general"` is the server-side default made explicit, and is
- * what 0.8.0 sent — NOT a normalisation of the caller's value. */
-export function writeRequestBody(a: WriteArgs): Record<string, unknown> {
+/**
+ * memory_write. `"general"` is the server-side default made explicit, and is
+ * what 0.8.0 sent — NOT a normalisation of the caller's value.
+ *
+ * `author` (STEP4-5): sent verbatim, exactly as the caller's `writeAuthor()`
+ * dependency returned it, when present — this function does no field-level
+ * normalisation of it (core re-normalises server-side, see {@link WriteAuthor}).
+ * Omitted entirely, not sent as `undefined`, when there is none, so every
+ * existing write body this function ever produced stays byte-identical.
+ */
+export function writeRequestBody(a: WriteArgs, author?: WriteAuthor): Record<string, unknown> {
   return {
     content: a.content,
     concepts: a.concepts || [],
     domain: a.domain || "general",
+    ...(author === undefined ? {} : { author }),
   };
 }
 

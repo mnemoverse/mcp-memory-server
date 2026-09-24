@@ -94,6 +94,63 @@ const USAGE_URL = "https://console.mnemoverse.com/dashboard/usage";
  *  cycle. Change one, grep for the other. */
 const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
 
+/**
+ * How a server that registers these tools wants its failures worded (STEP4-2,
+ * STEP4-3, owner decisions 2026-09-24). Every field is optional, and every
+ * field's absence means exactly what this file already does today — the
+ * whole point is that a consumer supplying no `wording` at all gets
+ * byte-identical text to before this type existed.
+ *
+ *  - `serverNoun`: what the three tool descriptions that name themselves
+ *    call this deployment ("this server" vs "this connector"). Read by
+ *    src/tools.ts at registration time; ignored by this module.
+ *  - `auth`: which credential the CALLER holds, not which one core issued.
+ *    "api-key" (default) keeps every existing MNEMOVERSE_API_KEY-flavoured
+ *    sentence. "oauth" is for a server whose user never sees an API key at
+ *    all (a hosted connector minting a key on their behalf) — no 401/403
+ *    explanation under this mode names MNEMOVERSE_API_KEY, an env var, an
+ *    MCP config file, or the keys console; each says what an OAuth user can
+ *    actually do instead (reconnect, sign in again, check the plan, wait
+ *    for the retry window).
+ *  - `keysUrl`: replaces {@link KEYS_URL} wherever the api-key vocabulary
+ *    prints a console URL, for a deployment whose key-management page is
+ *    not console.mnemoverse.com. Has no effect under `auth: "oauth"`, which
+ *    prints no console URL at all.
+ *  - `rawDetail`: whether the wire body's raw tail (STEP4-3; e.g. `Raw
+ *    detail — Mnemoverse API error 401 on …`) is appended after the
+ *    guidance. Defaults to `true`, unchanged from every release before this
+ *    one. Held in reserve for a deployment whose core-side error envelopes
+ *    are found to echo request content back in `details` — set to `false`
+ *    only once that check finds something to hide.
+ */
+export interface Wording {
+  serverNoun?: "this server" | "this connector";
+  auth?: "api-key" | "oauth";
+  keysUrl?: string;
+  rawDetail?: boolean;
+}
+
+interface ResolvedWording {
+  serverNoun: "this server" | "this connector";
+  auth: "api-key" | "oauth";
+  keysUrl: string;
+  rawDetail: boolean;
+}
+
+/** Defaults applied field-by-field, with a `typeof`/literal guard on each —
+ *  `wording` crosses a public package boundary a caller controls only at
+ *  compile time, so a malformed value at runtime degrades to the default
+ *  instead of propagating (e.g. into a template literal, or a `Wording`
+ *  field silently taking a fifth value no branch here checks for). */
+function resolveWording(w: Wording | undefined): ResolvedWording {
+  return {
+    serverNoun: w?.serverNoun === "this connector" ? "this connector" : "this server",
+    auth: w?.auth === "oauth" ? "oauth" : "api-key",
+    keysUrl: typeof w?.keysUrl === "string" && w.keysUrl !== "" ? w.keysUrl : KEYS_URL,
+    rawDetail: typeof w?.rawDetail === "boolean" ? w.rawDetail : true,
+  };
+}
+
 /** Everything known about one failed call, at the moment it failed. */
 export interface ApiFailure {
   /** HTTP status. */
@@ -284,17 +341,43 @@ function has(message: string | undefined, needle: string): boolean {
  * "caller org not identified" for the same reason that clause runs first at
  * all (a valid key must never be told to replace itself), and still before
  * the substring guess, since a named reason needs no guessing.
+ *
+ * UNDER `wording.auth === "oauth"` (STEP4-2, owner, 2026-09-24) none of the
+ * above applies: the caller never held an API key at all, so `reason` (a
+ * diagnosis of WHICH key problem this is) and every key-flavoured branch
+ * below would be a wrong cause stated confidently. "Caller org not
+ * identified" is the one exception — it is about tenant identification, not
+ * about a key, and can fire under either credential type — so it is checked
+ * first regardless of `auth`, worded for whichever credential the caller
+ * actually holds. Every other 401 collapses to one OAuth-flavoured sentence:
+ * reconnect or sign in again, because that is the one thing an OAuth user
+ * can actually do about a 401, and naming a wrong one of five key reasons
+ * would be worse than naming none.
  */
-function explain401(env: ErrorEnvelope): string {
+function explain401(env: ErrorEnvelope, wording: ResolvedWording): string {
   const m = env.message;
   if (has(m, "caller org not identified")) {
+    return wording.auth === "oauth"
+      ? "Mnemoverse: this deployment could not identify a tenant account for " +
+          "this request (401). The caller's sign-in itself was not rejected " +
+          "— do NOT tell the user to reconnect over this. Room and " +
+          "shared-memory operations need the multi-tenant backend, which a " +
+          "self-hosted or static-auth deployment does not have. Quote the " +
+          "detail below, and do not retry the same call against this " +
+          "deployment."
+      : "Mnemoverse: this deployment could not identify a tenant account for " +
+          "this request (401). The API key itself was not rejected — do NOT " +
+          "tell the user to replace it. Room and shared-memory operations need " +
+          "the multi-tenant backend, which a self-hosted or static-auth " +
+          "deployment does not have. Quote the detail below, and do not retry " +
+          "the same call against this deployment.";
+  }
+  if (wording.auth === "oauth") {
     return (
-      "Mnemoverse: this deployment could not identify a tenant account for " +
-      "this request (401). The API key itself was not rejected — do NOT " +
-      "tell the user to replace it. Room and shared-memory operations need " +
-      "the multi-tenant backend, which a self-hosted or static-auth " +
-      "deployment does not have. Quote the detail below, and do not retry " +
-      "the same call against this deployment."
+      "Mnemoverse: the user's sign-in was rejected (401). This is not " +
+      "something they fix by editing a key — tell them to disconnect and " +
+      "reconnect the app, or sign in again, to refresh their session. Do " +
+      "not retry until they do."
     );
   }
   // `details.reason` (an engine change not yet released as of this
@@ -308,7 +391,7 @@ function explain401(env: ErrorEnvelope): string {
   // for byte: `reason` is additive, never a replacement for a message this
   // parser cannot yet interpret.
   if (env.reason !== undefined) {
-    const keysUrl = env.keysUrl ?? KEYS_URL;
+    const keysUrl = env.keysUrl ?? wording.keysUrl;
     switch (env.reason) {
       case "placeholder_key":
         return (
@@ -374,7 +457,7 @@ function explain401(env: ErrorEnvelope): string {
       "MNEMOVERSE_API_KEY is not valid — if it still reads a docs " +
       'placeholder such as "mk_live_YOUR_KEY" or "mk_live_USER_KEY" (any ' +
       "value they did not create at the console themselves) it must be " +
-      `replaced with a real key from ${KEYS_URL}. Do not retry until they ` +
+      `replaced with a real key from ${wording.keysUrl}. Do not retry until they ` +
       "replace it."
     );
   }
@@ -397,13 +480,19 @@ function explain401(env: ErrorEnvelope): string {
   );
 }
 
-/** 403: when the ENGINE refused, the key was accepted and then the request
- *  was refused — name WHICH refusal, from the engine's own message, and never
- *  blame the key. But that first clause is only known when the engine actually
- *  spoke: a proxy, a WAF or a tunnel also answers 403, in HTML, and asserting
- *  "the key identified the account fine" about a response the engine may never
- *  have seen is exactly the confident wrong cause this module exists to avoid. */
-function explain403(env: ErrorEnvelope): string {
+/** 403: when the ENGINE refused, the credential was accepted and then the
+ *  request was refused — name WHICH refusal, from the engine's own message,
+ *  and never blame the credential. But that first clause is only known when
+ *  the engine actually spoke: a proxy, a WAF or a tunnel also answers 403, in
+ *  HTML, and asserting "the credential identified the account fine" about a
+ *  response the engine may never have seen is exactly the confident wrong
+ *  cause this module exists to avoid.
+ *
+ *  Room-permission causes below (archived / not-a-member / read-only /
+ *  invalid-address / not-owner) do not mention a key one way or the other —
+ *  they are about the room, not the credential — so `wording.auth` changes
+ *  only the one sentence that names the credential as innocent. */
+function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   if (saidNothing(env)) {
     return (
       "Mnemoverse: this request was refused (403) by something that did not " +
@@ -438,8 +527,9 @@ function explain403(env: ErrorEnvelope): string {
               "most often the room it addressed. Check memory_list_rooms, and " +
               "if nothing there explains it, tell the user exactly what was " +
               "refused instead of guessing.";
+  const subject = wording.auth === "oauth" ? "Your sign-in" : "The API key";
   return (
-    "Mnemoverse: this request was refused (403). The API key is NOT the problem " +
+    `Mnemoverse: this request was refused (403). ${subject} is NOT the problem ` +
     "— it identified the account fine, and this was a permission decision. " +
     `${cause} Do not retry the same call: it will be refused again.`
   );
@@ -561,19 +651,24 @@ function explain429(f: ApiFailure, env: ErrorEnvelope): string {
 
 /**
  * The agent-facing explanation for one failed call, with the raw body kept
- * after it.
+ * after it (unless `wording.rawDetail === false`, STEP4-3).
  *
  * Total by construction: every status reaches a sentence, and the fallback says
  * that it has no specific guidance instead of inventing some.
+ *
+ * `wording` (STEP4-2/3, owner 2026-09-24) is optional and, absent, resolves
+ * to exactly today's behaviour — every call site before this release passes
+ * none, so every existing pin stays byte-identical.
  */
-export function explainApiFailure(f: ApiFailure): string {
+export function explainApiFailure(f: ApiFailure, wording?: Wording): string {
+  const resolved = resolveWording(wording);
   const env = parseErrorEnvelope(f.body);
   let guidance: string;
 
   if (f.status === 401) {
-    guidance = explain401(env);
+    guidance = explain401(env, resolved);
   } else if (f.status === 403) {
-    guidance = explain403(env);
+    guidance = explain403(env, resolved);
   } else if (f.status === 404) {
     guidance = explain404(f, env);
   } else if (f.status === 429) {
@@ -600,7 +695,7 @@ export function explainApiFailure(f: ApiFailure): string {
       "quote the detail below. One retry is acceptable; a loop is not.";
   }
 
-  return `${guidance}\n\n${rawDetail(f)}`;
+  return resolved.rawDetail ? `${guidance}\n\n${rawDetail(f)}` : guidance;
 }
 
 /**
@@ -690,12 +785,14 @@ export function explainNetworkFailure(
   method: string,
   path: string,
   cause: unknown,
+  wording?: Wording,
 ): string {
+  const resolved = resolveWording(wording);
   const name = cause instanceof Error ? cause.name : "";
   const timedOut = name === "TimeoutError" || name === "AbortError";
   const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
   if (refusedRedirect(cause)) {
-    return (
+    const head =
       `Mnemoverse: ${method} ${path} was answered with a REDIRECT, and this ` +
       "client refused to follow it — so the API key was never sent to whatever " +
       "the redirect pointed at. That refusal is the whole point: following a " +
@@ -707,8 +804,10 @@ export function explainNetworkFailure(
       "network: the request arrived somewhere and was answered. Tell the user " +
       "to check MNEMOVERSE_API_URL and point it straight at the API (the " +
       `default is ${DEFAULT_API_URL}). Do not retry: the same address will ` +
-      `redirect again.\n\n${rawTransportDetail(method, path, detail)}`
-    );
+      "redirect again.";
+    return resolved.rawDetail
+      ? `${head}\n\n${rawTransportDetail(method, path, detail)}`
+      : head;
   }
   const head = timedOut
     ? `Mnemoverse: the memory service did not answer ${method} ${path} in time.`
@@ -718,13 +817,12 @@ export function explainNetworkFailure(
     ? "The service may just be slow right now."
     : "That is a connectivity or DNS problem, or MNEMOVERSE_API_URL pointing at " +
       "a host that does not answer.";
-  return (
+  const body =
     `${head} ${cause_} This is NOT a rejected API key and NOT a quota — no ` +
     "reply arrived to say anything about either, so do not send the user to " +
     "check their key. One retry is reasonable. If that also fails, tell the " +
-    "user memory is unreachable and carry on without it rather than retrying.\n\n" +
-    rawTransportDetail(method, path, detail)
-  );
+    "user memory is unreachable and carry on without it rather than retrying.";
+  return resolved.rawDetail ? `${body}\n\n${rawTransportDetail(method, path, detail)}` : body;
 }
 
 /** The debugging half of a transport failure, in one place so the redirect
@@ -778,7 +876,8 @@ export interface UnreadableBody {
  * say whether the operation ran, because a body it cannot read is no evidence
  * either way. That last clause matters most for a write.
  */
-export function explainUnreadableBody(f: UnreadableBody): string {
+export function explainUnreadableBody(f: UnreadableBody, wording?: Wording): string {
+  const resolved = resolveWording(wording);
   // TWO ARMS, because the two failures have different causes and the wrong one
   // is a wrong instruction. A body that PARSED WRONG is a foreign answer — a
   // portal, a proxy, a base URL aimed elsewhere. A body that stopped ARRIVING
@@ -802,12 +901,12 @@ export function explainUnreadableBody(f: UnreadableBody): string {
         `nothing about the user's key. One retry is reasonable; if it ` +
         `repeats, tell the user the reply is arriving incomplete and quote ` +
         `the detail below, status included.`;
-  return (
+  const head =
     `Mnemoverse: something answered HTTP ${f.status} for ${f.method} ` +
     `${f.path}, but ${body} Whether the operation itself ran is unknown ` +
     `either way — if this was a write, treat it as neither saved nor ` +
-    `refused.\n\n${rawUnreadableDetail(f)}`
-  );
+    "refused.";
+  return resolved.rawDetail ? `${head}\n\n${rawUnreadableDetail(f)}` : head;
 }
 
 /** The debugging half for an unreadable body: what stopped the read, and the
@@ -837,8 +936,10 @@ export class UnreadableBodyError extends Error {
   readonly method: string;
   readonly path: string;
 
-  constructor(f: UnreadableBody) {
-    super(explainUnreadableBody(f), { cause: f.cause });
+  /** `wording` (STEP4-2/3): optional, and absent (every call site before this
+   *  release) reproduces today's message exactly — see {@link explainUnreadableBody}. */
+  constructor(f: UnreadableBody, wording?: Wording) {
+    super(explainUnreadableBody(f, wording), { cause: f.cause });
     this.name = "UnreadableBodyError";
     this.status = f.status;
     this.method = f.method;
@@ -882,8 +983,10 @@ export class NetworkError extends Error {
   readonly method: string;
   readonly path: string;
 
-  constructor(method: string, path: string, cause: unknown) {
-    super(explainNetworkFailure(method, path, cause), { cause });
+  /** `wording` (STEP4-2/3): optional, and absent (every call site before this
+   *  release) reproduces today's message exactly — see {@link explainNetworkFailure}. */
+  constructor(method: string, path: string, cause: unknown, wording?: Wording) {
+    super(explainNetworkFailure(method, path, cause, wording), { cause });
     this.name = "NetworkError";
     this.method = method;
     this.path = path;
@@ -909,8 +1012,10 @@ export class ApiError extends Error {
   /** The engine's envelope, already parsed — so a caller never re-parses. */
   readonly envelope: ErrorEnvelope;
 
-  constructor(f: ApiFailure) {
-    super(explainApiFailure(f));
+  /** `wording` (STEP4-2/3): optional, and absent (every call site before this
+   *  release) reproduces today's message exactly — see {@link explainApiFailure}. */
+  constructor(f: ApiFailure, wording?: Wording) {
+    super(explainApiFailure(f, wording));
     this.name = "ApiError";
     this.status = f.status;
     this.body = f.body;
