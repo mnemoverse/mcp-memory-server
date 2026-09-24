@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-24
+
 ### Added
 
 - **`MemoryToolDeps` gains two optional dependencies, `wording` and
@@ -372,6 +374,15 @@ git history and the GitHub releases are the record.
   has its own, separate copy of this exact ASCII-erasure defect in its own
   author-tag rendering. This package shares no code with the connector, so
   this fix does not reach it; that is a separate issue for that repository.
+
+### Changed
+
+- **The removal of `memory_feedback`'s deprecated `atom_ids` parameter,
+  announced in 0.11.0 for 0.12, moves to 0.13** (owner, 2026-09-24). 0.12.0
+  ships sooner than that announcement assumed, and the stability rule above
+  keeps a deprecated parameter for one full MINOR. The parameter is still
+  accepted on its own, exactly as in 0.11; only its description changes, to
+  `Deprecated since 0.11, removed in 0.13`.
 
 ## [0.11.0] — 2026-09-23
 

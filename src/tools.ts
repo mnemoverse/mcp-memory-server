@@ -1592,7 +1592,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .min(1)
           .optional()
           .describe(
-            "Deprecated since 0.11, removed in 0.12: atom_ids is the old name of memory_ids, still accepted on its own until then. Pass memory_ids instead.",
+            "Deprecated since 0.11, removed in 0.13: atom_ids is the old name of memory_ids, still accepted on its own until then. Pass memory_ids instead.",
           ),
         outcome: z
           .number()

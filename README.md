@@ -329,16 +329,26 @@ saw and diff it against what the server serves today, by version.
   GUID-validated string there (this package's ids are opaque);
   `memory_list_recent`'s `next_cursor`, optional here (absent when the
   service sent a continuation token this client will not pass on) and
-  required there; and `memory_stats`, which carries five optional fields
+  required there; `memory_stats`, which carries five optional fields
   (`episodes`, `prototypes`, `hebbian_edges`, `avg_valence`,
-  `avg_importance`) the connector's schema does not declare.
+  `avg_importance`) the connector's schema does not declare; the room
+  tools (`memory_create_room`, `memory_invite_to_room`, `memory_join_room`,
+  `memory_list_rooms`), where several fields the connector marks required
+  are optional here (`name`, `scope`, `already_member`, and the invite's
+  `code`, `scope`, `room_address` and `expires_at`), because a value core
+  did not send is an honest outcome here rather than a placeholder; and
+  `memory_list_rooms` and `vault_list`, which drop a row with no usable
+  identity (`room_id`, `address`, `role`; `alias`, `context`) from the data,
+  reported once on stderr, instead of emitting empty strings into required
+  fields.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
   renaming a declared annotation field,** is announced one MINOR ahead: the
   tool (or parameter) stays, its description says
   `deprecated since x.y, removed in x.z`, and the change lands only in the
   announced version, with its CHANGELOG line. A renamed parameter is accepted
   under both names until then (0.11: `memory_feedback`'s `atom_ids` became
-  `memory_ids`). A rename is announced by naming
+  `memory_ids`; its removal, first announced for 0.12, lands in 0.13, since
+  0.12 shipped sooner than that announcement assumed). A rename is announced by naming
   both the old and the new name; the version pair alone does not say what a
   client should look for. Because a MINOR may add a field but not remove one, a
   renamed annotation field is declared under both names until the announced
@@ -350,7 +360,7 @@ saw and diff it against what the server serves today, by version.
   changes those three description strings and nothing else; tool names,
   input and output schemas and annotations never vary by configuration.
 
-The list above is the 0.11 surface: ten tools, each declaring all four hints.
+The list above is the 0.12 surface: ten tools, each declaring all four hints.
 The hosted connector at `mcp.mnemoverse.com/mcp` serves the same ten.
 
 **If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in the Quick Start, reaches the same memory and does not depend on that session's sign-in.
