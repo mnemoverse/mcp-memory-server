@@ -1171,6 +1171,10 @@ describe("the raw detail is data, never voice", () => {
  */
 describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names the key (STEP4-2)", () => {
   const OAUTH: Wording = { auth: "oauth" };
+  /** The explanation without its raw-detail tail: everything before the
+   *  first blank line. The tail quotes the wire body verbatim (STEP4-3), so
+   *  it can contain whatever core said, "key" included. */
+  const guidanceOf = (text: string): string => text.split("\n\n")[0] ?? text;
 
   /** Every distinct shape explain401 can be handed, in api-key mode terms:
    *  reused here to prove ALL of them collapse to one of two oauth-safe
@@ -1206,8 +1210,11 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(text).not.toContain("console.mnemoverse.com/dashboard/keys");
     expect(text).not.toContain("mk_live_");
     // Round 2: not the word "key" in any form either (the first oauth
-    // sentence said "not something they fix by editing a key").
-    expect(text).not.toMatch(/keys?/i);
+    // sentence said "not something they fix by editing a key"). Checked on
+    // the guidance alone: the raw-detail tail after the blank line quotes
+    // the wire body verbatim, and core's own 401 body may well say "key";
+    // hiding that tail is what `rawDetail: false` is for (STEP4-3).
+    expect(guidanceOf(text)).not.toMatch(/\bkeys?\b/i);
   });
 
   it("401 without 'caller org not identified' always reads the same reconnect sentence, whatever the body says", () => {
@@ -1248,7 +1255,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(text).toContain("do NOT tell the user to reconnect over this");
     expect(text).not.toContain("MNEMOVERSE_API_KEY");
     expect(text).not.toContain("replace it");
-    expect(text).not.toMatch(/keys?/i);
+    expect(guidanceOf(text)).not.toMatch(/\bkeys?\b/i);
   });
 
   /** Every 403 cause the engine actually sends (mirrors "a 403 names the
@@ -1274,7 +1281,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     // changed only the innocent clause and left "This key is not an active
     // member" for an OAuth user who holds no key (Copilot, CodeRabbit, the
     // internal panel, all on the same lines).
-    expect(text).not.toMatch(/\bkeys?\b/i);
+    expect(guidanceOf(text)).not.toMatch(/\bkeys?\b/i);
   });
 
   it("403 room-permission causes speak about the account under oauth, and about the key otherwise", () => {
@@ -1354,7 +1361,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(withoutWording).not.toContain(banned);
       expect(withOauth).not.toContain(banned);
     }
-    expect(withOauth).not.toMatch(/keys?/i);
+    expect(guidanceOf(withOauth)).not.toMatch(/\bkeys?\b/i);
     // Exactly one noun differs, and only in the per-minute branch: for the
     // other two bodies the replacement is a no-op and the texts are identical.
     expect(withOauth).toBe(
