@@ -71,7 +71,10 @@ git history and the GitHub releases are the record.
   `src/constants.ts` `CHARACTER_LIMIT = 25000`; that adoption is not part of
   this slice, and the connector's literal is untouched here. The notice text
   itself is unchanged, so every existing truncation-notice assertion still
-  pins the same string.
+  pins the same string, and so is the cut for every hint this package passes
+  (the 200-character reserve); a consumer's hint longer than that reserve
+  widens the reserve instead of pushing the result over the cap, and a hint
+  is bounded at 1,000 code points.
 - **`memory_list_rooms` and `vault_list` declare output schemas and return
   `structuredContent` alongside their unchanged text.** `memory_list_rooms`
   returns `{rooms: [{room_id, name?, address, role, scope, archived}]}`;

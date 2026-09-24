@@ -141,6 +141,26 @@ describe("the shared entry point", () => {
     expect(truncated.endsWith("[…truncated to fit the 25K token limit. Use a more specific query to see all results.]")).toBe(true);
   });
 
+  it("capResult never leaves a lone surrogate: an astral character exactly at the cut is dropped whole", () => {
+    // The cut for the default hint falls at MAX_RESULT_CHARS - 200; put a
+    // surrogate pair so that its high surrogate is the last unit before it.
+    const cut = MAX_RESULT_CHARS - 200;
+    const text = "x".repeat(cut - 1) + "\u{1F600}" + "y".repeat(2000);
+    const out = capResult(text);
+    expect(out.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    // No unpaired surrogate anywhere in the result.
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(out)).toBe(false);
+    expect(out.startsWith("x".repeat(cut - 1) + "\n\n[…truncated")).toBe(true);
+  });
+
+  it("capResult keeps the whole result within the cap for a hint longer than the reserve, and bounds the hint", () => {
+    const longHint = "h".repeat(5_000);
+    const out = capResult("x".repeat(MAX_RESULT_CHARS + 10), longHint);
+    expect(out.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(out.endsWith("h".repeat(1_000) + "]")).toBe(true);
+    expect(out.includes("h".repeat(1_001))).toBe(false);
+  });
+
   it("starts nothing on import: neither the entry nor the tools import src/index.ts", () => {
     // A "never" that no call can observe, so it is checked on the source. The
     // main entry opens a stdio transport when imported without

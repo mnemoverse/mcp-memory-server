@@ -112,16 +112,31 @@ export function capResult(
   moreHint = "Use a more specific query to see all results.",
 ): string {
   if (text.length <= MAX_RESULT_CHARS) return text;
-  let truncated = text.slice(0, MAX_RESULT_CHARS - 200);
+  // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
+  // guidance instead of the read-tool default (which points at a query control a
+  // repeated no-arg call cannot use). Existing callers keep the default message.
+  //
+  // The reserve for the notice is 200 characters, as it always was, so every
+  // existing truncated result keeps its exact cut; a hint longer than that
+  // reserve (a consumer of the /shared export may pass any sentence) widens
+  // the reserve to the suffix's own length instead of pushing the result over
+  // the cap, and a hint is bounded at MAX_HINT_CODE_POINTS so the suffix can
+  // never be the whole budget (review round 2 on the export, CodeRabbit).
+  const hint = [...moreHint].slice(0, MAX_HINT_CODE_POINTS).join("");
+  const suffix = `\n\n[…truncated to fit the 25K token limit. ${hint}]`;
+  const reserve = Math.max(200, suffix.length);
+  let truncated = text.slice(0, MAX_RESULT_CHARS - reserve);
   const lastCode = truncated.charCodeAt(truncated.length - 1);
   if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
     truncated = truncated.slice(0, -1);
   }
-  // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
-  // guidance instead of the read-tool default (which points at a query control a
-  // repeated no-arg call cannot use). Existing callers keep the default message.
-  return `${truncated}\n\n[…truncated to fit the 25K token limit. ${moreHint}]`;
+  return `${truncated}${suffix}`;
 }
+
+/** The longest `moreHint` capResult will print; the rest is cut, so the suffix
+ * cannot take the whole result budget. 1,000 code points is ten times the
+ * longest hint this package passes. */
+const MAX_HINT_CODE_POINTS = 1_000;
 
 /**
  * A 2xx whose body does not carry what core always sends for this operation.
