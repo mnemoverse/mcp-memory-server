@@ -58,6 +58,20 @@ git history and the GitHub releases are the record.
 
 ### Added
 
+- **`MAX_RESULT_CHARS` and `capResult` are exported from `/shared`.** Both
+  already existed in `src/tools.ts`; this slice makes them a named export of
+  the shared entry point (ADR-025), alongside the existing tool/prompt/resource
+  exports. `MAX_RESULT_CHARS` is the hard cap on a tool result's text, 96,000
+  characters (24,000 tokens), unchanged by this slice, and `capResult` is the
+  helper that applies it, truncating on a UTF-16 code-point boundary and
+  appending the truncation notice, so a consumer does not have to re-implement
+  a `slice` that can cut a surrogate pair. `structuredContent` stays uncapped
+  (OD-11). This is the handoff for a later step in which the hosted connector
+  (`mnemoverse-mcp-remote`) adopts this export in place of its own
+  `src/constants.ts` `CHARACTER_LIMIT = 25000`; that adoption is not part of
+  this slice, and the connector's literal is untouched here. The notice text
+  itself is unchanged, so every existing truncation-notice assertion still
+  pins the same string.
 - **`memory_list_rooms` and `vault_list` declare output schemas and return
   `structuredContent` alongside their unchanged text.** `memory_list_rooms`
   returns `{rooms: [{room_id, name?, address, role, scope, archived}]}`;

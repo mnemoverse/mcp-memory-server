@@ -33,6 +33,7 @@ import {
   structuredText,
   withDomainEscapeLegend,
 } from "../src/names.js";
+import { MAX_RESULT_CHARS } from "../src/tools.js";
 import { NAMES } from "./name-cases.js";
 
 
@@ -248,11 +249,11 @@ describe("formatDomainList — the memory_stats line", () => {
   });
 
   it("bounds the default budget below the tool-result cap", () => {
-    // MAX_RESULT_CHARS in src/index.ts is 24,000 tokens × 4 = 96,000, and the
-    // stats message carries four more lines plus, sometimes, the escape legend.
-    // The behavioural pin is in test/handlers.test.ts; this is the arithmetic.
+    // The imported MAX_RESULT_CHARS (src/tools.ts) is 24,000 tokens × 4 = 96,000,
+    // and the stats message carries four more lines plus, sometimes, the escape
+    // legend. The behavioural pin is in test/handlers.test.ts; this is the arithmetic.
     const many = Array.from({ length: 4000 }, (_, i) => `team-${i}-engineering`);
-    expect(formatDomainList(many).length).toBeLessThan(24_000 * 4 - 2_000);
+    expect(formatDomainList(many).length).toBeLessThan(MAX_RESULT_CHARS - 2_000);
   });
 });
 

@@ -185,8 +185,9 @@ export function roomNamePhrase(name: unknown): string {
 /**
  * How many characters of NAMES the `Domains:` line may spend.
  *
- * Sized against the tool-result cap it exists to respect: `MAX_RESULT_CHARS` in
- * src/index.ts is 96,000, and the reserve covers the four other stats lines, the
+ * Sized against the tool-result cap it exists to respect: `MAX_RESULT_CHARS`,
+ * exported from src/tools.ts (and re-exported from src/shared.ts), is 96,000,
+ * and the reserve covers the four other stats lines, the
  * escape legend, and the truncation notice `capResult` appends if it ever fires.
  * The relationship is pinned behaviourally — "memory_stats fits the result cap
  * without losing its tail", test/handlers.test.ts — so this number cannot drift

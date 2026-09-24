@@ -81,7 +81,13 @@ export interface MemoryToolDeps {
 // Hard cap on tool result size — required by Claude Connectors Directory
 // (https://support.claude.com/en/articles/12922490-remote-mcp-server-submission-guide).
 // Approximate token count = chars / 4. Cap at 24,000 tokens to leave headroom under the 25K limit.
-const MAX_RESULT_CHARS = 24_000 * 4;
+//
+// Exported (re-exported from ./shared, ADR-025) so a future editor does not
+// move or rename it without checking there: it is now the one cap both this
+// server and, from step 4 of the structured-output plan, the hosted connector
+// apply to a tool result's text. `structuredContent` is NOT capped (OD-11,
+// 2026-09-23); this bound is text-only.
+export const MAX_RESULT_CHARS = 24_000 * 4;
 
 /**
  * Truncate a result string to MAX_RESULT_CHARS, appending a notice if truncated.
@@ -91,8 +97,12 @@ const MAX_RESULT_CHARS = 24_000 * 4;
  * before the cut point is a high surrogate (U+D800–U+DBFF), drop it so the
  * result stays well-formed. Otherwise an emoji or non-BMP character at the
  * boundary can produce a lone surrogate and corrupt downstream JSON encoding.
+ *
+ * Exported (re-exported from ./shared) so a consumer applying MAX_RESULT_CHARS
+ * to its own tool results does not have to re-implement this code-point-safe
+ * truncation as a plain `slice`, which can cut a surrogate pair.
  */
-function capResult(
+export function capResult(
   text: string,
   // The default recommends ONLY the control that works. A previous draft also
   // said "or smaller top_k" — but top_k is not a hard cap (association

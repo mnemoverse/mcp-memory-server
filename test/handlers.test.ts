@@ -35,7 +35,7 @@ import {
   NO_MATCH_SCOPED_HINT,
   SERVER_INSTRUCTIONS,
 } from "../src/teaching.js";
-import { unreadableAnswerText } from "../src/tools.js";
+import { MAX_RESULT_CHARS, unreadableAnswerText } from "../src/tools.js";
 
 let mcp: Harness;
 
@@ -2136,8 +2136,7 @@ describe("a field with the wrong wire type costs that field, not the tool call",
  */
 describe("memory_stats fits the result cap without losing its tail", () => {
   // 4000 stores × a 21-character name renders past 100K characters — the
-  // MAX_RESULT_CHARS bound in src/index.ts is 24,000 tokens × 4 = 96,000.
-  const MAX_RESULT_CHARS = 24_000 * 4;
+  // imported MAX_RESULT_CHARS bound (src/tools.ts) is 24,000 tokens × 4 = 96,000.
   const many = Array.from(
     { length: 4000 },
     (_, i) => `team-${String(i).padStart(4, "0")}-engineering`,
