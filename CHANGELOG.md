@@ -270,7 +270,16 @@ git history and the GitHub releases are the record.
   `structuredText` removes (whitespace, control, bidi, zero-width) is
   printed exactly in the tag, as an escaped literal with the legend, but has
   no plain data value, so the data omits `author` rather than carry `""` or
-  the raw characters.
+  the raw characters. `structuredText` itself (src/names.ts) now drops every
+  Unicode format character, not only its curated lists of bidi and
+  zero-width code points: the Tag block (U+E0000 to U+E007F, an invisible
+  copy of ASCII used to smuggle text past a reader) and U+00AD SOFT HYPHEN
+  passed into `structuredContent.author` unchanged while the text tag
+  escaped them (Sigma, review round 4). This is the one normaliser every
+  structured free-text field uses (room names, `reason`, `share_message`,
+  `next_steps`, vault aliases and contexts), so those fields gain the same
+  rule; line and paragraph separators (U+2028, U+2029) now count as control
+  characters there too.
   **`structuredContent.author` had the same erasure, undetected**, found
   while fixing this, not reported in the original issue: it fed off the same
   `safeInline`-sanitised value, so a non-Latin name reached neither surface.

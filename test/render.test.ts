@@ -236,6 +236,10 @@ describe("authorName", () => {
     // tag (escaped) and has no plain data value.
     expect(formatAuthorTag({ agent_name: "\u200b" })).toBe(' [by "\\u200b"]');
     expect(authorName({ agent_name: "\u200b" })).toBe("");
+    // Invisible format characters never reach the data field (Sigma, #168).
+    const smuggled = "co" + String.fromCodePoint(0xe0041) + "dex" + "\u00ad";
+    expect(authorName({ agent_name: smuggled })).toBe("codex");
+    expect(formatAuthorTag({ agent_name: smuggled })).not.toContain(String.fromCodePoint(0xe0041));
     expect(formatAuthorTag({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe(' [by "sigma"]');
   });
 

@@ -396,8 +396,18 @@ export function structuredText(s: unknown, cap: number): string | undefined {
       code === 0x200d || // ZWJ
       code === 0x2060 || // WORD JOINER
       code === 0xfeff; // ZWNBSP / BOM
-    if (isControl || isBidi) out += " ";
-    else if (isZeroWidth) continue;
+    // Every other Unicode format character (general category Cf) is dropped
+    // as well: the Tag block (U+E0000 to U+E007F, an invisible copy of ASCII
+    // used to smuggle text past a reader), U+00AD SOFT HYPHEN, and the rest.
+    // `exactLiteral` already escapes the whole category on the text surface;
+    // the data surface removed only the curated lists above until Sigma
+    // showed the gap on #168 (review round 4). Zl and Zp (line and paragraph
+    // separators) count as control here: they break a value the same way a
+    // newline does.
+    const isOtherFormat = /^[\p{Cf}]$/u.test(ch);
+    const isLineSeparator = /^[\p{Zl}\p{Zp}]$/u.test(ch);
+    if (isControl || isBidi || isLineSeparator) out += " ";
+    else if (isZeroWidth || isOtherFormat) continue;
     else out += ch;
   }
   const collapsed = out.replace(/\s+/g, " ").trim();

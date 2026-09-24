@@ -367,6 +367,23 @@ describe("structuredText", () => {
   });
 });
 
+describe("structuredText: every Unicode format character is dropped, not only the curated lists", () => {
+  it("drops the Tag block (invisible ASCII) and a soft hyphen; the text surface escapes the same characters", () => {
+    // U+E0041 U+E0042 are TAG LATIN CAPITAL LETTER A / B, invisible in every renderer.
+    const tagged = "sig" + String.fromCodePoint(0xe0041) + String.fromCodePoint(0xe0042) + "ma" + "\u00ad";
+    expect(structuredText(tagged, 100)).toBe("sigma");
+    expect(exactLiteral(tagged, 128)?.escaped).toBe(true);
+  });
+
+  it("treats the line and paragraph separators as control characters", () => {
+    expect(structuredText("a\u2028b\u2029c", 100)).toBe("a b c");
+  });
+
+  it("a value made only of format characters normalises to nothing", () => {
+    expect(structuredText(String.fromCodePoint(0xe0041) + "\u00ad", 100)).toBeUndefined();
+  });
+});
+
 describe("structuredText: the cap counts code points, not UTF-16 units", () => {
   it("does not split an astral character at the boundary into a lone surrogate", () => {
     const out = structuredText("ab\u{1F600}cd", 3);
