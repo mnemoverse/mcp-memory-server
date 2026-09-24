@@ -225,6 +225,13 @@ describe("authorName", () => {
   it("appends \" · external\" for an external agent, with no brackets", () => {
     expect(authorName({ agent_name: "sigma", is_external: true })).toBe("sigma · external");
     expect(authorName({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe("sigma");
+    // Present exactly when the tag prints the name: a 100-character name is
+    // carried whole (the old cap was 64), a 200-character one is withheld
+    // because the tag prints "(name cannot be printed exactly)".
+    expect(authorName({ agent_name: "n".repeat(100) })).toBe("n".repeat(100));
+    expect(formatAuthorTag({ agent_name: "n".repeat(100) })).toBe(' [by "' + "n".repeat(100) + '"]');
+    expect(authorName({ agent_name: "n".repeat(200) })).toBe("");
+    expect(formatAuthorTag({ agent_name: "n".repeat(200) })).toBe(" [by (name cannot be printed exactly)]");
     expect(formatAuthorTag({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe(' [by "sigma"]');
   });
 

@@ -188,6 +188,12 @@ git history and the GitHub releases are the record.
   name equal to that fragment, sent by another connector, can no longer
   suppress the legend for a genuinely escaped name on the same page.
   `is_external` counts as external only when it is the boolean `true`.
+  And `structuredContent.author` follows the tag's own rule (review round
+  3): it is present exactly when the tag prints the name, decided by the
+  same `exactLiteral` check under the same cap, and carries the whole
+  normalised name; the old 64-code-point cap, inherited from `safeInline`,
+  could hold a shorter name than the page showed, or a name the page had
+  refused.
   **`structuredContent.author` had the same erasure, undetected**, found
   while fixing this, not reported in the original issue: it fed off the same
   `safeInline`-sanitised value, so a non-Latin name reached neither surface.

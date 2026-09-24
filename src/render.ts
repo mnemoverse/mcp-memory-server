@@ -143,7 +143,16 @@ export function rawAuthorName(p?: Provenance | null): string {
  * `exactLiteral`'s quoting.
  */
 export function authorName(p?: Provenance | null): string {
-  const who = structuredText(rawAuthorName(p), 64);
+  // Present exactly when the text tag prints the name (Sigma, review round
+  // 3 on #66): the same exactLiteral check under MAX_DOMAIN_TAG_LITERAL
+  // decides, so a name the tag refuses ("(name cannot be printed exactly)")
+  // is withheld here too, and a name the tag prints is carried whole (the
+  // structuredText normalisation, never a truncated prefix). The old cap of
+  // 64 code points, inherited from safeInline, let the data hold a shorter
+  // name than the page showed, with nothing marking the cut.
+  const raw = rawAuthorName(p);
+  if (!raw || !exactLiteral(raw, MAX_DOMAIN_TAG_LITERAL)) return "";
+  const who = structuredText(raw, MAX_DOMAIN_TAG_LITERAL);
   if (!who) return "";
   return p?.is_external === true ? `${who} · external` : who;
 }
