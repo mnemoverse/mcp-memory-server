@@ -16,6 +16,15 @@ import { describe, expect, it } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { connectMemoryTools } from "./direct-register.js";
 import type { ApiFetch, MemoryToolDeps } from "../src/shared.js";
+import {
+  ApiError,
+  NetworkError,
+  UnreadableBodyError,
+  explainApiFailure,
+  explainNetworkFailure,
+  explainUnreadableBody,
+  type Wording,
+} from "../src/errors.js";
 
 const neverCalled: ApiFetch = async () => {
   throw new Error("listing tools must not call the API");
@@ -112,5 +121,118 @@ describe("wording.serverNoun", () => {
     const s = surfaces(tools);
     expect(s.get("memory_read.input.top_k")).toContain("what this server asks for");
     await close();
+  });
+});
+
+/**
+ * How `wording` reaches the ERROR TEXT (STEP4-2): the consumer's `apiFetch`
+ * may build `ApiError`/`NetworkError`/`UnreadableBodyError` with no wording
+ * at all; `registerMemoryTools` re-renders whatever it rejects with under
+ * `deps.wording` before the SDK turns it into the tool result. These run
+ * through the real SDK, so what they read is exactly what a model sees.
+ */
+describe("wording reaches the errors apiFetch throws (STEP4-2)", () => {
+  const OAUTH: Wording = { auth: "oauth" };
+  const QUIET: Wording = { rawDetail: false };
+  const F401 = {
+    status: 401,
+    body: JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "invalid_key" } }),
+    method: "POST",
+    path: "/memory/read",
+  };
+
+  const throwing =
+    (make: () => unknown): ApiFetch =>
+    async () => {
+      throw make();
+    };
+
+  async function callText(
+    deps: MemoryToolDeps,
+    name = "memory_read",
+    args: Record<string, unknown> = { query: "x" },
+  ): Promise<{ isError: unknown; text: string | undefined }> {
+    const { client, server } = await connectMemoryTools(deps);
+    try {
+      const res = await client.callTool({ name, arguments: args });
+      const content = res.content as Array<{ type: string; text?: string }>;
+      return { isError: res.isError, text: content[0]?.text };
+    } finally {
+      await server.close();
+    }
+  }
+
+  it("a 401 built with no wording is explained for an OAuth user when deps.wording says so", async () => {
+    const out = await callText({ apiFetch: throwing(() => new ApiError(F401)), wording: OAUTH });
+    expect(out.isError).toBe(true);
+    expect(out.text).toBe(explainApiFailure(F401, OAUTH));
+    expect(out.text).not.toContain("MNEMOVERSE_API_KEY");
+    expect(out.text).not.toContain("console.mnemoverse.com");
+  });
+
+  it("with no wording on deps, the text is exactly the error's own message (no wrapper is installed)", async () => {
+    const built = new ApiError(F401);
+    const out = await callText({ apiFetch: throwing(() => built) });
+    expect(out.isError).toBe(true);
+    expect(out.text).toBe(built.message);
+    expect(out.text).toContain("console.mnemoverse.com/dashboard/keys");
+  });
+
+  it("an apiFetch that already passes the same wording to the constructor gets the same text", async () => {
+    const out = await callText({ apiFetch: throwing(() => new ApiError(F401, OAUTH)), wording: OAUTH });
+    expect(out.text).toBe(explainApiFailure(F401, OAUTH));
+  });
+
+  it("deps.wording wins over a different wording passed to the constructor", async () => {
+    const out = await callText({
+      apiFetch: throwing(() => new ApiError(F401, { auth: "api-key" })),
+      wording: OAUTH,
+    });
+    expect(out.text).toBe(explainApiFailure(F401, OAUTH));
+  });
+
+  it("NetworkError and UnreadableBodyError are re-rendered too (rawDetail: false drops their tails)", async () => {
+    const cause = new TypeError("fetch failed");
+    const net = await callText({
+      apiFetch: throwing(() => new NetworkError("POST", "/memory/read", cause)),
+      wording: QUIET,
+    });
+    expect(net.isError).toBe(true);
+    expect(net.text).toBe(explainNetworkFailure("POST", "/memory/read", cause, QUIET));
+    expect(net.text).not.toBe(new NetworkError("POST", "/memory/read", cause).message);
+
+    const ub = {
+      status: 200,
+      method: "POST",
+      path: "/memory/read",
+      bodyPreview: "<!doctype html>",
+      cause: new SyntaxError("Unexpected token <"),
+    };
+    const unread = await callText({ apiFetch: throwing(() => new UnreadableBodyError(ub)), wording: QUIET });
+    expect(unread.isError).toBe(true);
+    expect(unread.text).toBe(explainUnreadableBody(ub, QUIET));
+    expect(unread.text).not.toBe(new UnreadableBodyError(ub).message);
+  });
+
+  it("a rejection that is none of the three classes passes through untouched", async () => {
+    const out = await callText({ apiFetch: throwing(() => new Error("something else entirely")), wording: OAUTH });
+    expect(out.isError).toBe(true);
+    expect(out.text).toBe("something else entirely");
+  });
+
+  it("memory_list_recent's bare-404 degrade still fires on a re-rendered ApiError", async () => {
+    const out = await callText(
+      {
+        apiFetch: throwing(() => new ApiError({ status: 404, body: "", method: "POST", path: "/memory/recent" })),
+        wording: OAUTH,
+      },
+      "memory_list_recent",
+      {},
+    );
+    expect(out.isError).toBe(true);
+    expect(out.text).toBe(
+      "The memory service does not support the recent-entries feed yet. " +
+        "Use memory_read with order_by: 'recency' as an approximation.",
+    );
   });
 });

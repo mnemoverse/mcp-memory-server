@@ -217,6 +217,22 @@ core-side error envelopes are checked and found to echo request content
 back in `details`. Until that check happens, there is no reason to drop
 diagnostic detail a human debugging at 3am relies on.
 
+### How `wording` reaches the error text
+
+`registerMemoryTools` and `registerMemoryResources` apply `deps.wording` to
+every `ApiError`, `NetworkError` or `UnreadableBodyError` that
+`deps.apiFetch` rejects with, before the SDK turns it into the tool result.
+Each is re-rendered with `withWording(deps.wording)`: a new instance of the
+same class whose message is what its constructor would have produced under
+that wording, every field and `isBare404` unchanged. The consumer therefore
+states its wording once, on `deps`. Its `apiFetch` may construct the three
+classes with no wording at all, or pass the same value to their optional
+second constructor argument; a message is a pure function of the failure
+and the wording, so the text is the same either way. If a constructor was
+given a different wording, `deps.wording` wins. A rejection that is none of
+the three classes passes through untouched. When `deps` carries no
+`wording`, `apiFetch` is used exactly as supplied, with no wrapper at all.
+
 ## `writeAuthor`: vouching for the end user behind a write
 
 ```ts

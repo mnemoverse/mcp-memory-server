@@ -54,7 +54,7 @@ import {
   withDomainEscapeLegend,
   withEscapeLegendAt,
 } from "./names.js";
-import { ApiError, type Wording } from "./errors.js";
+import { ApiError, rewordFailure, type Wording } from "./errors.js";
 // Field limits, generated from core's contract (src/limits.ts, ADR-025).
 import { CORE_LIMITS } from "./limits.js";
 // For the invite's `expires_at` (S8, structured-output plan): the same
@@ -75,6 +75,26 @@ import { utcInstant } from "./time.js";
 export type ApiFetch = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 
 /**
+ * `deps.apiFetch` with `deps.wording` applied to what it throws (STEP4-2):
+ * every rejection passes through {@link rewordFailure}, so an `ApiError`,
+ * `NetworkError` or `UnreadableBodyError` the consumer built with no
+ * `wording` (or with a different one) reaches the model explained under the
+ * wording this registration was given. Results and every other rejection
+ * pass through untouched. Installed only when `wording` is supplied at all:
+ * the stdio server supplies none, and its `apiFetch` is used exactly as
+ * before.
+ */
+export function wordedApiFetch(inner: ApiFetch, wording: Wording): ApiFetch {
+  return async <T = unknown>(path: string, options?: RequestInit): Promise<T> => {
+    try {
+      return await inner<T>(path, options);
+    } catch (e) {
+      throw rewordFailure(e, wording);
+    }
+  };
+}
+
+/**
  * What a server supplies when it registers the memory tools.
  *
  * `wording` and `writeAuthor` (STEP4-2/3/5, owner decisions 2026-09-24) are
@@ -90,11 +110,11 @@ export interface MemoryToolDeps {
   apiFetch: ApiFetch;
   /** How this registration wants its own tool descriptions and error
    *  explanations worded. See {@link Wording} for each field. Read at
-   *  registration time for the three descriptions that name the server.
-   *  NOT threaded into `apiFetch`'s own errors automatically: a consumer
-   *  that wants its `ApiError`/`NetworkError`/`UnreadableBodyError`
-   *  instances to speak this same wording passes the same value to their
-   *  constructors from inside its own `apiFetch` implementation. */
+   *  registration time for the three descriptions that name the server,
+   *  and applied to every `ApiError`/`NetworkError`/`UnreadableBodyError`
+   *  the consumer's `apiFetch` rejects with (see {@link wordedApiFetch}),
+   *  so the consumer states it once, here. Passing the same value to the
+   *  error constructors inside `apiFetch` is allowed and changes nothing. */
   wording?: Wording;
   /**
    * Supplier-vouched authorship for `memory_write` (STEP4-5). Called once
@@ -396,7 +416,10 @@ const MEMORY_ITEM_OUTPUT = {
  * `deps.apiFetch` is the only way the tools reach the API.
  */
 export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): void {
-  const { apiFetch, wording, writeAuthor } = deps;
+  const { wording, writeAuthor } = deps;
+  // STEP4-2: `wording` reaches the error text here, on every rejection, not
+  // in the consumer's constructors. See wordedApiFetch.
+  const apiFetch = wording === undefined ? deps.apiFetch : wordedApiFetch(deps.apiFetch, wording);
 
   // Read once, defensively: `wording` crosses a public package boundary a
   // caller controls only at compile time (STEP4-2, owner 2026-09-24). A

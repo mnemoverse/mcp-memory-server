@@ -23,7 +23,7 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { ApiError } from "./errors.js";
-import { unreadableAnswerText, type MemoryToolDeps } from "./tools.js";
+import { unreadableAnswerText, wordedApiFetch, type MemoryToolDeps } from "./tools.js";
 
 /** MCP's code for a resource that does not exist (spec, "Resources: Error Handling"). */
 const RESOURCE_NOT_FOUND = -32002;
@@ -47,7 +47,10 @@ function decodeOnce(segment: string): string {
  * API only through `deps.apiFetch`, like the tools.
  */
 export function registerMemoryResources(server: McpServer, deps: MemoryToolDeps): void {
-  const { apiFetch } = deps;
+  // The same `wording` treatment as registerMemoryTools (STEP4-2): a
+  // resource read that fails is explained in this registration's own voice.
+  const { wording } = deps;
+  const apiFetch = wording === undefined ? deps.apiFetch : wordedApiFetch(deps.apiFetch, wording);
 
   server.registerResource(
     "memory-item",

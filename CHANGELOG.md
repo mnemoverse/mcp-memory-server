@@ -82,7 +82,13 @@ git history and the GitHub releases are the record.
   and set to `false` only once a specific deployment's error envelopes are
   checked and found to echo request content back in `details`. The three
   error classes (`ApiError`, `NetworkError`, `UnreadableBodyError`) accept
-  the same optional `wording` as a second constructor argument.
+  the same optional `wording` as a second constructor argument, and
+  `registerMemoryTools`/`registerMemoryResources` apply `deps.wording` to
+  every one of them that `apiFetch` rejects with, so a consumer states its
+  wording once: each class gains a `withWording` method that re-renders the
+  same failure under another wording, `ApiError` now carries `retryAfter`
+  and `UnreadableBodyError` its `bodyPreview` so nothing is lost in that
+  re-rendering, and a rejection of any other type passes through untouched.
   `writeAuthor: () => WriteAuthor | undefined` is called once per
   `memory_write`; a returned value is sent as the request body's `author`
   field exactly as returned (no normalisation beyond a `typeof` guard;

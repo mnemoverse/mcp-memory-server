@@ -32,6 +32,7 @@ import {
   ApiError,
   NetworkError,
   UnreadableBodyError,
+  rewordFailure,
   type Wording,
 } from "../src/errors.js";
 
@@ -1503,5 +1504,103 @@ describe("the three error classes accept the same optional wording their explain
     expect(withWording.message).not.toContain("Raw detail");
     expect(withoutWording.message).toContain("Raw detail");
     expect(withWording.status).toBe(200);
+  });
+});
+
+/**
+ * `withWording` / `rewordFailure` (STEP4-2): how `MemoryToolDeps.wording`
+ * reaches an error the consumer's `apiFetch` built without it. A message is
+ * a pure function of the failure and the wording, so these pins compare the
+ * re-rendered message with the explainer called directly on the same
+ * inputs: equality proves every input (the Retry-After header, the body
+ * preview, the cause) survived the round trip.
+ */
+describe("withWording / rewordFailure: the same failure, explained under another wording", () => {
+  const OAUTH: Wording = { auth: "oauth" };
+  const QUIET: Wording = { rawDetail: false };
+
+  it("ApiError: a 429 re-rendered under another wording keeps its Retry-After header", () => {
+    const f = {
+      status: 429,
+      body: JSON.stringify({ error: { code: "rate_limited", message: "Too many requests", retryable: true } }),
+      method: "POST",
+      path: "/memory/read",
+      retryAfter: "30",
+    };
+    const built = new ApiError(f);
+    const reworded = built.withWording(QUIET);
+    expect(reworded).toBeInstanceOf(ApiError);
+    expect(reworded.message).toBe(explainApiFailure(f, QUIET));
+    expect(built.message).toBe(explainApiFailure(f));
+    // rawDetail: false drops the tail and nothing else.
+    expect(built.message.startsWith(reworded.message)).toBe(true);
+    expect(built.message).not.toBe(reworded.message);
+    expect(reworded.retryAfter).toBe("30");
+    expect(reworded.status).toBe(429);
+    expect(reworded.envelope).toEqual(built.envelope);
+  });
+
+  it("ApiError: re-rendering under the wording it was built with is the identity on the message", () => {
+    const f = {
+      status: 401,
+      body: JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "invalid_key" } }),
+      method: "POST",
+      path: "/memory/read",
+    };
+    const oauth = new ApiError(f, OAUTH);
+    expect(oauth.withWording(OAUTH).message).toBe(oauth.message);
+    expect(new ApiError(f).withWording(undefined).message).toBe(new ApiError(f).message);
+    expect(new ApiError(f).withWording(OAUTH).message).toBe(oauth.message);
+    // The invalid_key sentence points at the keys console; the oauth one
+    // never prints that URL, nor names the key.
+    expect(oauth.message).not.toContain("console.mnemoverse.com");
+    expect(oauth.message).not.toContain("MNEMOVERSE_API_KEY");
+    expect(new ApiError(f).message).toContain("console.mnemoverse.com/dashboard/keys");
+  });
+
+  it("ApiError: isBare404 survives re-rendering", () => {
+    const bare = new ApiError({ status: 404, body: "", method: "POST", path: "/memory/recent" });
+    expect(bare.isBare404).toBe(true);
+    expect(bare.withWording(OAUTH).isBare404).toBe(true);
+  });
+
+  it("UnreadableBodyError: the body preview and the cause survive, and so does the preview's absence", () => {
+    const cause = new SyntaxError("Unexpected token <");
+    const withPreview = { status: 200, method: "POST", path: "/memory/read", bodyPreview: "<!doctype html>", cause };
+    const reworded = new UnreadableBodyError(withPreview).withWording(QUIET);
+    expect(reworded).toBeInstanceOf(UnreadableBodyError);
+    expect(reworded.message).toBe(explainUnreadableBody(withPreview, QUIET));
+    expect(reworded.cause).toBe(cause);
+    expect(reworded.bodyPreview).toBe("<!doctype html>");
+
+    const noPreview = { status: 200, method: "POST", path: "/memory/read", cause };
+    const rewordedNoPreview = new UnreadableBodyError(noPreview).withWording(QUIET);
+    expect(rewordedNoPreview.message).toBe(explainUnreadableBody(noPreview, QUIET));
+    expect(rewordedNoPreview.bodyPreview).toBeUndefined();
+    // The two arms of the explanation differ, so a lost preview would show here.
+    expect(rewordedNoPreview.message).not.toBe(reworded.message);
+  });
+
+  it("NetworkError: the cause survives, so the explanation keeps naming it", () => {
+    const cause = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    const built = new NetworkError("POST", "/memory/read", cause);
+    const reworded = built.withWording(QUIET);
+    expect(reworded).toBeInstanceOf(NetworkError);
+    expect(reworded.message).toBe(explainNetworkFailure("POST", "/memory/read", cause, QUIET));
+    expect(reworded.cause).toBe(cause);
+    expect(built.message.startsWith(reworded.message)).toBe(true);
+    expect(built.message).not.toBe(reworded.message);
+  });
+
+  it("rewordFailure: the three classes are re-rendered, anything else comes back as is", () => {
+    const plain = new Error("not ours");
+    expect(rewordFailure(plain, OAUTH)).toBe(plain);
+    expect(rewordFailure("a string", OAUTH)).toBe("a string");
+    expect(rewordFailure(undefined, OAUTH)).toBeUndefined();
+    const api = new ApiError({ status: 401, body: "", method: "POST", path: "/memory/read" });
+    const out = rewordFailure(api, OAUTH);
+    expect(out).toBeInstanceOf(ApiError);
+    expect(out).not.toBe(api);
+    expect((out as ApiError).message).toBe(api.withWording(OAUTH).message);
   });
 });

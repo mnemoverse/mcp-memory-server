@@ -935,6 +935,9 @@ export class UnreadableBodyError extends Error {
   readonly status: number;
   readonly method: string;
   readonly path: string;
+  /** The bytes that failed to parse, when they were read at all. Kept so
+   *  {@link withWording} re-renders the same arm of the explanation. */
+  readonly bodyPreview: string | undefined;
 
   /** `wording` (STEP4-2/3): optional, and absent (every call site before this
    *  release) reproduces today's message exactly: see {@link explainUnreadableBody}. */
@@ -944,6 +947,14 @@ export class UnreadableBodyError extends Error {
     this.status = f.status;
     this.method = f.method;
     this.path = f.path;
+    this.bodyPreview = f.bodyPreview;
+  }
+
+  /** The same failure, explained under `wording`: see {@link ApiError.withWording}. */
+  withWording(wording: Wording | undefined): UnreadableBodyError {
+    const f: UnreadableBody = { status: this.status, method: this.method, path: this.path, cause: this.cause };
+    if (this.bodyPreview !== undefined) f.bodyPreview = this.bodyPreview;
+    return new UnreadableBodyError(f, wording);
   }
 }
 
@@ -991,6 +1002,11 @@ export class NetworkError extends Error {
     this.method = method;
     this.path = path;
   }
+
+  /** The same failure, explained under `wording`: see {@link ApiError.withWording}. */
+  withWording(wording: Wording | undefined): NetworkError {
+    return new NetworkError(this.method, this.path, this.cause, wording);
+  }
 }
 
 /**
@@ -1011,6 +1027,9 @@ export class ApiError extends Error {
   readonly path: string;
   /** The engine's envelope, already parsed — so a caller never re-parses. */
   readonly envelope: ErrorEnvelope;
+  /** The `Retry-After` header as it arrived, when the response carried one.
+   *  Kept so {@link withWording} re-renders a 429 with its retry sentence. */
+  readonly retryAfter: string | null | undefined;
 
   /** `wording` (STEP4-2/3): optional, and absent (every call site before this
    *  release) reproduces today's message exactly: see {@link explainApiFailure}. */
@@ -1021,7 +1040,23 @@ export class ApiError extends Error {
     this.body = f.body;
     this.method = f.method;
     this.path = f.path;
+    this.retryAfter = f.retryAfter;
     this.envelope = parseErrorEnvelope(f.body);
+  }
+
+  /**
+   * The same failure, explained under `wording`: a new instance of this
+   * class whose message is what the constructor would have produced with
+   * that `wording`, every field and {@link isBare404} unchanged. The message
+   * is a pure function of the failure and the wording, so re-rendering an
+   * instance under the wording it was built with gives the same text back.
+   * This is how `MemoryToolDeps.wording` reaches an error the consumer's
+   * `apiFetch` built without it: see {@link rewordFailure}.
+   */
+  withWording(wording: Wording | undefined): ApiError {
+    const f: ApiFailure = { status: this.status, body: this.body, method: this.method, path: this.path };
+    if (this.retryAfter !== undefined) f.retryAfter = this.retryAfter;
+    return new ApiError(f, wording);
   }
 
   /**
@@ -1044,4 +1079,28 @@ export class ApiError extends Error {
   get isBare404(): boolean {
     return this.status === 404 && engineSilentOn404(this.envelope);
   }
+}
+
+/**
+ * Re-explain one of this module's three errors under `wording`; hand
+ * anything else back untouched.
+ *
+ * This is how `MemoryToolDeps.wording` reaches the error text (STEP4-2): a
+ * consumer's `apiFetch` constructs `ApiError`, `NetworkError` and
+ * `UnreadableBodyError` however it likes, and `registerMemoryTools` passes
+ * every rejection through here with the `wording` it was given, so the
+ * consumer states its wording once, on `deps`, and the constructors need no
+ * second copy. Re-rendering is idempotent (see {@link ApiError.withWording}),
+ * so an `apiFetch` that does pass the same `wording` to the constructors
+ * gets the same text either way; one that passed a different wording gets
+ * `deps.wording`, the one source of truth for this registration. A
+ * rejection that is none of the three classes (a plain `Error`, an
+ * `McpError`) is returned as is: it carries no wording to apply, and its
+ * identity may matter to whoever threw it.
+ */
+export function rewordFailure(e: unknown, wording: Wording | undefined): unknown {
+  if (e instanceof ApiError || e instanceof NetworkError || e instanceof UnreadableBodyError) {
+    return e.withWording(wording);
+  }
+  return e;
 }
