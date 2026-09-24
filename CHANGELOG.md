@@ -58,6 +58,46 @@ git history and the GitHub releases are the record.
 
 ### Added
 
+- **`MemoryToolDeps` gains two optional dependencies, `wording` and
+  `writeAuthor`, for a second server registering these tools (STEP4-2/3/5,
+  owner 2026-09-24).** Both default to exactly this package's existing
+  behaviour: a consumer supplying neither gets byte-identical descriptions,
+  error text and write bodies to every release before this one, which the
+  full existing suite proves unchanged.
+  `wording: { serverNoun?, auth?, keysUrl?, rawDetail? }` lets a second
+  server speak in its own voice. `serverNoun` ("this server" default vs
+  "this connector") is substituted into the three tool descriptions that
+  name the server (`memory_read`'s `top_k`, `memory_feedback`'s
+  `coactivation_edges`, `vault_list`). `auth: "oauth"` rewords every
+  401/403 explanation for a caller who never holds an API key at all (a
+  hosted connector minting one on their behalf): no explanation under this
+  mode names `MNEMOVERSE_API_KEY`, an environment variable, an MCP client
+  config file, or the keys console, and each says what an OAuth user can
+  actually do instead (reconnect, sign in again); 429 needed no change,
+  since none of its three sentences ever named the credential type.
+  `keysUrl` replaces the console URL the api-key vocabulary prints,
+  overridden by the engine's own validated `details.keys_url` when core
+  sends one. `rawDetail` (default `true`) is the STEP4-3 flag held in
+  reserve to drop the raw wire-body tail from an explanation, shipped now
+  and set to `false` only once a specific deployment's error envelopes are
+  checked and found to echo request content back in `details`. The three
+  error classes (`ApiError`, `NetworkError`, `UnreadableBodyError`) accept
+  the same optional `wording` as a second constructor argument.
+  `writeAuthor: () => WriteAuthor | undefined` is called once per
+  `memory_write`; a returned value is sent as the request body's `author`
+  field exactly as returned (no normalisation beyond a `typeof` guard;
+  core re-normalises server-side). `WriteAuthor` mirrors core's
+  `ProvenanceWriteSchema` field for field (`principal`, `agent`,
+  `agent_name`, `client_env`, `is_external`, all optional); core honours
+  `author` only for a SERVICE/supplier caller and silently ignores it for
+  an OIDC end-user (`mnemoverse-core src/mnemo/api/routes.py:211-276`,
+  `_get_provenance`, verified 2026-09-24), so this dependency is useful
+  only to a server vouching for someone else, not to an end-user's own
+  key. The stdio server supplies neither dependency, and its own requests
+  do not change. `Wording` and `WriteAuthor` are exported from `/shared`.
+  Full contract and the exact sentences `auth` switches: `docs/shared.md`,
+  linked from the README's `/shared` paragraph.
+
 - **`MAX_RESULT_CHARS` and `capResult` are exported from `/shared`.** Both
   already existed in `src/tools.ts`; this slice makes them a named export of
   the shared entry point (ADR-025), alongside the existing tool/prompt/resource
