@@ -58,6 +58,79 @@ git history and the GitHub releases are the record.
 
 ### Added
 
+- **`memory_list_rooms` and `vault_list` declare output schemas and return
+  `structuredContent` alongside their unchanged text.** `memory_list_rooms`
+  returns `{rooms: [{room_id, name?, address, role, scope, archived}]}`;
+  `vault_list` returns `{secrets: [{alias, context, concepts}]}`. Field names
+  and descriptions are copied from the connector's own `roomListOutput`/
+  `vaultListOutput` (mnemoverse-mcp-remote), field for field and description
+  for description.
+  **OD-14** (owner, 2026-09-23): `memory_list_rooms`'s room `name` is OPTIONAL
+  here though the connector marks it a required `z.string()`, and so is
+  `scope`, for the reason OD-13 gave on `memory_join_room`: the text already
+  has a supported state for a membership whose write access core did not
+  report, and a required field would turn it into an SDK validation error. `structuredText`
+  returns `undefined` for a genuinely empty or absent name, and that is a
+  real, already-tested outcome ("keeps '(unnamed room)' for a genuinely
+  absent or empty name"), forcing it through a required field would reject
+  the WHOLE reply with an SDK "Output validation error" on an unnamed room,
+  which is a supported, non-error case, not a malformed response. The
+  rejected alternative was falling back to the literal empty string, which
+  would have the text say "(unnamed room)" while the data silently said
+  `name: ""`, the same text/data lie this package's optional fields
+  otherwise refuse to tell. `room_id`/`address`/`role`/`scope` keep the same
+  `safeInline` sanitisation and the same `xroom:<room_id>` address fallback
+  the text already applies; `archived` is `Boolean(r?.archived)`. `name` is
+  present in the data exactly when the text prints it: the same
+  `exactLiteral` check `roomNamePhrase` uses (the JSON literal at most
+  `MAX_DOMAIN_LITERAL`, 256, once quoted and escaped) decides, and the value
+  is the `structuredText` normalisation of the raw name, never a truncated
+  prefix presented as the name; a name the text prints as "(room name cannot
+  be printed exactly)" has no `name` key in the data. One stated exception:
+  a name made only of the characters `structuredText` removes (whitespace,
+  control, bidi, zero-width) is printed exactly in the text, as an escaped
+  literal with the legend, but has no plain data value, so the data omits
+  the key rather than carry `""` or the raw characters. A row whose `room_id` or
+  `role` sanitises to nothing (core's `RoomListItemSchema` sends both on every
+  row), or whose address cannot be rebuilt from `room_id`, is dropped from the
+  data instead of emitted with empty strings in required fields; the text keeps its existing per-row
+  degrade, and the drop is reported once per call on stderr, as `vault_list`
+  and `memory_stats` report theirs. One divergence from the connector's
+  schema that is not about fields: the connector declares its output
+  objects `.strict()`, this package registers plain shapes as the SDK
+  expects; the schema is used for outbound validation of this package's own
+  `structuredContent` only, so strictness has no observable effect.
+  **OD-15** (owner, 2026-09-23): `vault_list`'s `alias`, `context` and
+  `concepts` all stay REQUIRED, matching the connector exactly, the
+  divergence here is behavioural, not shape. A row whose `alias` or `context`
+  is not a usable string (including one that was never sent at all) is
+  SKIPPED from `structuredContent.secrets`, never turned into `isError` for
+  the whole call: an earlier draft of this slice would have made one
+  cosmetically bad row fail the ENTIRE list, directly reversing the existing,
+  deliberately named behaviour "a broken alias is one anonymous row, not a
+  dead tool", the text already substitutes `(no alias)` for that one row and
+  leaves every other row and the call itself untouched, so the data now
+  follows the same rule. This package does not fabricate `""` for a value it
+  does not have, so a row with no `context` at all (a real, already-tested
+  case, the existing "openai-key" fixture with no context) is ALSO dropped
+  from the data even though the text still prints its plain `- alias` line
+  for it unchanged. The drop is not silent: it is reported once per call on
+  stderr, in this package's existing startup-diagnostic style (the
+  "Mnemoverse: ..." lines in src/index.ts), naming how many rows were
+  dropped, mirroring `memory_stats`'s S7 domain-drop diagnostic.
+  **`concepts`** is a brand-new field with no text-side precedent (nothing in
+  this tool's text renders it): core sends it on every row, so a row without
+  it, or with a value that is not an array of strings, is treated the same as
+  a malformed alias/context and drops the row; no `[]` is fabricated for a
+  value core did not send. `alias`, `context` and each concept go through
+  `structuredText` with core's own caps (200, 10,000 and 200), the same
+  normalisation the room name gets, and a value that normalises to nothing
+  (an empty or whitespace-only alias, which the text prints as `(no alias)`)
+  drops the row rather than being carried as `""`.
+  **No existing text-only reply gains `isError`** in this slice: both tools'
+  unreadable-body degrade paths (an unrecognised `/memory/rooms` or
+  `/vault/secrets` body) were already `isError` since S2.
+
 - **`memory_create_room`, `memory_invite_to_room` and `memory_join_room` declare
   output schemas and return `structuredContent` alongside their unchanged text.**
   `memory_create_room` returns `{room_id, address, name?}`; `memory_invite_to_room`
