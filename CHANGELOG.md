@@ -193,7 +193,11 @@ git history and the GitHub releases are the record.
   same `exactLiteral` check under the same cap, and carries the whole
   normalised name; the old 64-code-point cap, inherited from `safeInline`,
   could hold a shorter name than the page showed, or a name the page had
-  refused.
+  refused. One stated exception: a name made only of the characters
+  `structuredText` removes (whitespace, control, bidi, zero-width) is
+  printed exactly in the tag, as an escaped literal with the legend, but has
+  no plain data value, so the data omits `author` rather than carry `""` or
+  the raw characters.
   **`structuredContent.author` had the same erasure, undetected**, found
   while fixing this, not reported in the original issue: it fed off the same
   `safeInline`-sanitised value, so a non-Latin name reached neither surface.

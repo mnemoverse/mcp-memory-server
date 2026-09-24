@@ -232,6 +232,10 @@ describe("authorName", () => {
     expect(formatAuthorTag({ agent_name: "n".repeat(100) })).toBe(' [by "' + "n".repeat(100) + '"]');
     expect(authorName({ agent_name: "n".repeat(200) })).toBe("");
     expect(formatAuthorTag({ agent_name: "n".repeat(200) })).toBe(" [by (name cannot be printed exactly)]");
+    // The stated exception: a zero-width-only name is printed exactly in the
+    // tag (escaped) and has no plain data value.
+    expect(formatAuthorTag({ agent_name: "\u200b" })).toBe(' [by "\\u200b"]');
+    expect(authorName({ agent_name: "\u200b" })).toBe("");
     expect(formatAuthorTag({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe(' [by "sigma"]');
   });
 

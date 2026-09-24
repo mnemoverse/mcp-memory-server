@@ -152,6 +152,11 @@ export function authorName(p?: Provenance | null): string {
   // name than the page showed, with nothing marking the cut.
   const raw = rawAuthorName(p);
   if (!raw || !exactLiteral(raw, MAX_DOMAIN_TAG_LITERAL)) return "";
+  // One stated exception: a name made only of the characters structuredText
+  // removes (whitespace, control, bidi, zero-width) is printed exactly in
+  // the tag, as an escaped literal with the legend, but leaves nothing to
+  // carry as a plain data value; the data omits the field rather than carry
+  // "" or the raw characters.
   const who = structuredText(raw, MAX_DOMAIN_TAG_LITERAL);
   if (!who) return "";
   return p?.is_external === true ? `${who} · external` : who;
