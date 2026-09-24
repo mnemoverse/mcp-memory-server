@@ -86,7 +86,11 @@ git history and the GitHub releases are the record.
   `MAX_DOMAIN_LITERAL`, 256, once quoted and escaped) decides, and the value
   is the `structuredText` normalisation of the raw name, never a truncated
   prefix presented as the name; a name the text prints as "(room name cannot
-  be printed exactly)" has no `name` key in the data. A row whose `room_id` or
+  be printed exactly)" has no `name` key in the data. One stated exception:
+  a name made only of the characters `structuredText` removes (whitespace,
+  control, bidi, zero-width) is printed exactly in the text, as an escaped
+  literal with the legend, but has no plain data value, so the data omits
+  the key rather than carry `""` or the raw characters. A row whose `room_id` or
   `role` sanitises to nothing (core's `RoomListItemSchema` sends both on every
   row), or whose address cannot be rebuilt from `room_id`, is dropped from the
   data instead of emitted with empty strings in required fields; the text keeps its existing per-row

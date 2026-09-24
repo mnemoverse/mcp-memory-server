@@ -2593,6 +2593,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // literal and a code-point count, so reusing the number alone did not
       // make the surfaces agree). Absent, never fabricated as "" or
       // "(unnamed room)", for a room with no usable name (OD-14 above).
+      // One stated exception (review round 3): a name made only of the
+      // characters structuredText removes (whitespace, control, bidi,
+      // zero-width) is printed exactly in the text, as an escaped literal
+      // with the legend, but leaves nothing to carry as a plain data value;
+      // the data omits the key rather than carry "" (which would claim the
+      // name is empty) or the raw characters (which the data surface keeps
+      // out by rule). The same exception holds for every structuredText
+      // field on this surface.
       //
       // Core's RoomListItemSchema sends room_id, address and role on every
       // row; a row whose room_id or role sanitises to nothing (or whose

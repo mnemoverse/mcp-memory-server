@@ -330,6 +330,21 @@ describe("memory_list_rooms: cap on the room name (S9-3)", () => {
     }
   });
 
+  it("a name made only of a zero-width character is printed exactly in the text (with the legend) and omitted from the data: the stated exception", async () => {
+    mcp.on(ROOMS, [
+      { room_id: "room_01W", name: "\u200b", address: "xroom:room_01W", role: "owner", scope: "read_write" },
+    ]);
+
+    const result = await mcp.call("memory_list_rooms");
+
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toContain('"\\u200b"');
+    expect(result.text).toContain("printed as JSON string literals");
+    const sc = result.structuredContent as { rooms: Array<Record<string, unknown>> };
+    expect(sc.rooms).toHaveLength(1);
+    expect("name" in sc.rooms[0]!).toBe(false);
+  });
+
   it("a room whose scope core did not report is kept without a scope key; the text says the write access was not reported", async () => {
     mcp.on(ROOMS, [{ room_id: "room_01S", name: "quiet", address: "xroom:room_01S", role: "member" }]);
 
