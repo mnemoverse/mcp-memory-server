@@ -66,7 +66,10 @@ git history and the GitHub releases are the record.
   `vaultListOutput` (mnemoverse-mcp-remote), field for field and description
   for description.
   **OD-14** (owner, 2026-09-23): `memory_list_rooms`'s room `name` is OPTIONAL
-  here though the connector marks it a required `z.string()`. `structuredText`
+  here though the connector marks it a required `z.string()`, and so is
+  `scope`, for the reason OD-13 gave on `memory_join_room`: the text already
+  has a supported state for a membership whose write access core did not
+  report, and a required field would turn it into an SDK validation error. `structuredText`
   returns `undefined` for a genuinely empty or absent name, and that is a
   real, already-tested outcome ("keeps '(unnamed room)' for a genuinely
   absent or empty name"), forcing it through a required field would reject
@@ -78,10 +81,21 @@ git history and the GitHub releases are the record.
   otherwise refuse to tell. `room_id`/`address`/`role`/`scope` keep the same
   `safeInline` sanitisation and the same `xroom:<room_id>` address fallback
   the text already applies; `archived` is `Boolean(r?.archived)`. `name` is
-  capped at 256 characters (`MAX_DOMAIN_LITERAL`, the same cap `roomNamePhrase`
-  already uses for this field in text), not the 400 a different field
-  (`memory_write`'s `reason`) uses, so a name's length reads identically on
-  both surfaces.
+  present in the data exactly when the text prints it: the same
+  `exactLiteral` check `roomNamePhrase` uses (the JSON literal at most
+  `MAX_DOMAIN_LITERAL`, 256, once quoted and escaped) decides, and the value
+  is the `structuredText` normalisation of the raw name, never a truncated
+  prefix presented as the name; a name the text prints as "(room name cannot
+  be printed exactly)" has no `name` key in the data. A row whose `room_id` or
+  `role` sanitises to nothing (core's `RoomListItemSchema` sends both on every
+  row), or whose address cannot be rebuilt from `room_id`, is dropped from the
+  data instead of emitted with empty strings in required fields; the text keeps its existing per-row
+  degrade, and the drop is reported once per call on stderr, as `vault_list`
+  and `memory_stats` report theirs. One divergence from the connector's
+  schema that is not about fields: the connector declares its output
+  objects `.strict()`, this package registers plain shapes as the SDK
+  expects; the schema is used for outbound validation of this package's own
+  `structuredContent` only, so strictness has no observable effect.
   **OD-15** (owner, 2026-09-23): `vault_list`'s `alias`, `context` and
   `concepts` all stay REQUIRED, matching the connector exactly, the
   divergence here is behavioural, not shape. A row whose `alias` or `context`
@@ -101,10 +115,14 @@ git history and the GitHub releases are the record.
   "Mnemoverse: ..." lines in src/index.ts), naming how many rows were
   dropped, mirroring `memory_stats`'s S7 domain-drop diagnostic.
   **`concepts`** is a brand-new field with no text-side precedent (nothing in
-  this tool's text renders it): a value core never sent for it degrades to an
-  empty array (an honest reading of "no concept tags"), while a value core
-  DID send that is not an array of strings is treated the same as a
-  malformed alias/context and drops the row.
+  this tool's text renders it): core sends it on every row, so a row without
+  it, or with a value that is not an array of strings, is treated the same as
+  a malformed alias/context and drops the row; no `[]` is fabricated for a
+  value core did not send. `alias`, `context` and each concept go through
+  `structuredText` with core's own caps (200, 10,000 and 200), the same
+  normalisation the room name gets, and a value that normalises to nothing
+  (an empty or whitespace-only alias, which the text prints as `(no alias)`)
+  drops the row rather than being carried as `""`.
   **No existing text-only reply gains `isError`** in this slice: both tools'
   unreadable-body degrade paths (an unrecognised `/memory/rooms` or
   `/vault/secrets` body) were already `isError` since S2.
