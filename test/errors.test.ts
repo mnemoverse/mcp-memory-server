@@ -1266,6 +1266,29 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       OAUTH,
     );
     for (const banned of BANNED) expect(text).not.toContain(banned);
+    // Review round 2: not the word "key" in ANY form either. The first cut
+    // changed only the innocent clause and left "This key is not an active
+    // member" for an OAuth user who holds no key (Copilot, CodeRabbit, the
+    // internal panel, all on the same lines).
+    expect(text).not.toMatch(/\bkeys?\b/i);
+  });
+
+  it("403 room-permission causes speak about the account under oauth, and about the key otherwise", () => {
+    const failure = (body: string) => ({ status: 403, body, method: "POST", path: "/memory/read", retryAfter: null });
+    const member = envelope("FORBIDDEN", "Not an active member of this room", false);
+    expect(explainApiFailure(failure(member), OAUTH)).toContain(
+      "This account is not an active member of the room you addressed.",
+    );
+    expect(explainApiFailure(failure(member))).toContain("This key is not an active member of the room you addressed.");
+    const readOnly = envelope("FORBIDDEN", "Read-only membership cannot write to this room", false);
+    expect(explainApiFailure(failure(readOnly), OAUTH)).toContain("This account's membership in that room is read-only");
+    expect(explainApiFailure(failure(readOnly))).toContain("This key's membership in that room is read-only");
+    const owner = envelope("FORBIDDEN", "You do not own this room.", false);
+    expect(explainApiFailure(failure(owner), OAUTH)).toContain("shows which rooms this account owns.");
+    expect(explainApiFailure(failure(owner))).toContain("shows which rooms this key owns.");
+    const other = envelope("FORBIDDEN", "Operation not allowed for this plan", false);
+    expect(explainApiFailure(failure(other), OAUTH)).toContain("is not permitted for this account");
+    expect(explainApiFailure(failure(other))).toContain("is not permitted for this key");
   });
 
   it("403 with a named cause says the sign-in is not the problem, not the API key", () => {
@@ -1283,7 +1306,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(text).not.toContain("The API key is NOT the problem");
   });
 
-  it("403 the engine never spoke to stays unchanged by wording (no credential is named either way)", () => {
+  it("403 the engine never spoke to differs under oauth by exactly one word: it declines to blame the sign-in, not the key", () => {
     const apiKeyText = explainApiFailure(
       { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },
     );
@@ -1291,7 +1314,8 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },
       OAUTH,
     );
-    expect(oauthText).toBe(apiKeyText);
+    expect(apiKeyText).toContain("so do not blame the key and do not blame room permissions");
+    expect(oauthText).toBe(apiKeyText.replace("so do not blame the key and", "so do not blame the sign-in and"));
   });
 
   /** 429 already names no key in api-key mode either (verified above); this

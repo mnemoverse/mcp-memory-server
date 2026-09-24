@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { connectMemoryTools } from "./direct-register.js";
+import { connectMemoryResources, connectMemoryTools } from "./direct-register.js";
 import type { ApiFetch, MemoryToolDeps } from "../src/shared.js";
 import {
   ApiError,
@@ -179,8 +179,32 @@ describe("wording reaches the errors apiFetch throws (STEP4-2)", () => {
   });
 
   it("an apiFetch that already passes the same wording to the constructor gets the same text", async () => {
+    // Idempotence, not wiring: this passes with the wrapper deleted too,
+    // because the constructor already rendered the oauth text. The two
+    // neighbouring tests are the ones that fail without the wrapper.
     const out = await callText({ apiFetch: throwing(() => new ApiError(F401, OAUTH)), wording: OAUTH });
     expect(out.text).toBe(explainApiFailure(F401, OAUTH));
+  });
+
+  it("registerMemoryResources applies the same wording to a failed resource read", async () => {
+    const atom = { status: 401, body: F401.body, method: "GET", path: "/memory/atoms/m1" };
+    const oauth = await connectMemoryResources({ apiFetch: throwing(() => new ApiError(atom)), wording: OAUTH });
+    try {
+      await expect(oauth.client.readResource({ uri: "memory://item/m1" })).rejects.toThrow(
+        explainApiFailure(atom, OAUTH),
+      );
+    } finally {
+      await oauth.server.close();
+    }
+    // And with no wording, the resource read fails with the error's own text.
+    const plain = await connectMemoryResources({ apiFetch: throwing(() => new ApiError(atom)) });
+    try {
+      await expect(plain.client.readResource({ uri: "memory://item/m1" })).rejects.toThrow(
+        explainApiFailure(atom),
+      );
+    } finally {
+      await plain.server.close();
+    }
   });
 
   it("deps.wording wins over a different wording passed to the constructor", async () => {

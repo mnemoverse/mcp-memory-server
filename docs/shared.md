@@ -28,7 +28,7 @@ import {
 const server = new McpServer({ name, version }, { instructions: SERVER_INSTRUCTIONS });
 registerMemoryTools(server, { apiFetch, wording, writeAuthor });
 registerMemoryPrompts(server);
-registerMemoryResources(server, { apiFetch });
+registerMemoryResources(server, { apiFetch, wording });
 ```
 
 Importing `/shared` starts nothing. It never pulls in the package's own
@@ -166,22 +166,30 @@ whichever credential the caller actually holds:
 > oauth: "...The caller's sign-in itself was not rejected — do NOT tell
 > the user to reconnect over this..."
 
-**403, a named cause.** Only the one clause naming the credential as
-innocent changes; the room-permission cause itself (archived, not a
-member, read-only, invalid address, not the owner) does not mention a key
-either way and is unchanged:
+**403, a named cause.** Every noun for the credential changes and nothing
+else does: the clause naming it as innocent, and the holder the
+room-permission cause speaks about ("This key" becomes "This account",
+since an OAuth user holds no key and room membership is the account's).
+The archived-room and invalid-address causes name no holder and are
+identical under both modes.
 
 > api-key: "Mnemoverse: this request was refused (403). The API key is NOT
 > the problem — it identified the account fine, and this was a permission
-> decision. [cause] Do not retry the same call: it will be refused again."
+> decision. This key is not an active member of the room you addressed.
+> Ask the room's owner for an invite; memory_list_rooms shows the rooms it
+> can already reach. Do not retry the same call: it will be refused again."
 >
 > oauth: "Mnemoverse: this request was refused (403). Your sign-in is NOT
 > the problem — it identified the account fine, and this was a permission
-> decision. [cause] Do not retry the same call: it will be refused again."
+> decision. This account is not an active member of the room you
+> addressed. Ask the room's owner for an invite; memory_list_rooms shows
+> the rooms it can already reach. Do not retry the same call: it will be
+> refused again."
 
 **403, the engine said nothing parseable (a proxy, a WAF, a wrong base
-URL).** Unchanged by `auth`: this branch already names no credential,
-because the module cannot tell who refused the request.
+URL).** One word changes: the branch declines to blame "the key" under
+api-key and "the sign-in" under oauth; the rest is identical, because the
+module cannot tell who refused the request either way.
 
 **429, all three branches (per-minute limit, daily quota, unknown).**
 Unchanged by `auth`. None of the three 429 sentences ever named
@@ -191,8 +199,12 @@ keys console; "wait for the retry window" and "check the account's plan"
 correctly for an OAuth user with no changes.
 
 `auth` has no effect on 404, 409, 422/400, 5xx, or the network- and
-unreadable-body-failure explanations: none of those sentences name the
-credential type one way or the other.
+unreadable-body-failure explanations. Several of those sentences mention a
+key only to rule it out as the cause ("This is NOT a rejected API key", "do
+not tell them their key is the problem"); none sends the user to a key, an
+environment variable, a config file or the console, and none changes under
+`auth: "oauth"`. Rewording those exculpatory clauses for an OAuth reader is
+a possible later slice, not part of this one.
 
 ### `keysUrl`
 
@@ -296,7 +308,9 @@ renders one message asking the model to use `memory_read` or
 `memory://item/{memory_id}`, that opens a single saved memory by id through
 `deps.apiFetch`. It reads the caller's own store only; a memory from a
 shared room cannot be opened by id here. It takes the same `MemoryToolDeps`
-shape as `registerMemoryTools`, though today it reads only `apiFetch`.
+shape as `registerMemoryTools` and reads `apiFetch` and `wording` (a failed
+read is re-rendered under `wording` exactly as a tool failure is, see above);
+`writeAuthor` does not apply, since a resource read never writes.
 
 ## Versioning
 

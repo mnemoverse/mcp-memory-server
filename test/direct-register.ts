@@ -19,7 +19,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { registerMemoryTools, type MemoryToolDeps } from "../src/shared.js";
+import { registerMemoryResources, registerMemoryTools, type MemoryToolDeps } from "../src/shared.js";
 
 export interface DirectServer {
   client: Client;
@@ -32,8 +32,18 @@ export interface DirectServer {
  * this helper serves read tools/list and call tools, not either of those.
  */
 export async function connectMemoryTools(deps: MemoryToolDeps): Promise<DirectServer> {
+  return connect((server) => registerMemoryTools(server, deps));
+}
+
+/** The same, with only the memory resource registered via `deps`, for the
+ *  tests that read a resource and look at how its failure is worded. */
+export async function connectMemoryResources(deps: MemoryToolDeps): Promise<DirectServer> {
+  return connect((server) => registerMemoryResources(server, deps));
+}
+
+async function connect(register: (server: McpServer) => void): Promise<DirectServer> {
   const server = new McpServer({ name: "direct-register-test", version: "0.0.0" });
-  registerMemoryTools(server, deps);
+  register(server);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "direct-register-test-client", version: "0.0.0" });
   await server.connect(serverTransport);

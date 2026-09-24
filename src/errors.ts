@@ -488,33 +488,42 @@ function explain401(env: ErrorEnvelope, wording: ResolvedWording): string {
  *  response the engine may never have seen is exactly the confident wrong
  *  cause this module exists to avoid.
  *
- *  Room-permission causes below (archived / not-a-member / read-only /
- *  invalid-address / not-owner) do not mention a key one way or the other:
- *  they are about the room, not the credential, so `wording.auth` changes
- *  only the one sentence that names the credential as innocent. */
+ *  Under `wording.auth === "oauth"` every noun for the credential changes
+ *  and nothing else does: the clause naming it as innocent ("The API key" /
+ *  "Your sign-in"), the holder the room-permission causes speak about ("This
+ *  key" / "This account", since an OAuth user holds no key and membership is
+ *  the account's), and the one word the opaque-403 branch declines to blame
+ *  ("the key" / "the sign-in"). Review round 2 on the wording slice: the
+ *  first cut changed only the innocent clause and left "This key is not an
+ *  active member" in the same sentence that had just told an OAuth user
+ *  their sign-in was fine. */
 function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
+  const oauth = wording.auth === "oauth";
   if (saidNothing(env)) {
+    const blamed = oauth ? "the sign-in" : "the key";
     return (
       "Mnemoverse: this request was refused (403) by something that did not " +
       "speak this API's error language — the body carries neither of the two " +
       "shapes the engine produces. That points at a proxy, a gateway, or a " +
       "MNEMOVERSE_API_URL aimed somewhere unexpected, and the engine may never " +
-      "have seen the request — so do not blame the key and do not blame room " +
+      `have seen the request — so do not blame ${blamed} and do not blame room ` +
       "permissions: this client cannot tell WHO refused it. Quote the detail " +
       "below to the user, and do not retry until the path to the API is explained."
     );
   }
+  const holder = oauth ? "This account" : "This key";
+  const holderLc = oauth ? "this account" : "this key";
   const m = env.message;
   const cause = has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +
       "and every write, for its owner as much as for a member, and this client " +
       "has no operation that reopens one."
     : has(m, "not an active member") || has(m, "member of this room")
-      ? "This key is not an active member of the room you addressed. Ask the " +
+      ? `${holder} is not an active member of the room you addressed. Ask the ` +
         "room's owner for an invite; memory_list_rooms shows the rooms it can " +
         "already reach."
       : has(m, "read-only")
-        ? "This key's membership in that room is read-only — it can read the " +
+        ? `${holder}'s membership in that room is read-only — it can read the ` +
           "room but not write to it. Ask the room's owner for write access."
         : has(m, "invalid room address")
           ? 'The room address was not in the form the engine accepts ' +
@@ -522,12 +531,12 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
             "rather than composing one."
           : has(m, "own this room")
             ? "That room belongs to another account, and only its owner can do " +
-              "this. memory_list_rooms shows which rooms this key owns."
-            : "Something about this request is not permitted for this key — " +
+              `this. memory_list_rooms shows which rooms ${holderLc} owns.`
+            : `Something about this request is not permitted for ${holderLc} — ` +
               "most often the room it addressed. Check memory_list_rooms, and " +
               "if nothing there explains it, tell the user exactly what was " +
               "refused instead of guessing.";
-  const subject = wording.auth === "oauth" ? "Your sign-in" : "The API key";
+  const subject = oauth ? "Your sign-in" : "The API key";
   return (
     `Mnemoverse: this request was refused (403). ${subject} is NOT the problem ` +
     "— it identified the account fine, and this was a permission decision. " +
