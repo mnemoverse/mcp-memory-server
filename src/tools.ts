@@ -46,9 +46,11 @@ import {
 import {
   exactLiteral,
   formatDomainList,
+  MAX_DOMAIN_TAG_LITERAL,
   roomNamePhrase,
   structuredText,
   withDomainEscapeLegend,
+  withEscapeLegendAt,
 } from "./names.js";
 import { ApiError } from "./errors.js";
 // Field limits, generated from core's contract (src/limits.ts, ADR-025).
@@ -928,7 +930,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // quoted, so this recomputation finds the same literal that is
       // actually on the page.
       return structured(
-        withDomainEscapeLegend(
+        withEscapeLegendAt(
+          MAX_DOMAIN_TAG_LITERAL,
           capResult(text),
           ...items.map((it) => it?.domain),
           ...items.map((it) => rawAuthorName(it?.provenance)),
@@ -1373,7 +1376,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         //
         // Author names are candidates too, not just domains: same reasoning
         // as memory_read's call site above (I66-1..I66-3, issue #66).
-        withDomainEscapeLegend(
+        withEscapeLegendAt(
+          MAX_DOMAIN_TAG_LITERAL,
           capResult(
             formatRecentPage(items, acceptedCursor) +
               (stoppedEarly ? LIST_PAGE_EARLY_STOP_NOTE : ""),

@@ -145,7 +145,7 @@ export function rawAuthorName(p?: Provenance | null): string {
 export function authorName(p?: Provenance | null): string {
   const who = structuredText(rawAuthorName(p), 64);
   if (!who) return "";
-  return p?.is_external ? `${who} · external` : who;
+  return p?.is_external === true ? `${who} · external` : who;
 }
 
 /**
@@ -182,7 +182,7 @@ export function formatAuthorTag(p?: Provenance | null): string {
   if (!raw) return "";
   const exact = exactLiteral(raw, MAX_DOMAIN_TAG_LITERAL);
   const printed = exact ? exact.literal : "(name cannot be printed exactly)";
-  return ` [by ${printed}${p?.is_external ? " · external" : ""}]`;
+  return ` [by ${printed}${p?.is_external === true ? " · external" : ""}]`;
 }
 
 /**

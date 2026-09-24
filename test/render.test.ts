@@ -224,6 +224,8 @@ describe("authorName", () => {
 
   it("appends \" · external\" for an external agent, with no brackets", () => {
     expect(authorName({ agent_name: "sigma", is_external: true })).toBe("sigma · external");
+    expect(authorName({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe("sigma");
+    expect(formatAuthorTag({ agent_name: "sigma", is_external: "yes" as unknown as boolean })).toBe(' [by "sigma"]');
   });
 
   it("never surfaces the human principal, only agent identity", () => {

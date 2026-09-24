@@ -179,7 +179,15 @@ git history and the GitHub releases are the record.
   vanishing. An escaped author literal now gets the same "printed as JSON
   string literals" escape-legend sentence an escaped domain already gets
   (`withDomainEscapeLegend`, src/tools.ts), on both `memory_read` and
-  `memory_list_recent`.
+  `memory_list_recent`. Two things about that legend changed with it (review
+  round 2): on the result-line surfaces a candidate is judged under the tag
+  cap (`MAX_DOMAIN_TAG_LITERAL`), the cap the tag actually printed under,
+  so a name too long for the tag cannot earn a legend through a literal
+  that merely appears in a result's content; and the at-most-once check
+  looks for the whole legend rather than a fragment of it, so an author
+  name equal to that fragment, sent by another connector, can no longer
+  suppress the legend for a genuinely escaped name on the same page.
+  `is_external` counts as external only when it is the boolean `true`.
   **`structuredContent.author` had the same erasure, undetected**, found
   while fixing this, not reported in the original issue: it fed off the same
   `safeInline`-sanitised value, so a non-Latin name reached neither surface.

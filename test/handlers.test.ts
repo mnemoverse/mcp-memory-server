@@ -17,6 +17,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DOMAIN_ESCAPE_LEGEND } from "../src/names.js";
 import {
   httpError,
   networkDown,
@@ -1352,6 +1353,53 @@ describe("the escape legend survives the size cap", () => {
  * not only domains: a handler-level proof that the plumbing (not just the
  * render.ts unit) actually wires an escaped author name to the legend.
  */
+describe("the escape legend cannot be suppressed or faked by an author name (review round 2, issue #66)", () => {
+  it("an author name equal to the legend's own wording does not suppress the legend an escaped domain needs", async () => {
+    mcp.on(READ, {
+      items: [
+        { atom_id: "a1", content: "x", domain: "acme\u00a0", provenance: { agent_name: "sigma" } },
+        {
+          atom_id: "a2",
+          content: "y",
+          domain: "general",
+          provenance: { agent_name: "printed as JSON string literals" },
+        },
+      ],
+      search_time_ms: 3,
+    });
+
+    const text = await mcp.callText("memory_read", { query: "x" });
+
+    expect(text).toContain('@"acme\\u00a0"');
+    expect(text).toContain('[by "printed as JSON string literals"]');
+    // The legends() helper counts the wording, which this author name also
+    // carries; the whole legend paragraph is what must appear exactly once.
+    expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBe(1);
+  });
+
+  it("an author name too long for the tag earns no legend through its literal appearing in a result's content", async () => {
+    const longName = "\u200b" + "n".repeat(140);
+    const printedLiteral = '"\\u200b' + "n".repeat(140) + '"';
+    mcp.on(READ, {
+      items: [
+        {
+          atom_id: "a1",
+          content: `mentions ${printedLiteral} in passing`,
+          domain: "general",
+          provenance: { agent_name: longName },
+        },
+      ],
+      search_time_ms: 3,
+    });
+
+    const text = await mcp.callText("memory_read", { query: "x" });
+
+    expect(text).toContain("[by (name cannot be printed exactly)]");
+    expect(text).toContain(printedLiteral);
+    expect(legends(text)).toBe(0);
+  });
+});
+
 describe("the escape legend also fires for an escaped author name", () => {
   const AUTHOR_ZWSP_NAME = "sigma\u200b";
   const AUTHOR_ZWSP_LITERAL = '"sigma\\u200b"';

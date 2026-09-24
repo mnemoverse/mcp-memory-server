@@ -287,8 +287,6 @@ export const DOMAIN_ESCAPE_LEGEND =
   "escape such as \\u00a0 or \\n stands for ONE character. Decode it before you " +
   "send the name back — do not paste the escape text.)";
 
-/** Substring that identifies the legend, for the at-most-once check below. */
-const LEGEND_MARK = "printed as JSON string literals";
 
 /**
  * Append {@link DOMAIN_ESCAPE_LEGEND} to `message` if one of `names` was printed
@@ -308,9 +306,33 @@ export function withDomainEscapeLegend(
   message: string,
   ...names: (string | null | undefined)[]
 ): string {
-  if (message.includes(LEGEND_MARK)) return message;
+  return withEscapeLegendAt(MAX_DOMAIN_LITERAL, message, ...names);
+}
+
+/**
+ * The same legend, for a surface that printed its literals under a different
+ * cap. The result-line tags (`@domain`, `[by "name"]`) refuse a literal longer
+ * than MAX_DOMAIN_TAG_LITERAL and print a name-free fallback instead, so a
+ * candidate must be judged under THAT cap there: judged under the larger
+ * note cap, a name in between the two would count as printed-and-escaped
+ * whenever its literal happens to appear in a result's content, and the
+ * legend would explain an escape the tag never showed (review round 2 on
+ * issue #66).
+ *
+ * The at-most-once check looks for the whole legend, not a fragment of it:
+ * a fragment short enough to fit a printed literal (an author name from
+ * another connector, say) could otherwise appear inside a tag and suppress
+ * the legend for a genuinely escaped name elsewhere on the page. The whole
+ * legend is longer than any literal either cap admits.
+ */
+export function withEscapeLegendAt(
+  max: number,
+  message: string,
+  ...names: (string | null | undefined)[]
+): string {
+  if (message.includes(DOMAIN_ESCAPE_LEGEND)) return message;
   const needed = names.some((n) => {
-    const r = exactLiteral(n);
+    const r = exactLiteral(n, max);
     return r !== null && r.escaped && message.includes(r.literal);
   });
   return needed ? message + DOMAIN_ESCAPE_LEGEND : message;
