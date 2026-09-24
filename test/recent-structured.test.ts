@@ -142,6 +142,28 @@ describe("memory_list_recent: structuredContent, ported from the connector's hap
     expect(JSON.stringify(result)).not.toContain("someone@example.com");
     expect(result.text).toContain("More older entries exist — pass cursor: abc123");
   });
+
+  it("carries a non-Latin author name in BOTH the text tag and structuredContent.author (I66-1/I66-2, issue #66)", async () => {
+    mcp.on(RECENT, {
+      items: [
+        {
+          atom_id: "44444444-4444-4444-8444-444444444444",
+          content: "заметка",
+          domain: "general",
+          created_at: "2026-08-02T10:00:00Z",
+          provenance: { agent_name: "Ольга" },
+        },
+      ],
+      next_cursor: null,
+    });
+
+    const result = await mcp.call("memory_list_recent", { limit: 1 });
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as { items: Array<Record<string, unknown>> };
+    expect(sc.items[0]?.author).toBe("Ольга");
+    expect(result.text).toContain('[by "Ольга"]');
+  });
 });
 
 describe("memory_list_recent: structuredContent on a budget-limited page", () => {

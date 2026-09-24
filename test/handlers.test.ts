@@ -1344,6 +1344,80 @@ describe("the escape legend survives the size cap", () => {
 // ---------------------------------------------------------------------------
 
 /**
+ * The escape legend fires for an escaped AUTHOR literal too, not just a
+ * domain (I66-1..I66-3, issue #66, owner decisions 2026-09-23/24): the
+ * `[by "…"]` tag now quotes every author name the same way `@domain` does,
+ * so `withDomainEscapeLegend`'s candidate list at the src/tools.ts call
+ * sites for memory_read and memory_list_recent must include author names,
+ * not only domains: a handler-level proof that the plumbing (not just the
+ * render.ts unit) actually wires an escaped author name to the legend.
+ */
+describe("the escape legend also fires for an escaped author name", () => {
+  const AUTHOR_ZWSP_NAME = "sigma\u200b";
+  const AUTHOR_ZWSP_LITERAL = '"sigma\\u200b"';
+
+  it("memory_read: an escaped author name (no escaped domain) still gets the legend", async () => {
+    mcp.on(READ, {
+      items: [
+        {
+          atom_id: "a1",
+          content: "x",
+          domain: "general",
+          provenance: { agent_name: AUTHOR_ZWSP_NAME },
+        },
+      ],
+      search_time_ms: 3,
+    });
+
+    const text = await mcp.callText("memory_read", { query: "x" });
+
+    expect(text).toContain(AUTHOR_ZWSP_LITERAL);
+    expect(legends(text)).toBe(1);
+  });
+
+  it("memory_list_recent: an escaped author name (no escaped domain) still gets the legend", async () => {
+    mcp.on(RECENT, {
+      items: [
+        {
+          atom_id: "a1",
+          content: "x",
+          domain: "general",
+          provenance: { agent_name: AUTHOR_ZWSP_NAME },
+        },
+      ],
+      next_cursor: null,
+    });
+
+    const text = await mcp.callText("memory_list_recent", {});
+
+    expect(text).toContain(AUTHOR_ZWSP_LITERAL);
+    expect(legends(text)).toBe(1);
+  });
+
+  it("fires at most once when BOTH the domain and the author name are escaped", async () => {
+    mcp.on(READ, {
+      items: [
+        {
+          atom_id: "a1",
+          content: "x",
+          domain: ZWSP_NAME,
+          provenance: { agent_name: AUTHOR_ZWSP_NAME },
+        },
+      ],
+      search_time_ms: 3,
+    });
+
+    const text = await mcp.callText("memory_read", { query: "x" });
+
+    expect(text).toContain(ZWSP_LITERAL);
+    expect(text).toContain(AUTHOR_ZWSP_LITERAL);
+    expect(legends(text)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
  * Room names, printed exactly (truth review F4/F10, 2026-08-08).
  *
  * Every room-name surface used to go through the lossy sanitiser, which maps

@@ -116,7 +116,14 @@ export interface ExactLiteral {
 /** Longest literal we will print for a domain name in a sentence or a list. */
 export const MAX_DOMAIN_LITERAL = 256;
 
-/** Longest literal we will print as an `@domain` tag on a result line. */
+/**
+ * Longest literal we will print as an `@domain` tag on a result line.
+ *
+ * Shared, not mirrored: the ` [by "name"]` author tag (`formatAuthorTag`,
+ * src/render.ts) reuses this SAME constant rather than a second one of its
+ * own (owner decision I66-4, issue #66, 2026-09-24): one calibrated number,
+ * not two magic values that happen to agree today and can drift apart later.
+ */
 export const MAX_DOMAIN_TAG_LITERAL = 128;
 
 /**

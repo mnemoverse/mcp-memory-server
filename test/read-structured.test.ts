@@ -153,8 +153,31 @@ describe("memory_read: author in structuredContent", () => {
     expect(result.isError).toBeFalsy();
     const sc = result.structuredContent as { items: Array<Record<string, unknown>> };
     expect(sc.items[0]?.author).toBe("sigma · external");
-    expect(result.text).toContain("[by sigma · external]");
+    // Quoted as an exact JSON literal since I66-1 (issue #66, 2026-09-24):
+    // full symmetry with the `@domain` tag, applied to every author name.
+    expect(result.text).toContain('[by "sigma" · external]');
     expect(JSON.stringify(result)).not.toContain("someone@example.com");
+  });
+
+  it("carries a non-Latin author name in BOTH the text tag and structuredContent.author, where safeInline used to erase it from both (I66-1/I66-2)", async () => {
+    mcp.on(READ, {
+      items: [
+        {
+          atom_id: "atom_2",
+          content: "статус",
+          domain: "general",
+          provenance: { agent_name: "Ольга" },
+        },
+      ],
+      search_time_ms: 5,
+    });
+
+    const result = await mcp.call("memory_read", { query: "status" });
+
+    expect(result.isError).toBeFalsy();
+    const sc = result.structuredContent as { items: Array<Record<string, unknown>> };
+    expect(sc.items[0]?.author).toBe("Ольга");
+    expect(result.text).toContain('[by "Ольга"]');
   });
 });
 

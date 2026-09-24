@@ -11,7 +11,7 @@
  * the line are simply omitted.
  */
 
-import { MAX_DOMAIN_TAG_LITERAL, exactLiteral } from "./names.js";
+import { MAX_DOMAIN_TAG_LITERAL, exactLiteral, structuredText } from "./names.js";
 import { parseAsUtc, utcInstant } from "./time.js";
 
 /** CN-001 server-stamped authorship, as returned nested on read/feed items. */
@@ -90,31 +90,99 @@ export function safeInline(s: unknown, cap = 200): string {
 }
 
 /**
+ * `agent_name || agent || client_env`, exactly as the wire sent it: no
+ * sanitising, no suffix. The single raw value `authorName` and
+ * `formatAuthorTag` below BOTH derive from, so the bare structured field and
+ * the quoted text tag cannot end up naming two different agents. The same
+ * raw value is what src/tools.ts passes to `withDomainEscapeLegend` as an
+ * author candidate, so its independent recomputation of `exactLiteral` finds
+ * the same literal `formatAuthorTag` printed (I66-3, issue #66).
+ *
+ * Returns `""`, not `null`/`undefined`, when there is no renderable name at
+ * all: an absent provenance, every field empty, or the field that won the
+ * `||` chain arriving with the wrong wire type. A numeric `agent_name` is a
+ * real shape a hostile or buggy connector sends, not a hypothetical one; see
+ * "a non-string where the type promised a string" below, and CN-032's own
+ * history with this exact field.
+ */
+export function rawAuthorName(p?: Provenance | null): string {
+  if (!p) return "";
+  const raw = p.agent_name || p.agent || p.client_env;
+  return typeof raw === "string" ? raw : "";
+}
+
+/**
  * "X" / "X · external": agent identity only, never the human `principal`
  * (may be an email / PII), even though the response carries it. Empty string
  * when there is no renderable name.
  *
- * Extracted from `formatAuthorTag` (S4, structured-output plan) so
- * `structuredItem` below can put the same sanitised name into
- * `structuredContent.author` without re-deriving it, and so the two never
- * drift: `formatAuthorTag` now builds its bracketed text FROM this value
- * rather than computing its own copy.
+ * Feeds `structuredContent.author` (via `structuredItem`, below), not the
+ * text tag; `formatAuthorTag` now quotes `rawAuthorName`'s value itself
+ * (I66-1) rather than building its bracketed text from this one, so the two
+ * no longer share a derivation the way the original S4 extraction intended,
+ * and instead share `rawAuthorName` as their common raw input.
+ *
+ * Until owner decision I66-2 (issue #66, 2026-09-23), this ran the raw name
+ * through `safeInline`, the same ASCII-only, bracket-stripping sanitiser the
+ * text tag used, which erased Cyrillic/CJK/Arabic names from the DATA just
+ * as completely as it erased them from the text: a second, previously
+ * unreported instance of the bug the issue reports for the tag, found with
+ * zero non-Latin fixtures anywhere in this file's history. It now runs
+ * through `structuredText` (src/names.ts) instead, the same
+ * control/bidi/zero-width-only normalisation `reason` already gets on this
+ * surface, so a name survives here whenever it survives on the page.
+ *
+ * This deliberately drops bracket-stripping on this field: a bare JSON
+ * value cannot be "closed early" by a literal `]` or `"` the way a
+ * hand-built sentence can (the MCP SDK serialises the field; this code does
+ * not concatenate it into one). The property CN-032 actually needs here, a
+ * reader must not be shown something that is not there or have text
+ * hidden/reordered inside it, is exactly what `structuredText` still strips
+ * (control, bidi, zero-width). The `[by "…"]` TEXT tag carries the
+ * anti-injection burden for the rendered surface instead, via
+ * `exactLiteral`'s quoting.
  */
 export function authorName(p?: Provenance | null): string {
-  if (!p) return "";
-  const raw = p.agent_name || p.agent || p.client_env || "";
-  const who = safeInline(raw, 64);
+  const who = structuredText(rawAuthorName(p), 64);
   if (!who) return "";
-  return p.is_external ? `${who} · external` : who;
+  return p?.is_external ? `${who} · external` : who;
 }
 
 /**
- * ` [by X]` / ` [by X · external]` — agent identity only, never the human
- * `principal` (may be an email / PII), even though the response carries it.
+ * ` [by "X"]` / ` [by "X" · external]`: agent identity only, never the
+ * human `principal` (may be an email / PII), even though the response
+ * carries it.
+ *
+ * Quoted as an exact JSON literal (`exactLiteral`, src/names.ts), the same
+ * treatment `formatDomainTag` below already gives `@domain`, for EVERY
+ * name, including a plain ASCII one like "sigma", not only names that
+ * happen to need escaping (owner decision I66-1, issue #66, 2026-09-24:
+ * full symmetry with domains, no second unquoted branch). Before this, a
+ * Cyrillic, CJK or Arabic `agent_name` sanitised through `safeInline`'s
+ * ASCII-only charset to an empty string, and the tag disappeared with no
+ * trace, the exact defect `formatDomainTag` was already fixed for in 0.8.1,
+ * reached here in a later release (issue #66).
+ *
+ * Operates on `rawAuthorName`, not `authorName`'s sanitised value: quoting
+ * the raw wire name is what lets `exactLiteral` print and escape characters
+ * a sanitiser would have dropped, and what lets `withDomainEscapeLegend`'s
+ * independent recomputation (src/tools.ts) find the same literal this
+ * function printed.
+ *
+ * `" · external"` sits OUTSIDE the quotes (I66-3): it is a server-added
+ * qualifier, not part of the name, so it is not part of what gets escaped
+ * and not part of what the escape-legend candidate has to match.
+ *
+ * The cap is `MAX_DOMAIN_TAG_LITERAL` itself, not a second constant with the
+ * same value (I66-4): a name too long to print exactly gets the same
+ * disclosed, name-free fallback `formatDomainTag` uses, reworded for "name".
  */
 export function formatAuthorTag(p?: Provenance | null): string {
-  const who = authorName(p);
-  return who ? ` [by ${who}]` : "";
+  const raw = rawAuthorName(p);
+  if (!raw) return "";
+  const exact = exactLiteral(raw, MAX_DOMAIN_TAG_LITERAL);
+  const printed = exact ? exact.literal : "(name cannot be printed exactly)";
+  return ` [by ${printed}${p?.is_external ? " · external" : ""}]`;
 }
 
 /**
