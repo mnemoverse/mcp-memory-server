@@ -30,8 +30,8 @@
  * capped, OD-11). ADR-025 makes this the single source of truth for the
  * number; the hosted connector still keeps its own 25,000-character literal
  * (`src/constants.ts`) and adopts this export in its place at a later step,
- * not yet done as of this release. `capResult` truncates on a UTF-16
- * code-point boundary and appends the truncation notice, so a consumer does
+ * not yet done as of this release. `capResult` truncates on a code-point
+ * boundary (never inside a UTF-16 surrogate pair) and appends the truncation notice, so a consumer does
  * not have to re-implement a `slice` that can cut a surrogate pair.
  */
 
