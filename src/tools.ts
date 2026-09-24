@@ -1800,9 +1800,9 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // count, and the same rule: a value that is not a finite number is
       // unknown and prints nothing, never 0. Core's async mode acks with 0
       // before the worker runs (memory_engine.py `feedback` docstring), which
-      // is why this is the service's report too; production ran the sync path
-      // for every rating in the week checked (Axiom 2026-09-15..22:
-      // feedback_completed 630, feedback_completed_async 0).
+      // is why this is the service's report too; in production every rating
+      // observed so far took the synchronous path (the asynchronous
+      // acknowledgement is reachable but was not seen in the checked window).
       //
       // coactivation_edges is left out of the text on purpose: core links
       // concepts only when the request carries query_concepts, which this tool
