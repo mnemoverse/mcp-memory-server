@@ -1,6 +1,6 @@
 /**
  * `wording.serverNoun` (STEP4-2, owner 2026-09-24): what the three tool
- * descriptions that name this deployment's own scope call it — "this server"
+ * descriptions that name this deployment's own scope call it: "this server"
  * (the default, and what every stdio-harness golden in
  * test/descriptions.test.ts already pins) or "this connector", for a second
  * server registering these tools (the hosted connector, ADR-025).
@@ -9,7 +9,7 @@
  * file only ever boots the stdio server with default deps: that supplying
  * "this connector" changes EXACTLY the three known surfaces and no other
  * description on tools/list, and that each changed surface differs from the
- * default ONLY by the noun — not by any other word around it.
+ * default ONLY by the noun, not by any other word around it.
  */
 
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,7 @@ type ToolList = Awaited<ReturnType<Client["listTools"]>>["tools"];
 
 /** Every description surface tools/list carries for every tool: the tool's
  *  own description, every input-parameter description, and every declared
- *  output-schema field description — keyed so two snapshots diff cleanly. */
+ *  output-schema field description, keyed so two snapshots diff cleanly. */
 function surfaces(tools: ToolList): Map<string, string> {
   const out = new Map<string, string>();
   for (const t of tools) {
@@ -54,7 +54,7 @@ async function list(deps: MemoryToolDeps): Promise<{ tools: ToolList; close: () 
 }
 
 describe("wording.serverNoun", () => {
-  it('defaults to "this server" — byte-identical to every deps-less registration', async () => {
+  it('defaults to "this server", byte-identical to every deps-less registration', async () => {
     const { tools, close } = await list({ apiFetch: neverCalled });
     const s = surfaces(tools);
     expect(s.get("memory_read.input.top_k")).toContain("what this server asks for");
@@ -73,7 +73,7 @@ describe("wording.serverNoun", () => {
     const sa = surfaces(def.tools);
     const sb = surfaces(connector.tools);
 
-    // Same set of surfaces both times — the noun never adds or removes a
+    // Same set of surfaces both times: the noun never adds or removes a
     // description, only edits the three that already named the server.
     expect([...sb.keys()].sort()).toEqual([...sa.keys()].sort());
 
@@ -85,7 +85,7 @@ describe("wording.serverNoun", () => {
     ]);
 
     // Swapping the noun back in the connector's text must reproduce the
-    // default text EXACTLY — proof the edit touched only the noun.
+    // default text EXACTLY: proof the edit touched only the noun.
     expect(sb.get("memory_read.input.top_k")!.split("this connector").join("this server")).toBe(
       sa.get("memory_read.input.top_k"),
     );
@@ -104,7 +104,7 @@ describe("wording.serverNoun", () => {
   it("an unrecognised serverNoun value falls back to the default, defensively (typeof/literal guard)", async () => {
     const deps: MemoryToolDeps = {
       apiFetch: neverCalled,
-      // A value outside the two-literal union — what a JS caller (no
+      // A value outside the two-literal union: what a JS caller (no
       // compile-time check) or a stale build could actually send.
       wording: { serverNoun: "somebody else's deployment" as never },
     };

@@ -90,8 +90,8 @@ export interface MemoryToolDeps {
   apiFetch: ApiFetch;
   /** How this registration wants its own tool descriptions and error
    *  explanations worded. See {@link Wording} for each field. Read at
-   *  registration time for the three descriptions that name the server;
-   *  NOT threaded into `apiFetch`'s own errors automatically — a consumer
+   *  registration time for the three descriptions that name the server.
+   *  NOT threaded into `apiFetch`'s own errors automatically: a consumer
    *  that wants its `ApiError`/`NetworkError`/`UnreadableBodyError`
    *  instances to speak this same wording passes the same value to their
    *  constructors from inside its own `apiFetch` implementation. */
@@ -100,14 +100,14 @@ export interface MemoryToolDeps {
    * Supplier-vouched authorship for `memory_write` (STEP4-5). Called once
    * per write, with no arguments; a returned value is sent as the request
    * body's `author` field EXACTLY as returned (this package applies no
-   * normalisation beyond a `typeof` guard — core re-normalises server-side,
+   * normalisation beyond a `typeof` guard; core re-normalises server-side,
    * see {@link WriteAuthor}). Returning `undefined`, or omitting this
-   * dependency entirely, sends the body this package has always sent — the
+   * dependency entirely, sends the body this package has always sent: the
    * stdio server's own requests are exactly this case, and do not change.
    *
    * Core honours `author` ONLY for a SERVICE/supplier caller and IGNORES it
    * for an OIDC end-user (mnemoverse-core src/mnemo/api/routes.py:211-276,
-   * `_get_provenance`, verified 2026-09-24) — so this dependency is useful
+   * `_get_provenance`, verified 2026-09-24), so this dependency is useful
    * only to a server that authenticates to core as a supplier vouching for
    * someone else, not to an end-user's own key.
    */
@@ -401,8 +401,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
   // Read once, defensively: `wording` crosses a public package boundary a
   // caller controls only at compile time (STEP4-2, owner 2026-09-24). A
   // strict-equality check rather than a truthiness check, so any value other
-  // than the one literal "this connector" — including a typo, a boolean, or
-  // a stale value from a future third option — falls back to the default
+  // than the one literal "this connector" (including a typo, a boolean, or
+  // a stale value from a future third option) falls back to the default
   // rather than being printed. Defaults to today's wording exactly, so a
   // server that supplies no `wording` at all gets byte-identical descriptions.
   const serverNoun = wording?.serverNoun === "this connector" ? "this connector" : "this server";
@@ -557,13 +557,13 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // characters handled (JS trim() does not strip them — verified, contrary
       // to what an earlier comment here asserted).
       //
-      // `writeAuthor` (STEP4-5): called once, here, only for this one write —
+      // `writeAuthor` (STEP4-5): called once, here, only for this one write,
       // never for a read or a probe. `typeof` first, not a shape check: this
       // dependency crosses a public package boundary a caller controls only
       // at compile time, so a runtime value that is not an object (a string,
       // a number, `null`) is treated the same as "no author", rather than
       // reaching JSON.stringify as a field core would then have to reject.
-      // Whatever IS an object is sent exactly as returned — no field-level
+      // Whatever IS an object is sent exactly as returned: no field-level
       // normalisation here, because core re-normalises server-side (see
       // {@link WriteAuthor}), and this package cannot know the sixth field a
       // future core release adds any better than core's own validator does.

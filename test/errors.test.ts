@@ -1156,13 +1156,13 @@ describe("the raw detail is data, never voice", () => {
 
 /**
  * `wording` (STEP4-2/3/5, owner 2026-09-24): a second server registering
- * these tools — the hosted connector — supplies its own vocabulary through
+ * these tools (the hosted connector) supplies its own vocabulary through
  * `MemoryToolDeps.wording`, read by `explainApiFailure` / `explainNetworkFailure`
  * / `explainUnreadableBody` and by the three error classes' constructors.
  *
  * Every case in this block calls the module's functions DIRECTLY with a
  * `wording` argument, unlike the rest of this file, which drives them
- * through a live tool call on the stdio harness — the stdio server never
+ * through a live tool call on the stdio harness: the stdio server never
  * supplies `wording` at all, so there is no live surface for it to reach
  * today. Direct calls are also how "assert over every explanation the module
  * can produce" is actually checked: through the harness only one server's
@@ -1171,7 +1171,7 @@ describe("the raw detail is data, never voice", () => {
 describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names the key (STEP4-2)", () => {
   const OAUTH: Wording = { auth: "oauth" };
 
-  /** Every distinct shape explain401 can be handed, in api-key mode terms —
+  /** Every distinct shape explain401 can be handed, in api-key mode terms:
    *  reused here to prove ALL of them collapse to one of two oauth-safe
    *  sentences, never a key-flavoured one. */
   const failures401: ReadonlyArray<readonly [string, string]> = [
@@ -1209,7 +1209,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
   it("401 without 'caller org not identified' always reads the same reconnect sentence, whatever the body says", () => {
     // Every case in `failures401` above is a DIFFERENT api-key-mode branch
     // (five named reasons, an unknown reason, the substring guess, a bare
-    // code, silence) — under oauth every one of them collapses to this same
+    // code, silence). Under oauth every one of them collapses to this same
     // sentence, because none of the five reasons or the substring guess
     // means anything for a caller who never held a key.
     const texts = failures401.map(([, body]) =>
@@ -1295,7 +1295,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
 
   /** 429 already names no key in api-key mode either (verified above); this
    *  pins that `wording` changes nothing about it, so the same three cases
-   *  are safe under oauth too — the assertion this whole block promises. */
+   *  are safe under oauth too: the assertion this whole block promises. */
   const failures429: ReadonlyArray<readonly [string, string, string | null]> = [
     ["per-minute limit", envelope("RATE_LIMITED", "Rate limit exceeded (60/min)", true), "30"],
     ["daily quota", envelope("RATE_LIMITED", "Daily limit reached (1000/1000)", false), null],
@@ -1385,7 +1385,7 @@ describe("wording.keysUrl replaces the console URL the api-key vocabulary prints
     expect(text).not.toContain("console.mnemoverse.com");
   });
 
-  it("an empty-string keysUrl is not a value — falls back to KEYS_URL defensively", () => {
+  it("an empty-string keysUrl is not a value: falls back to KEYS_URL defensively", () => {
     const text = explainApiFailure(
       { status: 401, body: REAL_401_BODY, method: "POST", path: "/memory/read", retryAfter: null },
       { keysUrl: "" },
@@ -1403,7 +1403,7 @@ describe("wording.rawDetail: false drops the raw wire-body tail (STEP4-3, held i
     retryAfter: null,
   } as const;
 
-  it("defaults to true — every existing pin already proves this; this is the explicit form of the same default", () => {
+  it("defaults to true: every existing pin already proves this; this is the explicit form of the same default", () => {
     expect(explainApiFailure(failure)).toBe(explainApiFailure(failure, {}));
     expect(explainApiFailure(failure)).toBe(explainApiFailure(failure, { rawDetail: true }));
     expect(explainApiFailure(failure)).toContain("Raw detail");

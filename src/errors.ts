@@ -97,7 +97,7 @@ const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
 /**
  * How a server that registers these tools wants its failures worded (STEP4-2,
  * STEP4-3, owner decisions 2026-09-24). Every field is optional, and every
- * field's absence means exactly what this file already does today — the
+ * field's absence means exactly what this file already does today: the
  * whole point is that a consumer supplying no `wording` at all gets
  * byte-identical text to before this type existed.
  *
@@ -107,7 +107,7 @@ const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
  *  - `auth`: which credential the CALLER holds, not which one core issued.
  *    "api-key" (default) keeps every existing MNEMOVERSE_API_KEY-flavoured
  *    sentence. "oauth" is for a server whose user never sees an API key at
- *    all (a hosted connector minting a key on their behalf) — no 401/403
+ *    all (a hosted connector minting a key on their behalf): no 401/403
  *    explanation under this mode names MNEMOVERSE_API_KEY, an env var, an
  *    MCP config file, or the keys console; each says what an OAuth user can
  *    actually do instead (reconnect, sign in again, check the plan, wait
@@ -120,7 +120,7 @@ const DEFAULT_API_URL = "https://core.mnemoverse.com/api/v1";
  *    detail — Mnemoverse API error 401 on …`) is appended after the
  *    guidance. Defaults to `true`, unchanged from every release before this
  *    one. Held in reserve for a deployment whose core-side error envelopes
- *    are found to echo request content back in `details` — set to `false`
+ *    are found to echo request content back in `details`: set to `false`
  *    only once that check finds something to hide.
  */
 export interface Wording {
@@ -137,7 +137,7 @@ interface ResolvedWording {
   rawDetail: boolean;
 }
 
-/** Defaults applied field-by-field, with a `typeof`/literal guard on each —
+/** Defaults applied field-by-field, with a `typeof`/literal guard on each:
  *  `wording` crosses a public package boundary a caller controls only at
  *  compile time, so a malformed value at runtime degrades to the default
  *  instead of propagating (e.g. into a template literal, or a `Wording`
@@ -346,8 +346,8 @@ function has(message: string | undefined, needle: string): boolean {
  * above applies: the caller never held an API key at all, so `reason` (a
  * diagnosis of WHICH key problem this is) and every key-flavoured branch
  * below would be a wrong cause stated confidently. "Caller org not
- * identified" is the one exception — it is about tenant identification, not
- * about a key, and can fire under either credential type — so it is checked
+ * identified" is the one exception: it is about tenant identification, not
+ * about a key, and can fire under either credential type, so it is checked
  * first regardless of `auth`, worded for whichever credential the caller
  * actually holds. Every other 401 collapses to one OAuth-flavoured sentence:
  * reconnect or sign in again, because that is the one thing an OAuth user
@@ -489,8 +489,8 @@ function explain401(env: ErrorEnvelope, wording: ResolvedWording): string {
  *  cause this module exists to avoid.
  *
  *  Room-permission causes below (archived / not-a-member / read-only /
- *  invalid-address / not-owner) do not mention a key one way or the other —
- *  they are about the room, not the credential — so `wording.auth` changes
+ *  invalid-address / not-owner) do not mention a key one way or the other:
+ *  they are about the room, not the credential, so `wording.auth` changes
  *  only the one sentence that names the credential as innocent. */
 function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   if (saidNothing(env)) {
@@ -657,7 +657,7 @@ function explain429(f: ApiFailure, env: ErrorEnvelope): string {
  * that it has no specific guidance instead of inventing some.
  *
  * `wording` (STEP4-2/3, owner 2026-09-24) is optional and, absent, resolves
- * to exactly today's behaviour — every call site before this release passes
+ * to exactly today's behaviour: every call site before this release passes
  * none, so every existing pin stays byte-identical.
  */
 export function explainApiFailure(f: ApiFailure, wording?: Wording): string {
@@ -937,7 +937,7 @@ export class UnreadableBodyError extends Error {
   readonly path: string;
 
   /** `wording` (STEP4-2/3): optional, and absent (every call site before this
-   *  release) reproduces today's message exactly — see {@link explainUnreadableBody}. */
+   *  release) reproduces today's message exactly: see {@link explainUnreadableBody}. */
   constructor(f: UnreadableBody, wording?: Wording) {
     super(explainUnreadableBody(f, wording), { cause: f.cause });
     this.name = "UnreadableBodyError";
@@ -984,7 +984,7 @@ export class NetworkError extends Error {
   readonly path: string;
 
   /** `wording` (STEP4-2/3): optional, and absent (every call site before this
-   *  release) reproduces today's message exactly — see {@link explainNetworkFailure}. */
+   *  release) reproduces today's message exactly: see {@link explainNetworkFailure}. */
   constructor(method: string, path: string, cause: unknown, wording?: Wording) {
     super(explainNetworkFailure(method, path, cause, wording), { cause });
     this.name = "NetworkError";
@@ -1013,7 +1013,7 @@ export class ApiError extends Error {
   readonly envelope: ErrorEnvelope;
 
   /** `wording` (STEP4-2/3): optional, and absent (every call site before this
-   *  release) reproduces today's message exactly — see {@link explainApiFailure}. */
+   *  release) reproduces today's message exactly: see {@link explainApiFailure}. */
   constructor(f: ApiFailure, wording?: Wording) {
     super(explainApiFailure(f, wording));
     this.name = "ApiError";

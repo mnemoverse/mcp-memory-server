@@ -35,8 +35,8 @@
  * not have to re-implement a `slice` that can cut a surrogate pair.
  *
  * `MemoryToolDeps.wording` and `.writeAuthor` (STEP4-2/3/5, owner
- * 2026-09-24) are how a SECOND server registering these tools — the hosted
- * connector is the first consumer — speaks in its own voice: `wording`
+ * 2026-09-24) are how a SECOND server registering these tools (the hosted
+ * connector is the first consumer) speaks in its own voice: `wording`
  * swaps "this server" for "this connector" in the three descriptions that
  * name it and, under `auth: "oauth"`, rewords every 401/403 explanation for
  * a user who never sees an API key; `writeAuthor` lets a supplier vouch for

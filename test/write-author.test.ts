@@ -1,14 +1,14 @@
 /**
  * `MemoryToolDeps.writeAuthor` (STEP4-5, owner 2026-09-24): an optional
- * dependency called once per `memory_write`, whose return value — when it
- * returns one — is sent as the write body's `author` field.
+ * dependency called once per `memory_write`, whose return value, when it
+ * returns one, is sent as the write body's `author` field.
  *
  * test/requests.test.ts already pins `writeRequestBody`'s own contract (the
  * pure function). This file pins the WIRING: that `registerMemoryTools`
  * actually calls `writeAuthor()` on a write and not on any other tool, that
  * a returned value reaches the request body sent to `apiFetch`, and that a
- * dependency returning `undefined` — or not supplied at all, the stdio
- * server's own case — produces the exact body this package has always sent.
+ * dependency returning `undefined`, or not supplied at all (the stdio
+ * server's own case), produces the exact body this package has always sent.
  */
 
 import { describe, expect, it } from "vitest";
@@ -30,7 +30,7 @@ function recordingApiFetch(reply: unknown = { stored: true, atom_id: "m1" }) {
 }
 
 describe("MemoryToolDeps.writeAuthor", () => {
-  it("absent entirely: the write body carries no author key — byte-identical to every release before this one", async () => {
+  it("absent entirely: the write body carries no author key, byte-identical to every release before this one", async () => {
     const { apiFetch, calls } = recordingApiFetch();
     const { client, server } = await connectMemoryTools({ apiFetch });
 
@@ -99,7 +99,7 @@ describe("MemoryToolDeps.writeAuthor", () => {
     await server.close();
   });
 
-  it("is NOT called for memory_read — a read has no author to vouch for", async () => {
+  it("is NOT called for memory_read: a read has no author to vouch for", async () => {
     const { apiFetch } = recordingApiFetch();
     let calls = 0;
     const { client, server } = await connectMemoryTools({
@@ -123,7 +123,7 @@ describe("MemoryToolDeps.writeAuthor", () => {
     const { apiFetch, calls } = recordingApiFetch();
     const { client, server } = await connectMemoryTools({
       apiFetch,
-      // Not assignable under the real type — this is exactly the "a caller
+      // Not assignable under the real type: this is exactly the "a caller
       // controls the type only at compile time" case the typeof guard exists
       // for (a JS caller, or a stale build, can return anything at runtime).
       writeAuthor: () => "not an object" as never,
