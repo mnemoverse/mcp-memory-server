@@ -418,15 +418,21 @@ describe("vault_list: structuredContent, decision-2 regression (OD-15)", () => {
 // ---------------------------------------------------------------------------
 
 describe("vault_list: concepts handling", () => {
-  it("absent concepts default to [] for an otherwise well-formed row", async () => {
-    mcp.on(VAULT, { secrets: [{ alias: "openai-key", context: "billing" }] });
+  it("absent concepts drop the row, like an absent alias or context: core sends all three on every row", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      mcp.on(VAULT, { secrets: [{ alias: "openai-key", context: "for the pipeline" }] });
 
-    const result = await mcp.call("vault_list");
+      const result = await mcp.call("vault_list", {});
 
-    expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toEqual({
-      secrets: [{ alias: "openai-key", context: "billing", concepts: [] }],
-    });
+      expect(result.isError).toBeFalsy();
+      expect(result.text).toContain("- openai-key");
+      expect(result.structuredContent).toEqual({ secrets: [] });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0][0])).toContain("dropped 1 malformed secret row");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("a concepts value present but not an array-of-strings drops the row; the text (which never renders concepts) is unaffected", async () => {

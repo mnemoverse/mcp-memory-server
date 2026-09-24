@@ -69,12 +69,12 @@ git history and the GitHub releases are the record.
   here though the connector marks it a required `z.string()`. `structuredText`
   returns `undefined` for a genuinely empty or absent name, and that is a
   real, already-tested outcome ("keeps '(unnamed room)' for a genuinely
-  absent or empty name") — forcing it through a required field would reject
+  absent or empty name"), forcing it through a required field would reject
   the WHOLE reply with an SDK "Output validation error" on an unnamed room,
   which is a supported, non-error case, not a malformed response. The
   rejected alternative was falling back to the literal empty string, which
   would have the text say "(unnamed room)" while the data silently said
-  `name: ""` — the same text/data lie this package's optional fields
+  `name: ""`, the same text/data lie this package's optional fields
   otherwise refuse to tell. `room_id`/`address`/`role`/`scope` keep the same
   `safeInline` sanitisation and the same `xroom:<room_id>` address fallback
   the text already applies; `archived` is `Boolean(r?.archived)`. `name` is
@@ -83,18 +83,18 @@ git history and the GitHub releases are the record.
   (`memory_write`'s `reason`) uses, so a name's length reads identically on
   both surfaces.
   **OD-15** (owner, 2026-09-23): `vault_list`'s `alias`, `context` and
-  `concepts` all stay REQUIRED, matching the connector exactly — the
+  `concepts` all stay REQUIRED, matching the connector exactly, the
   divergence here is behavioural, not shape. A row whose `alias` or `context`
   is not a usable string (including one that was never sent at all) is
   SKIPPED from `structuredContent.secrets`, never turned into `isError` for
   the whole call: an earlier draft of this slice would have made one
   cosmetically bad row fail the ENTIRE list, directly reversing the existing,
   deliberately named behaviour "a broken alias is one anonymous row, not a
-  dead tool" — the text already substitutes `(no alias)` for that one row and
+  dead tool", the text already substitutes `(no alias)` for that one row and
   leaves every other row and the call itself untouched, so the data now
   follows the same rule. This package does not fabricate `""` for a value it
   does not have, so a row with no `context` at all (a real, already-tested
-  case — the existing "openai-key" fixture with no context) is ALSO dropped
+  case, the existing "openai-key" fixture with no context) is ALSO dropped
   from the data even though the text still prints its plain `- alias` line
   for it unchanged. The drop is not silent: it is reported once per call on
   stderr, in this package's existing startup-diagnostic style (the

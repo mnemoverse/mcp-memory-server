@@ -2461,13 +2461,13 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
   //
   // OD-14 (owner, 2026-09-23, S9-1): `name` is OPTIONAL here though the
   // connector's own schema marks it a REQUIRED z.string(). `structuredText`
-  // (src/names.ts) returns undefined for a genuinely empty or absent name — a
+  // (src/names.ts) returns undefined for a genuinely empty or absent name, a
   // real, already-tested case ("keeps '(unnamed room)' for a genuinely absent
-  // or empty name", test/handlers.test.ts) — and forcing that through a
+  // or empty name", test/handlers.test.ts), and forcing that through a
   // REQUIRED field would make the SDK reject the WHOLE reply with "Output
   // validation error" on an unnamed room, which is a supported, non-error
-  // outcome, not a malformed response. The alternative — falling back to the
-  // literal empty string — was rejected: the text would keep saying
+  // outcome, not a malformed response. The alternative, falling back to the
+  // literal empty string, was rejected: the text would keep saying
   // "(unnamed room)" while the data silently said `name: ""`, the same
   // text/data lie the anti-fabrication rule this package already applies to
   // every other optional field exists to prevent.
@@ -2577,7 +2577,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // scope through the SAME safeInline sanitiser the text loop above
       // already applies (address keeps the identical xroom:<room_id>
       // fallback), archived through Boolean(), and name through
-      // structuredText(r?.name, MAX_DOMAIN_LITERAL) — the SAME 256-character
+      // structuredText(r?.name, MAX_DOMAIN_LITERAL), the SAME 256-character
       // cap roomNamePhrase already uses for this field in text (S9-3), so a
       // name's length reads identically on both surfaces. Absent, never
       // fabricated as "" or "(unnamed room)", for a room with no usable name
@@ -2603,7 +2603,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
 
   // OUTPUT SCHEMA (S9, structured-output plan): `alias`/`context`/`concepts`
   // copied from the connector's `vaultListOutput` (mnemoverse-mcp-remote,
-  // src/tools/index.ts), field for field and description for description —
+  // src/tools/index.ts), field for field and description for description ,
   // all three REQUIRED, matching the connector exactly (unlike
   // memory_list_rooms's `name`, above).
   //
@@ -2611,11 +2611,11 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
   // a usable string is SKIPPED from `secrets` in structuredContent rather
   // than turning the whole call into `isError`. The plan's original wording
   // (isError on one bad row) directly reversed an existing, deliberately
-  // named test — "a broken alias is one anonymous row, not a dead tool"
-  // (test/handlers.test.ts) — which the owner confirmed keeping as-is: the
+  // named test, "a broken alias is one anonymous row, not a dead tool"
+  // (test/handlers.test.ts), which the owner confirmed keeping as-is: the
   // text already substitutes "(no alias)" for that ONE row and leaves every
   // other row and the call itself untouched, so the data follows the same
-  // rule this package applies everywhere else — a value the text withholds
+  // rule this package applies everywhere else, a value the text withholds
   // must be withheld from the data too. Because both fields are REQUIRED
   // here, exactly as in the connector, there is no honest partial row to
   // emit for one that fails either check, including a row whose `context`
@@ -2629,7 +2629,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
   // other way to learn the array is shorter than the count in the text's own
   // header line.
   //
-  // `concepts` is a brand-new field with no text-side precedent — nothing in
+  // `concepts` is a brand-new field with no text-side precedent, nothing in
   // this tool's text renders it. A value core never sent for it degrades to
   // an empty array (the honest reading of "no concept tags", not a
   // fabrication the way a placeholder string would be); a value core DID
@@ -2699,11 +2699,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         text,
         "The secret list was truncated — some secrets are not shown.",
       );
-      // STRUCTURED rows (S9-2, owner, 2026-09-23 — see the OD-15 comment
-      // above): a row is kept only when alias and context are both usable
-      // strings and concepts, when present, is an array of strings (absent
-      // defaults to []). A row failing any of those checks is dropped, not
-      // the call; the drop is counted and reported once on stderr.
+      // STRUCTURED rows (S9-2, owner, 2026-09-23; see the OD-15 comment
+      // above): core's SecretSummary sends alias, context and concepts on
+      // every row, so a row is kept only when alias and context are strings
+      // and concepts is an array of strings; a row missing any of the three,
+      // or carrying one in another shape, is not core's row and is dropped
+      // from the data, never defaulted (no "" for a context, no [] for
+      // concepts). The call itself stands; the drop is counted and reported
+      // once on stderr.
       const secretsStructured: { alias: string; context: string; concepts: string[] }[] = [];
       let droppedSecrets = 0;
       for (const s of list) {
@@ -2711,19 +2714,18 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         const context = s?.context;
         const conceptsRaw = s?.concepts;
         const conceptsOk =
-          conceptsRaw === undefined ||
-          (Array.isArray(conceptsRaw) && conceptsRaw.every((c) => typeof c === "string"));
+          Array.isArray(conceptsRaw) && conceptsRaw.every((c) => typeof c === "string");
         if (typeof alias !== "string" || typeof context !== "string" || !conceptsOk) {
           droppedSecrets += 1;
           continue;
         }
-        secretsStructured.push({ alias, context, concepts: conceptsRaw ?? [] });
+        secretsStructured.push({ alias, context, concepts: conceptsRaw });
       }
       if (droppedSecrets > 0) {
         console.error(
           `Mnemoverse: vault_list dropped ${droppedSecrets} malformed secret ` +
             `row${droppedSecrets === 1 ? "" : "s"} from structuredContent.secrets ` +
-            `(alias/context not a string, or concepts not an array of strings; ` +
+            `(alias, context or concepts missing or not in core's shape; ` +
             `still shown in the text).`,
         );
       }
