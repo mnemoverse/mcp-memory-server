@@ -45,6 +45,7 @@ import {
 import {
   exactLiteral,
   formatDomainList,
+  MAX_DOMAIN_LITERAL,
   roomNamePhrase,
   structuredText,
   withDomainEscapeLegend,
@@ -2453,12 +2454,44 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
 
   // --- Tool: memory_list_rooms ---
 
+  // OUTPUT SCHEMA (S9, structured-output plan): `room_id`/`name`/`address`/
+  // `role`/`scope`/`archived` copied from the connector's `roomListOutput`
+  // (mnemoverse-mcp-remote, src/tools/index.ts), field for field and
+  // description for description.
+  //
+  // OD-14 (owner, 2026-09-23, S9-1): `name` is OPTIONAL here though the
+  // connector's own schema marks it a REQUIRED z.string(). `structuredText`
+  // (src/names.ts) returns undefined for a genuinely empty or absent name — a
+  // real, already-tested case ("keeps '(unnamed room)' for a genuinely absent
+  // or empty name", test/handlers.test.ts) — and forcing that through a
+  // REQUIRED field would make the SDK reject the WHOLE reply with "Output
+  // validation error" on an unnamed room, which is a supported, non-error
+  // outcome, not a malformed response. The alternative — falling back to the
+  // literal empty string — was rejected: the text would keep saying
+  // "(unnamed room)" while the data silently said `name: ""`, the same
+  // text/data lie the anti-fabrication rule this package already applies to
+  // every other optional field exists to prevent.
+
   server.registerTool(
     "memory_list_rooms",
     {
       description:
         "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
       inputSchema: {},
+      outputSchema: {
+        rooms: z.array(
+          z.object({
+            room_id: z.string().describe("The room's id (room_...)."),
+            name: z.string().optional().describe("The room name."),
+            address: z
+              .string()
+              .describe("Domain address (xroom:<id>); pass as `domain` on read/write."),
+            role: z.string().describe("'owner' or 'member'."),
+            scope: z.string().describe("'read' or 'read_write'."),
+            archived: z.boolean().describe("True if archived (owned rooms only)."),
+          }),
+        ),
+      },
       annotations: {
         title: "List rooms",
         readOnlyHint: true,
@@ -2486,16 +2519,11 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         );
       }
       if (rooms.state === "none") {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "You have no shared rooms yet. Create one with memory_create_room, " +
-                "or join one with memory_join_room using an invite code.",
-            },
-          ],
-        };
+        return structured(
+          "You have no shared rooms yet. Create one with memory_create_room, " +
+            "or join one with memory_join_room using an invite code.",
+          { rooms: [] },
+        );
       }
       // ARCHIVED ROOMS ARE LISTED HERE, unlike in the scope note — this tool's job
       // is the inventory, and the `[archived]` tag says which ones cannot be read.
@@ -2538,27 +2566,76 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         return `- ${name} (${role}${scope ? `, ${scope}` : ""})${tail}`;
       });
       const text = `Your shared rooms (${list.length}):\n${lines.join("\n")}`;
-      return {
-        content: [
-          {
-            type: "text" as const,
-            // Legend after the cap: this is the one room surface long enough to
-            // actually overflow, and the legend must describe the names that
-            // SURVIVED the cut, not the ones it removed.
-            text: withDomainEscapeLegend(
-              capResult(
-                text,
-                "The room list was truncated — some rooms are not shown.",
-              ),
-              ...list.map((r) => r?.name),
-            ),
-          },
-        ],
-      };
+      // Legend after the cap: this is the one room surface long enough to
+      // actually overflow, and the legend must describe the names that
+      // SURVIVED the cut, not the ones it removed.
+      const finalText = withDomainEscapeLegend(
+        capResult(text, "The room list was truncated — some rooms are not shown."),
+        ...list.map((r) => r?.name),
+      );
+      // STRUCTURED rows (S9-1/S9-3, owner, 2026-09-23): room_id/address/role/
+      // scope through the SAME safeInline sanitiser the text loop above
+      // already applies (address keeps the identical xroom:<room_id>
+      // fallback), archived through Boolean(), and name through
+      // structuredText(r?.name, MAX_DOMAIN_LITERAL) — the SAME 256-character
+      // cap roomNamePhrase already uses for this field in text (S9-3), so a
+      // name's length reads identically on both surfaces. Absent, never
+      // fabricated as "" or "(unnamed room)", for a room with no usable name
+      // (OD-14 above).
+      const roomsStructured = list.map((r) => {
+        const roomId = safeInline(r?.room_id);
+        const address = safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
+        const nameStructured = structuredText(r?.name, MAX_DOMAIN_LITERAL);
+        return {
+          room_id: roomId,
+          address,
+          role: safeInline(r?.role),
+          scope: safeInline(r?.scope),
+          archived: Boolean(r?.archived),
+          ...(nameStructured === undefined ? {} : { name: nameStructured }),
+        };
+      });
+      return structured(finalText, { rooms: roomsStructured });
     },
   );
 
   // --- Tool: vault_list ---
+
+  // OUTPUT SCHEMA (S9, structured-output plan): `alias`/`context`/`concepts`
+  // copied from the connector's `vaultListOutput` (mnemoverse-mcp-remote,
+  // src/tools/index.ts), field for field and description for description —
+  // all three REQUIRED, matching the connector exactly (unlike
+  // memory_list_rooms's `name`, above).
+  //
+  // OD-15 (owner, 2026-09-23, S9-2): a row whose `alias` or `context` is not
+  // a usable string is SKIPPED from `secrets` in structuredContent rather
+  // than turning the whole call into `isError`. The plan's original wording
+  // (isError on one bad row) directly reversed an existing, deliberately
+  // named test — "a broken alias is one anonymous row, not a dead tool"
+  // (test/handlers.test.ts) — which the owner confirmed keeping as-is: the
+  // text already substitutes "(no alias)" for that ONE row and leaves every
+  // other row and the call itself untouched, so the data follows the same
+  // rule this package applies everywhere else — a value the text withholds
+  // must be withheld from the data too. Because both fields are REQUIRED
+  // here, exactly as in the connector, there is no honest partial row to
+  // emit for one that fails either check, including a row whose `context`
+  // (or `alias`) was never sent at all (`typeof undefined` is not
+  // `"string"`): this package does not fabricate `""` for a value it does
+  // not have, the same rule OD-14 above applies to a room name. The skip is
+  // reported once per call on stderr, in this package's existing
+  // startup-diagnostic style (src/index.ts's "Mnemoverse: ..." lines,
+  // mirroring memory_stats's S7 domain-drop diagnostic), because a
+  // structured consumer reading only `structuredContent.secrets` has no
+  // other way to learn the array is shorter than the count in the text's own
+  // header line.
+  //
+  // `concepts` is a brand-new field with no text-side precedent — nothing in
+  // this tool's text renders it. A value core never sent for it degrades to
+  // an empty array (the honest reading of "no concept tags", not a
+  // fabrication the way a placeholder string would be); a value core DID
+  // send that is not an array of strings is treated the same as a malformed
+  // alias/context and drops the row, since there is no honest subset of an
+  // unshaped value to keep.
 
   server.registerTool(
     "vault_list",
@@ -2566,6 +2643,17 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       description:
         "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you, and no tool on this server returns it. Use this to check WHICH secrets the user has stored and under what alias (e.g. the user says 'do I have a GitHub token saved?'). Only YOUR account's secrets are listed.",
       inputSchema: {},
+      outputSchema: {
+        secrets: z.array(
+          z.object({
+            alias: z
+              .string()
+              .describe("The secret's alias — the reference you use, never the value."),
+            context: z.string().describe("The secret's purpose/context — never the value."),
+            concepts: z.array(z.string()).describe("Concept tags."),
+          }),
+        ),
+      },
       annotations: {
         title: "List vault secrets",
         readOnlyHint: true,
@@ -2597,14 +2685,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         );
       }
       if (list.length === 0) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "No secrets are stored in your Vault yet.",
-            },
-          ],
-        };
+        return structured("No secrets are stored in your Vault yet.", { secrets: [] });
       }
       const lines = list.map((s) => {
         const alias = safeInline(s?.alias) || "(no alias)";
@@ -2614,14 +2695,39 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const text =
         `Your Vault secrets (${list.length}) — alias and purpose only, never the value:\n` +
         lines.join("\n");
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: capResult(text, "The secret list was truncated — some secrets are not shown."),
-          },
-        ],
-      };
+      const finalText = capResult(
+        text,
+        "The secret list was truncated — some secrets are not shown.",
+      );
+      // STRUCTURED rows (S9-2, owner, 2026-09-23 — see the OD-15 comment
+      // above): a row is kept only when alias and context are both usable
+      // strings and concepts, when present, is an array of strings (absent
+      // defaults to []). A row failing any of those checks is dropped, not
+      // the call; the drop is counted and reported once on stderr.
+      const secretsStructured: { alias: string; context: string; concepts: string[] }[] = [];
+      let droppedSecrets = 0;
+      for (const s of list) {
+        const alias = s?.alias;
+        const context = s?.context;
+        const conceptsRaw = s?.concepts;
+        const conceptsOk =
+          conceptsRaw === undefined ||
+          (Array.isArray(conceptsRaw) && conceptsRaw.every((c) => typeof c === "string"));
+        if (typeof alias !== "string" || typeof context !== "string" || !conceptsOk) {
+          droppedSecrets += 1;
+          continue;
+        }
+        secretsStructured.push({ alias, context, concepts: conceptsRaw ?? [] });
+      }
+      if (droppedSecrets > 0) {
+        console.error(
+          `Mnemoverse: vault_list dropped ${droppedSecrets} malformed secret ` +
+            `row${droppedSecrets === 1 ? "" : "s"} from structuredContent.secrets ` +
+            `(alias/context not a string, or concepts not an array of strings; ` +
+            `still shown in the text).`,
+        );
+      }
+      return structured(finalText, { secrets: secretsStructured });
     },
   );
 }
