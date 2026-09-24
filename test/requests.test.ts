@@ -173,6 +173,39 @@ describe("writeRequestBody matches 0.8.0 for every domain shape", () => {
 });
 
 /**
+ * `author` (STEP4-5, owner 2026-09-24): the optional second argument, sent
+ * as-is when present. Byte-identical when absent is the load-bearing claim
+ * — every case above this block calls `writeRequestBody` with one argument,
+ * exactly as every release before this one did, so those cases ALSO prove
+ * the claim; these add the "present" half.
+ */
+describe("writeRequestBody's optional second argument (author, STEP4-5)", () => {
+  it("omitted entirely: the body has no author key at all — same bytes as before this argument existed", () => {
+    expect(wire(writeRequestBody({ content: "c" }))).toBe(
+      wire({ content: "c", concepts: [], domain: "general" }),
+    );
+    expect(Object.keys(writeRequestBody({ content: "c" }))).toEqual(["content", "concepts", "domain"]);
+  });
+
+  it("present: sent exactly as given, as the fourth (last) key, no field-level normalisation", () => {
+    const author = { principal: "user_123", agent: "claude-code", is_external: true };
+    const body = writeRequestBody({ content: "c", domain: "d" }, author);
+    expect(Object.keys(body)).toEqual(["content", "concepts", "domain", "author"]);
+    expect(body.author).toBe(author); // the exact same reference — no copy, no reshape
+    expect(wire(body)).toBe(wire({ content: "c", concepts: [], domain: "d", author }));
+  });
+
+  it("a partial author (some ProvenanceWriteSchema fields only) passes through with only those fields", () => {
+    const author = { agent_name: "Cursor" };
+    expect(writeRequestBody({ content: "c" }, author).author).toEqual({ agent_name: "Cursor" });
+  });
+
+  it("an empty author object is still sent — this function does not decide 'empty means absent'", () => {
+    expect(writeRequestBody({ content: "c" }, {}).author).toEqual({});
+  });
+});
+
+/**
  * refusePlaceholderKey: the config-only guard that keeps a docs placeholder
  * off the wire (see the function's own doc comment for the incident this is
  * against). Every case here is either a CERTAIN placeholder or a value that

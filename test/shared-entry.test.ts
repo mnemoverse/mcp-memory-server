@@ -22,6 +22,9 @@ import {
   registerMemoryTools,
   SERVER_INSTRUCTIONS,
   type ApiFetch,
+  type MemoryToolDeps,
+  type Wording,
+  type WriteAuthor,
 } from "../src/shared.js";
 
 const TEN_TOOLS = [
@@ -110,6 +113,37 @@ describe("the shared entry point", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain("3");
     await server.close();
+  });
+
+  it("exports Wording and WriteAuthor (STEP4-2/3/5), and MemoryToolDeps accepts both dependencies", () => {
+    // Type-only proof: this compiles only if MemoryToolDeps.wording is typed
+    // as Wording and .writeAuthor returns WriteAuthor | undefined. A runtime
+    // assertion would test nothing a JS caller could break; the compiler
+    // catching a shape drift here is the actual guarantee.
+    const wording: Wording = {
+      serverNoun: "this connector",
+      auth: "oauth",
+      keysUrl: "https://acme.example/keys",
+      rawDetail: false,
+    };
+    const author: WriteAuthor = {
+      principal: "user_1",
+      agent: "a",
+      agent_name: "A",
+      client_env: "chatgpt",
+      is_external: true,
+    };
+    const neverCalled: ApiFetch = async () => {
+      throw new Error("not called in this test");
+    };
+    const deps: MemoryToolDeps = {
+      apiFetch: neverCalled,
+      wording,
+      writeAuthor: () => author,
+    };
+    expect(typeof deps.apiFetch).toBe("function");
+    expect(deps.wording).toBe(wording);
+    expect(deps.writeAuthor?.()).toBe(author);
   });
 
   it("adding an exports map narrows nothing that resolved before", () => {

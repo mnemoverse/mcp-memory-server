@@ -29,6 +29,10 @@ import {
   explainApiFailure,
   explainNetworkFailure,
   explainUnreadableBody,
+  ApiError,
+  NetworkError,
+  UnreadableBodyError,
+  type Wording,
 } from "../src/errors.js";
 
 let mcp: Harness;
@@ -1145,5 +1149,359 @@ describe("the raw detail is data, never voice", () => {
 
     expect(text).toContain("did not answer POST /memory/read in time");
     expect(text).not.toContain("connectivity or DNS problem");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * `wording` (STEP4-2/3/5, owner 2026-09-24): a second server registering
+ * these tools — the hosted connector — supplies its own vocabulary through
+ * `MemoryToolDeps.wording`, read by `explainApiFailure` / `explainNetworkFailure`
+ * / `explainUnreadableBody` and by the three error classes' constructors.
+ *
+ * Every case in this block calls the module's functions DIRECTLY with a
+ * `wording` argument, unlike the rest of this file, which drives them
+ * through a live tool call on the stdio harness — the stdio server never
+ * supplies `wording` at all, so there is no live surface for it to reach
+ * today. Direct calls are also how "assert over every explanation the module
+ * can produce" is actually checked: through the harness only one server's
+ * worth of routing is reachable per test.
+ */
+describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names the key (STEP4-2)", () => {
+  const OAUTH: Wording = { auth: "oauth" };
+
+  /** Every distinct shape explain401 can be handed, in api-key mode terms —
+   *  reused here to prove ALL of them collapse to one of two oauth-safe
+   *  sentences, never a key-flavoured one. */
+  const failures401: ReadonlyArray<readonly [string, string]> = [
+    ["no envelope at all (the founder-endorsed sentence's api-key trigger)", REAL_401_BODY],
+    ["reason: placeholder_key", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "placeholder_key" } })],
+    ["reason: revoked_key", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "revoked_key" } })],
+    ["reason: invalid_key", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "invalid_key" } })],
+    ["reason: malformed_key", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "malformed_key" } })],
+    ["reason: missing_key", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "missing_key" } })],
+    ["reason: an unknown value", JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "expired_key" } })],
+    ["a code with no reason at all", envelope("UNAUTHORIZED", "Token expired", false)],
+    ["a body the engine's shapes do not match", "<html>401 Unauthorized</html>"],
+    ["no body at all", ""],
+  ];
+
+  const BANNED = [
+    "MNEMOVERSE_API_KEY",
+    "MCP client config",
+    "MCP server",
+    "console.mnemoverse.com/dashboard/keys",
+    "mk_live_",
+  ];
+
+  it.each(failures401)("401, %s: no key/env-var/config-file/console mention", (_label, body) => {
+    const text = explainApiFailure(
+      { status: 401, body, method: "POST", path: "/memory/read", retryAfter: null },
+      OAUTH,
+    );
+    expect(text).not.toContain("MNEMOVERSE_API_KEY");
+    expect(text).not.toContain("MCP client config");
+    expect(text).not.toContain("console.mnemoverse.com/dashboard/keys");
+    expect(text).not.toContain("mk_live_");
+  });
+
+  it("401 without 'caller org not identified' always reads the same reconnect sentence, whatever the body says", () => {
+    // Every case in `failures401` above is a DIFFERENT api-key-mode branch
+    // (five named reasons, an unknown reason, the substring guess, a bare
+    // code, silence) — under oauth every one of them collapses to this same
+    // sentence, because none of the five reasons or the substring guess
+    // means anything for a caller who never held a key.
+    const texts = failures401.map(([, body]) =>
+      explainApiFailure(
+        { status: 401, body, method: "POST", path: "/memory/read", retryAfter: null },
+        OAUTH,
+      ).split("\n\n")[0],
+    );
+    for (const t of texts) {
+      expect(t).toBe(
+        "Mnemoverse: the user's sign-in was rejected (401). This is not " +
+          "something they fix by editing a key — tell them to disconnect and " +
+          "reconnect the app, or sign in again, to refresh their session. Do " +
+          "not retry until they do.",
+      );
+    }
+  });
+
+  it("401 'caller org not identified' still fires under oauth, worded for a sign-in rather than a key", () => {
+    const text = explainApiFailure(
+      {
+        status: 401,
+        body: envelope("UNAUTHORIZED", "Caller org not identified: a tenant API key is required.", false),
+        method: "POST",
+        path: "/memory/read",
+        retryAfter: null,
+      },
+      OAUTH,
+    );
+    expect(text).toContain("could not identify a tenant account");
+    expect(text).toContain("sign-in itself was not rejected");
+    expect(text).toContain("do NOT tell the user to reconnect over this");
+    expect(text).not.toContain("MNEMOVERSE_API_KEY");
+    expect(text).not.toContain("replace it");
+  });
+
+  /** Every 403 cause the engine actually sends (mirrors "a 403 names the
+   *  permission" above), plus the two structural branches (saidNothing and
+   *  no-match). */
+  const failures403: ReadonlyArray<readonly [string, string]> = [
+    ["room archived", envelope("FORBIDDEN", "Room is archived", false)],
+    ["not a member", envelope("FORBIDDEN", "Not an active member of this room", false)],
+    ["read-only member", envelope("FORBIDDEN", "Read-only membership cannot write to this room", false)],
+    ["invalid room address", envelope("FORBIDDEN", "Invalid room address", false)],
+    ["not the owner", envelope("FORBIDDEN", "You do not own this room.", false)],
+    ["no clause matches", envelope("FORBIDDEN", "Operation not allowed for this plan", false)],
+    ["the engine said nothing parseable", "<html>Forbidden</html>"],
+  ];
+
+  it.each(failures403)("403, %s: no key/env-var/config-file/console mention", (_label, body) => {
+    const text = explainApiFailure(
+      { status: 403, body, method: "POST", path: "/memory/read", retryAfter: null },
+      OAUTH,
+    );
+    for (const banned of BANNED) expect(text).not.toContain(banned);
+  });
+
+  it("403 with a named cause says the sign-in is not the problem, not the API key", () => {
+    const text = explainApiFailure(
+      {
+        status: 403,
+        body: envelope("FORBIDDEN", "Room is archived", false),
+        method: "POST",
+        path: "/memory/read",
+        retryAfter: null,
+      },
+      OAUTH,
+    );
+    expect(text).toContain("Your sign-in is NOT the problem");
+    expect(text).not.toContain("The API key is NOT the problem");
+  });
+
+  it("403 the engine never spoke to stays unchanged by wording (no credential is named either way)", () => {
+    const apiKeyText = explainApiFailure(
+      { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },
+    );
+    const oauthText = explainApiFailure(
+      { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },
+      OAUTH,
+    );
+    expect(oauthText).toBe(apiKeyText);
+  });
+
+  /** 429 already names no key in api-key mode either (verified above); this
+   *  pins that `wording` changes nothing about it, so the same three cases
+   *  are safe under oauth too — the assertion this whole block promises. */
+  const failures429: ReadonlyArray<readonly [string, string, string | null]> = [
+    ["per-minute limit", envelope("RATE_LIMITED", "Rate limit exceeded (60/min)", true), "30"],
+    ["daily quota", envelope("RATE_LIMITED", "Daily limit reached (1000/1000)", false), null],
+    ["body says nothing", "Too Many Requests", null],
+  ];
+
+  it.each(failures429)("429, %s: no key/env-var/config-file/console mention, and unchanged by wording", (_label, body, retryAfter) => {
+    const withoutWording = explainApiFailure({
+      status: 429,
+      body,
+      method: "POST",
+      path: "/memory/write",
+      retryAfter,
+    });
+    const withOauth = explainApiFailure(
+      {
+        status: 429,
+        body,
+        method: "POST",
+        path: "/memory/write",
+        retryAfter,
+      },
+      OAUTH,
+    );
+    for (const banned of BANNED) {
+      expect(withoutWording).not.toContain(banned);
+      expect(withOauth).not.toContain(banned);
+    }
+    expect(withOauth).toBe(withoutWording);
+  });
+});
+
+describe("wording.keysUrl replaces the console URL the api-key vocabulary prints (STEP4-2)", () => {
+  const CUSTOM_URL = "https://acme.example/manage/keys";
+
+  it("the generic 401 sentence prints keysUrl instead of KEYS_URL", () => {
+    const text = explainApiFailure(
+      { status: 401, body: REAL_401_BODY, method: "POST", path: "/memory/read", retryAfter: null },
+      { keysUrl: CUSTOM_URL },
+    );
+    expect(text).toContain(`replaced with a real key from ${CUSTOM_URL}`);
+    expect(text).not.toContain("console.mnemoverse.com/dashboard/keys");
+  });
+
+  it("a reason-branch 401 prints keysUrl too, when the engine sent no keys_url of its own", () => {
+    const text = explainApiFailure(
+      {
+        status: 401,
+        body: JSON.stringify({ code: "UNAUTHORIZED", details: { reason: "revoked_key" } }),
+        method: "POST",
+        path: "/memory/read",
+        retryAfter: null,
+      },
+      { keysUrl: CUSTOM_URL },
+    );
+    expect(text).toContain(CUSTOM_URL);
+    expect(text).not.toContain("console.mnemoverse.com/dashboard/keys");
+  });
+
+  it("the engine's own validated keys_url still wins over a caller-supplied keysUrl", () => {
+    // The engine's value is per-request and server-verified for this exact
+    // failure; the caller's `keysUrl` is a deployment-wide fallback. The
+    // more specific, more current source stays first.
+    const text = explainApiFailure(
+      {
+        status: 401,
+        body: JSON.stringify({
+          code: "UNAUTHORIZED",
+          details: { reason: "revoked_key", keys_url: "https://console.mnemoverse.com/dashboard/keys?ref=x" },
+        }),
+        method: "POST",
+        path: "/memory/read",
+        retryAfter: null,
+      },
+      { keysUrl: CUSTOM_URL },
+    );
+    expect(text).toContain("https://console.mnemoverse.com/dashboard/keys?ref=x");
+    expect(text).not.toContain(CUSTOM_URL);
+  });
+
+  it("has no effect under auth: \"oauth\", which prints no console URL at all", () => {
+    const text = explainApiFailure(
+      { status: 401, body: REAL_401_BODY, method: "POST", path: "/memory/read", retryAfter: null },
+      { auth: "oauth", keysUrl: CUSTOM_URL },
+    );
+    expect(text).not.toContain(CUSTOM_URL);
+    expect(text).not.toContain("console.mnemoverse.com");
+  });
+
+  it("an empty-string keysUrl is not a value — falls back to KEYS_URL defensively", () => {
+    const text = explainApiFailure(
+      { status: 401, body: REAL_401_BODY, method: "POST", path: "/memory/read", retryAfter: null },
+      { keysUrl: "" },
+    );
+    expect(text).toContain("https://console.mnemoverse.com/dashboard/keys");
+  });
+});
+
+describe("wording.rawDetail: false drops the raw wire-body tail (STEP4-3, held in reserve)", () => {
+  const failure = {
+    status: 401,
+    body: REAL_401_BODY,
+    method: "POST",
+    path: "/memory/read",
+    retryAfter: null,
+  } as const;
+
+  it("defaults to true — every existing pin already proves this; this is the explicit form of the same default", () => {
+    expect(explainApiFailure(failure)).toBe(explainApiFailure(failure, {}));
+    expect(explainApiFailure(failure)).toBe(explainApiFailure(failure, { rawDetail: true }));
+    expect(explainApiFailure(failure)).toContain("Raw detail");
+  });
+
+  it("explainApiFailure: false omits 'Raw detail' and the wire body entirely", () => {
+    const text = explainApiFailure(failure, { rawDetail: false });
+    expect(text).not.toContain("Raw detail");
+    expect(text).not.toContain("UNAUTHORIZED");
+    expect(text.trim().endsWith("Do not retry until they replace it.")).toBe(true);
+  });
+
+  it("explainNetworkFailure: false omits the raw transport detail, both branches", () => {
+    const timeout = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    const withRaw = explainNetworkFailure("POST", "/memory/read", timeout);
+    const withoutRaw = explainNetworkFailure("POST", "/memory/read", timeout, { rawDetail: false });
+    expect(withRaw).toContain("Raw detail");
+    expect(withoutRaw).not.toContain("Raw detail");
+    expect(withoutRaw).not.toContain("TimeoutError");
+
+    const redirectCause = Object.assign(new Error("fetch failed"), {
+      cause: new Error("unexpected redirect"),
+    });
+    const redirectWithout = explainNetworkFailure("POST", "/memory/read", redirectCause, {
+      rawDetail: false,
+    });
+    expect(redirectWithout).not.toContain("Raw detail");
+    expect(redirectWithout).toContain("REDIRECT");
+  });
+
+  it("explainUnreadableBody: false omits the raw unreadable-body detail", () => {
+    const withRaw = explainUnreadableBody({
+      status: 200,
+      method: "POST",
+      path: "/memory/read",
+      bodyPreview: "<html>sign in</html>",
+      cause: new SyntaxError("Unexpected token <"),
+    });
+    const withoutRaw = explainUnreadableBody(
+      {
+        status: 200,
+        method: "POST",
+        path: "/memory/read",
+        bodyPreview: "<html>sign in</html>",
+        cause: new SyntaxError("Unexpected token <"),
+      },
+      { rawDetail: false },
+    );
+    expect(withRaw).toContain("Raw detail");
+    expect(withoutRaw).not.toContain("Raw detail");
+    expect(withoutRaw).not.toContain("<html>sign in</html>");
+  });
+});
+
+describe("the three error classes accept the same optional wording their explain functions do", () => {
+  it("ApiError: a wording argument reaches .message", () => {
+    const withWording = new ApiError(
+      { status: 401, body: REAL_401_BODY, method: "POST", path: "/memory/read", retryAfter: null },
+      { auth: "oauth" },
+    );
+    expect(withWording.message).not.toContain("MNEMOVERSE_API_KEY");
+    expect(withWording.message).toContain("reconnect");
+    // No second argument at all reproduces today's exact behaviour.
+    const withoutWording = new ApiError({
+      status: 401,
+      body: REAL_401_BODY,
+      method: "POST",
+      path: "/memory/read",
+      retryAfter: null,
+    });
+    expect(withoutWording.message).toContain("MNEMOVERSE_API_KEY");
+    // isBare404 and the other fields are unaffected by the new argument.
+    expect(withWording.status).toBe(401);
+    expect(withWording.isBare404).toBe(false);
+  });
+
+  it("NetworkError: a wording argument reaches .message", () => {
+    const cause = new Error("fetch failed");
+    const withWording = new NetworkError("POST", "/memory/read", cause, { rawDetail: false });
+    const withoutWording = new NetworkError("POST", "/memory/read", cause);
+    expect(withWording.message).not.toContain("Raw detail");
+    expect(withoutWording.message).toContain("Raw detail");
+    expect(withWording.method).toBe("POST");
+    expect(withWording.path).toBe("/memory/read");
+  });
+
+  it("UnreadableBodyError: a wording argument reaches .message", () => {
+    const f = {
+      status: 200,
+      method: "POST",
+      path: "/memory/read",
+      bodyPreview: "<html>sign in</html>",
+      cause: new SyntaxError("Unexpected token <"),
+    } as const;
+    const withWording = new UnreadableBodyError(f, { rawDetail: false });
+    const withoutWording = new UnreadableBodyError(f);
+    expect(withWording.message).not.toContain("Raw detail");
+    expect(withoutWording.message).toContain("Raw detail");
+    expect(withWording.status).toBe(200);
   });
 });
