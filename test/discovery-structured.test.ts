@@ -373,8 +373,8 @@ describe("vault_list: structuredContent, decision-2 regression (OD-15)", () => {
     try {
       mcp.on(VAULT, {
         secrets: [
-          { alias: "github-token", context: "CI deploys" },
-          { alias: 7, context: "broken" },
+          { alias: "github-token", context: "CI deploys", concepts: ["ci"] },
+          { alias: 7, context: "broken", concepts: [] },
         ],
       });
 
@@ -382,7 +382,7 @@ describe("vault_list: structuredContent, decision-2 regression (OD-15)", () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.structuredContent).toEqual({
-        secrets: [{ alias: "github-token", context: "CI deploys", concepts: [] }],
+        secrets: [{ alias: "github-token", context: "CI deploys", concepts: ["ci"] }],
       });
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0]!.join(" ")).toContain("1");
