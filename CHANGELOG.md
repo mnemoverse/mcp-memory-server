@@ -56,7 +56,7 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
-## [0.12.0] — 2026-09-24
+## [0.12.0] — 2026-09-25
 
 ### Added
 
