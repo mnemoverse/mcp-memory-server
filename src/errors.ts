@@ -527,10 +527,13 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   const remedy = oauth
     ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
     : "tell the user to use a key that has it";
+  // The remedy either follows "Reading still works;" mid-sentence or opens
+  // its own sentence, capitalised.
+  const advice = writeScope ? `Reading still works; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
   const cause = has(m, "scope")
     ? `The permission this call needs is a scope ${credential} does not carry ` +
-      `(the engine's own words are in the detail below). ${writeScope ? "Reading still works; " : ""}` +
-      `${remedy}. Do not work around it by trying another tool.`
+      `(the engine's own words are in the detail below). ${advice} ` +
+      "Do not work around it by trying another tool."
     : has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +
       "and every write, for its owner as much as for a member, and this client " +

@@ -1355,7 +1355,8 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(text).not.toContain("Reading still works");
       expect(text).not.toMatch(/room|most often/i);
     }
-    expect(oauthText).toContain("re-authorize this connector with the access it needs");
+    expect(oauthText).toContain("below). Tell the user to re-authorize this connector with the access it needs.");
+    expect(apiKey).toContain("below). Tell the user to use a key that has it.");
     expect(oauthText).not.toMatch(/\bkeys?\b/i);
   });
 
