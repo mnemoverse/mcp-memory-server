@@ -1360,6 +1360,40 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(oauthText).not.toMatch(/\bkeys?\b/i);
   });
 
+  it("403 scope refusal: core's own two wordings take the scope cause (Sigma on #175)", () => {
+    for (const message of ["Token lacks memory:write scope", "Route has no scope policy; denied by default"]) {
+      const text = explainApiFailure(
+        { status: 403, body: envelope("FORBIDDEN", message, false), method: "POST", path: "/memory/write", retryAfter: null },
+        OAUTH,
+      ).split("\n\n")[0] ?? "";
+      expect(text).toContain("is a scope this sign-in does not carry");
+      expect(text).not.toMatch(/most often|room/i);
+    }
+    // The route-policy refusal names no write scope, so reading is not promised.
+    const policy = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Route has no scope policy; denied by default", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(policy).not.toContain("Reading still works");
+  });
+
+  it("403 room refusal that happens to say 'scope' keeps its room diagnosis; a compound read+write scope refusal does not promise reads (Sigma on #175)", () => {
+    const roomText = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Read-only membership scope cannot write to this room", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(roomText).toContain("membership in that room is read-only");
+    expect(roomText).not.toContain("is a scope this key does not carry");
+    const compound = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:read scope and memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(compound).toContain("is a scope this key does not carry");
+    expect(compound).not.toContain("Reading still works");
+    // The bare word "scope" without the scope vocabulary is not a scope refusal.
+    const bare = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "This operation is outside the scope of this plan", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(bare).not.toContain("is a scope this key does not carry");
+  });
+
   it("403 the engine never spoke to differs under oauth by exactly one word: it declines to blame the sign-in, not the key", () => {
     const apiKeyText = explainApiFailure(
       { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },

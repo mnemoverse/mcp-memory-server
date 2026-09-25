@@ -59,16 +59,21 @@ git history and the GitHub releases are the record.
 ### Fixed
 
 - **A 403 for a missing scope is explained as a scope refusal, not as a room
-  problem.** When the engine's 403 message names a `scope` (a write with a
-  read-only token, which is how the hosted connector refuses a write on the
-  package's surface at step 4 of ADR-025), the explanation says the credential
+  problem.** When the engine's 403 message names a scope in the vocabulary
+  core and the hosted connector use (`Token lacks memory:write scope`, `Route
+  has no scope policy`, `the token lacks the memory:write scope`; a write with
+  a read-only token is how the connector refuses a write on the package's
+  surface at step 4 of ADR-025), the explanation says the credential
   does not carry the scope the call needs, that reading still works when the
   missing scope is a write scope, and what to do (re-authorize with write
   access, or with the access the call needs, under `auth: "oauth"`; use a key
   that has it under api-key). Before this, such a 403 fell through to the generic
   sentence, which guesses "most often the room it addressed" and points at
-  `memory_list_rooms`, a wrong cause stated confidently. Text only, no shape
-  change: PATCH by the rule above.
+  `memory_list_rooms`, a wrong cause stated confidently. The room causes keep
+  precedence: room membership is itself called a scope on this surface, so a
+  room refusal that says "scope" keeps its room diagnosis, and the bare word
+  "scope" alone is not a scope refusal. Text only, no shape change: PATCH by
+  the rule above.
 
 ## [0.12.0] — 2026-09-25
 
