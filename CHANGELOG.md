@@ -66,8 +66,9 @@ git history and the GitHub releases are the record.
   ADR-025), the explanation says the credential identified the account but
   does not carry a scope the call needs (the usual "is NOT the problem"
   opening would contradict that, so this one 403 opens differently), that
-  reading still works when the missing scope is the write scope and the read
-  scope is not named too, and what to do (re-authorize with write access, or
+  reads are not affected by the refusal (they need only the read scope) when
+  the missing scope is the write scope and the read scope is not named too,
+  and what to do (re-authorize with write access, or
   with the access the call needs, under `auth: "oauth"`; under api-key, tell
   the user which scope was refused so they grant it on their side, since an
   API key carries no scope selection this package knows of and a key swap is

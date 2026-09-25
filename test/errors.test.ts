@@ -1329,7 +1329,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     };
     const apiKey = explainApiFailure(failure).split("\n\n")[0] ?? "";
     const oauthText = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
-    expect(apiKey).toContain("refused (403). The API key identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user which scope was refused so they can grant it on their side.");
+    expect(apiKey).toContain("refused (403). The API key identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reads are not affected by this refusal, since they need only the read scope; tell the user which scope was refused so they can grant it on their side.");
     // No impossible fix: an API key carries no scope selection (Copilot on #175).
     expect(apiKey).not.toMatch(/use a key|another key|a key that/i);
     // Under rawDetail: false the raw-body paragraph is withheld, so the reply
@@ -1340,11 +1340,11 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ]) {
       expect(quiet).not.toContain("\n\n");
       expect(quiet).not.toMatch(/detail below/i);
-      expect(quiet).toContain("does not carry a scope this call needs. Reading still works; tell the user");
+      expect(quiet).toContain("does not carry a scope this call needs. Reads are not affected by this refusal, since they need only the read scope; tell the user");
     }
-    expect(explainApiFailure(failure, { rawDetail: false })).toContain("this call needs. Reading still works; tell the user which scope was refused so they can grant it on their side. Do not work around it");
-    expect(explainApiFailure(failure, { auth: "oauth", rawDetail: false })).toContain("this call needs. Reading still works; tell the user to re-authorize this connector with write access. Do not work around it");
-    expect(oauthText).toContain("refused (403). Your sign-in identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user to re-authorize this connector with write access.");
+    expect(explainApiFailure(failure, { rawDetail: false })).toContain("this call needs. Reads are not affected by this refusal, since they need only the read scope; tell the user which scope was refused so they can grant it on their side. Do not work around it");
+    expect(explainApiFailure(failure, { auth: "oauth", rawDetail: false })).toContain("this call needs. Reads are not affected by this refusal, since they need only the read scope; tell the user to re-authorize this connector with write access. Do not work around it");
+    expect(oauthText).toContain("refused (403). Your sign-in identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reads are not affected by this refusal, since they need only the read scope; tell the user to re-authorize this connector with write access.");
     for (const text of [apiKey, oauthText]) {
       expect(text).not.toMatch(/room|membership|invite|archived|owner/i);
       expect(text).not.toContain("most often");
@@ -1366,7 +1366,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     const oauthText = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
     for (const text of [apiKey, oauthText]) {
       expect(text).toContain("does not carry a scope this call needs");
-      expect(text).not.toContain("Reading still works");
+      expect(text).not.toContain("not affected by this refusal");
       expect(text).not.toMatch(/room|most often/i);
     }
     expect(oauthText).toContain("detail below. Tell the user to re-authorize this connector with the access it needs.");
@@ -1380,7 +1380,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       OAUTH,
     ).split("\n\n")[0] ?? "";
     expect(lacks).toContain("does not carry a scope this call needs");
-    expect(lacks).toContain("Reading still works; tell the user to re-authorize this connector with write access.");
+    expect(lacks).toContain("Reads are not affected by this refusal, since they need only the read scope; tell the user to re-authorize this connector with write access.");
     expect(lacks).not.toMatch(/most often|room/i);
     const failure = {
       status: 403,
@@ -1399,7 +1399,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     for (const text of [policyKey, policyOauth]) {
       expect(text).toContain("Tell the user exactly what was refused so it can be reported");
       expect(text).not.toContain("does not carry a scope");
-      expect(text).not.toContain("Reading still works");
+      expect(text).not.toContain("not affected by this refusal");
       expect(text).not.toMatch(/re-authorize|grant it|most often|room/i);
     }
     // The route-policy branch is tried AFTER the room causes: a message that
@@ -1428,7 +1428,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:read scope and memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
     ).split("\n\n")[0] ?? "";
     expect(compound).toContain("does not carry a scope this call needs");
-    expect(compound).not.toContain("Reading still works");
+    expect(compound).not.toContain("not affected by this refusal");
     // A lacking scope that merely MENTIONS a scope policy is still a scope
     // refusal: the route-policy needle is core's exact clause, "no scope policy".
     const mentions = explainApiFailure(

@@ -537,8 +537,10 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // names no scope and does not say "lacks", so it never matches
   // `scopeRefusal` either.
   const routePolicy = has(m, "no scope policy");
-  // "Reading still works" is claimed only when the missing scope is the write
-  // scope and the read scope is not named too (Copilot and Sigma on #175).
+  // Reads are said to be unaffected only when the missing scope is the write
+  // scope and the read scope is not named too (Copilot and Sigma on #175);
+  // and "unaffected by this refusal" is all the refusal supports: whether
+  // reads work depends on the read scope, which it says nothing about.
   const writeScope =
     (has(m, "memory:write") || has(m, "write scope")) && !(has(m, "memory:read") || has(m, "read scope"));
   // Under oauth the remedy is real: the connector's consent flow grants
@@ -551,9 +553,9 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   const remedy = oauth
     ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
     : "tell the user which scope was refused so they can grant it on their side";
-  // The remedy either follows "Reading still works;" mid-sentence or opens
-  // its own sentence, capitalised.
-  const advice = writeScope ? `Reading still works; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
+  // The remedy either follows the reads clause mid-sentence or opens its own
+  // sentence, capitalised.
+  const advice = writeScope ? `Reads are not affected by this refusal, since they need only the read scope; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
   // The opening clause of the reply (below) already says what is missing, so
   // the cause carries the pointer to the engine's words, the advice, and the
   // one prohibition. The pointer exists only when the raw-detail paragraph
