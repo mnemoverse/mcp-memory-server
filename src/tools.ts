@@ -3147,8 +3147,10 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         ":";
       const tail =
         (truncated
-          ? "\n\n(truncated — more edges exist than are shown here; a higher " +
-            "min_weight or a lower limit surfaces the strongest ones first)"
+          ? "\n\n(truncated — the store may hold more edges than are shown " +
+            "here; core does not promise these are sorted by weight before the " +
+            "cut, so a higher min_weight, not a lower limit, is what reliably " +
+            "narrows to the strongest ones)"
           : "") +
         (minWeightApplied > 0
           ? `\n\n(edges below weight ${minWeightApplied} were excluded — ` +
