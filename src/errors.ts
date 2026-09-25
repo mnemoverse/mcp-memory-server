@@ -521,14 +521,16 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // memory:write scope"). It is not about a room, so it must not fall
   // through to the generic sentence that guesses "most often the room it
   // addressed" (the connector's refusal did exactly that, step 4 review).
-  // The check is keyed on that vocabulary (a scope NAME, or a lack verb:
-  // lacks, missing, without, requires, needs), not on the bare word "scope",
-  // and it is tried AFTER the room causes: room
+  // The check is keyed on that vocabulary (a scope NAME, or one of the lack
+  // verbs lacks, lacking, missing, without, requires, required, needs
+  // followed by the word "scope" in the same sentence), not on the bare word
+  // "scope" ("outside the scope of this plan and needs a review" is not a
+  // scope refusal), and it is tried AFTER the room causes: room
   // membership is itself called a scope elsewhere on this surface, so a room
   // refusal that happens to say "scope" keeps its room diagnosis (Sigma on
   // #175).
-  const LACK_VERB = /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b/i;
-  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || LACK_VERB.test(m ?? ""));
+  const LACK_THEN_SCOPE = /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b[^.;]*\bscope\b/i;
+  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || LACK_THEN_SCOPE.test(m ?? ""));
   // Core's other scope sentence, "Route has no scope policy; denied by
   // default", is NOT about the credential: the route itself has no policy
   // registered, and the middleware denies it by default. No re-authorization
@@ -552,13 +554,15 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // #175). Only the clause that states the lack is read: from "lacks",
   // "missing", "without", "requires" or "needs" up to the end of the
   // sentence, a comma, a dash (en, em, or a spaced hyphen), an opening
-  // parenthesis, or a word that introduces what IS held ("granted", "has",
-  // "holds", "carries"), so a scope the message lists as held in any of
-  // those positions is not presented as refused (CodeRabbit on #175). The
-  // trade-off is deliberate: a comma-separated list of LACKING scopes is cut
-  // to its first item, and a held scope after a colon or a connecting word
-  // ("while") would still be named; no producer writes either today (core
-  // names exactly one scope). A message that names scopes with the name
+  // parenthesis, a conjunction (but, while, whereas, although, though, yet,
+  // however, except), or a word that introduces what IS held ("granted",
+  // "has", "holds", "carries"), so a scope the message lists as held in any
+  // of those positions is not presented as refused (CodeRabbit on #175).
+  // The trade-off is deliberate: a comma-separated list of LACKING scopes is
+  // cut to its first item, and a held scope after a colon or after a
+  // connective not in that list ("with memory:read retained") would still
+  // be named; no producer writes either today (core names exactly one
+  // scope). A message that names scopes with the name
   // BEFORE the verb ("memory:write scope is required") keeps them all,
   // unless it also speaks of held scopes; a refusal that names none gets
   // the generic sentence.
@@ -585,7 +589,10 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
       ...text.matchAll(
         /\b(?:granted|held|has|holds|carries)\b((?:(?!\b(?:lacks?|lacking|missing|without|requires?|required|needs?|but|while|whereas|although|though|yet|however|except)\b)[^.;])*)/gi,
       ),
-    ].flatMap((x) => scopesIn(x[1])),
+      // A name the lack clause itself refuses is not held by this fragment
+      // ("has memory:write scope for room A but lacks memory:write scope
+      // for room B" refuses memory:write).
+    ].flatMap((x) => scopesIn(x[1])).filter((x) => !scopesIn(lackClause).includes(x)),
   ]);
   const candidates = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
   const named = candidates.filter((x) => !heldNames.has(x));
@@ -597,9 +604,13 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // "write scope"/"read scope". "Unaffected by this refusal" is all the
   // refusal supports: whether reads work depends on the read scope, which it
   // says nothing about.
+  // And never when the message states the read scope lacking anywhere, even
+  // past the cut of the lack clause ("lacks memory:write scope, memory:read
+  // scope"): a read name that is not held, or the words "read scope".
+  const readStatedLacking = (scopesIn(text).includes("memory:read") && !heldNames.has("memory:read")) || has(m, "read scope");
   const writeScope =
     named.length > 0
-      ? named.includes("memory:write") && !named.includes("memory:read")
+      ? named.includes("memory:write") && !named.includes("memory:read") && !readStatedLacking
       : has(m, "write scope") && !has(m, "read scope");
   const list = named.length <= 2 ? named.join(" and ") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
   const refused =
