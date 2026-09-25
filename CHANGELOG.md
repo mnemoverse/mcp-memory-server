@@ -75,10 +75,13 @@ git history and the GitHub releases are the record.
   not a fix it can promise). Before this, such a 403 fell through to the generic
   sentence, which guesses "most often the room it addressed" and points at
   `memory_list_rooms`, a wrong cause stated confidently. Under api-key the
-  reply names the refused scope(s) from the engine's own words, reading only
-  the clause that states the lack (up to a sentence end, a comma, a dash, a
+  reply names the refused scope(s) from the engine's own words, reading the
+  clause that states the lack (up to a sentence end, a comma, a dash, a
   parenthesis, or a word such as "granted" or "has"), so a scope the message
-  lists as held in any of those positions is not presented as refused; the
+  lists as held in any of those positions is not presented as refused; a
+  message that names scopes before the verb and says nothing of held scopes
+  has them all named; a comma-separated list of lacking scopes is cut to its
+  first item (no producer writes one: core names exactly one scope). The
   pointer to the engine's own words appears only when `rawDetail` leaves the
   raw detail in the reply. The room causes keep precedence: room
   membership is itself called a scope on this surface, so a room refusal

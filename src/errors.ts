@@ -555,19 +555,23 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // grant even when `rawDetail: false` withholds the message (Copilot on
   // #175). Only the clause that states the lack is read: from "lacks",
   // "missing", "without", "requires" or "needs" up to the end of the
-  // sentence, a comma, a dash, an opening parenthesis, or a word that
-  // introduces what IS held ("granted", "has", "holds", "carries"), so a
-  // scope the message lists as held in any of those positions is not
-  // presented as refused (CodeRabbit on #175). A message that names scopes
-  // but states the lack some other way ("memory:write scope is required")
-  // keeps them all, unless it also speaks of held scopes; a refusal that
-  // names none gets the generic sentence.
+  // sentence, a comma, a dash (en, em, or a spaced hyphen), an opening
+  // parenthesis, or a word that introduces what IS held ("granted", "has",
+  // "holds", "carries"), so a scope the message lists as held in any of
+  // those positions is not presented as refused (CodeRabbit on #175). The
+  // trade-off is deliberate: a comma-separated list of LACKING scopes is cut
+  // to its first item, and a held scope after a colon or a connecting word
+  // ("while") would still be named; no producer writes either today (core
+  // names exactly one scope). A message that names scopes with the name
+  // BEFORE the verb ("memory:write scope is required") keeps them all,
+  // unless it also speaks of held scopes; a refusal that names none gets
+  // the generic sentence.
   const text = m ?? "";
   const scopesIn = (t: string): string[] =>
     [...new Set((t.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
   const lackClause =
     text.match(
-      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b)[^.;(,\u2013\u2014])*)/i,
+      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b|\s-\s)[^.;(,\u2013\u2014])*)/i,
     )?.[1] ?? "";
   const speaksOfHeld = /\b(?:granted|held|has|holds|carries)\b/i.test(text);
   const named = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
