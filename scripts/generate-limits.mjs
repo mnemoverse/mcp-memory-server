@@ -45,6 +45,16 @@ const WANTED = [
   ["roomDescription", "CreateRoomRequestSchema", "description", ["maxLength"]],
   ["inviteExpiresInDays", "CreateInviteRequestSchema", "expires_in_days", ["minimum", "maximum", "default"]],
   ["inviteMaxUses", "CreateInviteRequestSchema", "max_uses", ["minimum", "maximum", "default"]],
+  ["graphSeeds", "GraphRequestSchema", "seeds", ["minItems", "maxItems"]],
+  ["graphDepth", "GraphRequestSchema", "depth", ["minimum", "maximum", "default"]],
+  ["graphMinWeight", "GraphRequestSchema", "min_weight", ["minimum"]],
+  ["graphLimit", "GraphRequestSchema", "limit", ["minimum", "maximum", "default"]],
+  // NOT here: each seed's 200-character cap. GraphRequestSchema.seeds.items
+  // carries no maxLength in the published JSON Schema at all — core enforces
+  // it with a Pydantic validator that has no JSON-Schema-expressible form
+  // (unlike writeContent/domain/etc., which are plain Field(max_length=…)),
+  // so there is no numeric field here for `collect()` to fetch. Left as an
+  // inline literal in src/tools.ts, with this same explanation there.
 ];
 
 /** Core writes an optional field as `anyOf: [{…}, {type: "null"}]`. */

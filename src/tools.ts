@@ -2947,6 +2947,14 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       description:
         "Reads the association edges around given concepts: which concepts the memory has linked together, with each link's weight, outcome valence and co-activation count. Use to inspect what a memory store has learned or to explain why a read expanded to a concept. Read-only.",
       inputSchema: {
+        // Bounds come from CORE_LIMITS (src/limits.ts, ADR-025) EXCEPT the
+        // per-seed 200-character cap: GraphRequestSchema.seeds.items carries
+        // no maxLength in the published JSON Schema at all (core enforces it
+        // with a Pydantic validator that has no JSON-Schema-expressible
+        // form, unlike writeContent/domain/etc.), so there is no numeric
+        // field for scripts/generate-limits.mjs to fetch — that literal
+        // stays inline, same as recentCursor's is generated but this one
+        // cannot be.
         seeds: z
           .array(
             z
@@ -2954,16 +2962,16 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
               .max(200)
               .refine((s) => s.trim().length > 0, { message: "must not be blank" }),
           )
-          .min(1)
-          .max(20)
+          .min(CORE_LIMITS.graphSeeds.minItems)
+          .max(CORE_LIMITS.graphSeeds.maxItems)
           .describe(
             "Concepts to center the graph on (1-20, each ≤200 chars, non-blank) — e.g. ['deploy', 'staging']. An unrecognised concept simply contributes no edges; it is not an error.",
           ),
         depth: z
           .number()
           .int()
-          .min(1)
-          .max(3)
+          .min(CORE_LIMITS.graphDepth.minimum)
+          .max(CORE_LIMITS.graphDepth.maximum)
           .optional()
           .describe(
             "Hops to expand from the seeds (1-3, default 1). At depth 2 or 3, if min_weight is omitted the engine floors edge weight at 0.05 at EVERY hop — including the first — so a hub concept cannot fan out across the whole store before limit applies; pass min_weight explicitly (0 included) to see every edge anyway.",
@@ -2977,7 +2985,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         min_weight: z
           .number()
           .finite()
-          .min(0)
+          .min(CORE_LIMITS.graphMinWeight.minimum)
           .optional()
           .describe(
             "Only include edges at or above this weight (≥ 0). Omit for no floor at depth 1; at depth 2/3 the engine applies its own 0.05 floor when this is omitted (see depth) — pass 0 to see every edge at every depth.",
@@ -2985,8 +2993,8 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         limit: z
           .number()
           .int()
-          .min(1)
-          .max(500)
+          .min(CORE_LIMITS.graphLimit.minimum)
+          .max(CORE_LIMITS.graphLimit.maximum)
           .optional()
           .describe(
             "Max edges to return (1-500, default 100 — mirrors memory_read's top_k bounds).",
@@ -3081,11 +3089,17 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         typeof truncatedRaw === "boolean" &&
         typeof minWeightAppliedRaw === "number" &&
         Number.isFinite(minWeightAppliedRaw) &&
+        // `degree`/`count` are safe-integer checks, not just finite ones:
+        // the outputSchema declares both `z.number().int()` (CodeRabbit
+        // review, round 1), and zod 4 rejects a non-integer AND an integer
+        // above 2^53 - 1 there — the same reasoning memory_feedback's
+        // `updated_count` guard already documents. `weight`/`valence` stay
+        // finite-only: their outputSchema is plain `z.number()`.
         nodesRaw.every(
           (n) =>
             typeof n?.concept === "string" &&
             typeof n?.degree === "number" &&
-            Number.isFinite(n.degree),
+            Number.isSafeInteger(n.degree),
         ) &&
         edgesRaw.every(
           (e) =>
@@ -3096,7 +3110,7 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
             typeof e?.valence === "number" &&
             Number.isFinite(e.valence) &&
             typeof e?.count === "number" &&
-            Number.isFinite(e.count) &&
+            Number.isSafeInteger(e.count) &&
             typeof e?.updated_at === "string",
         );
       if (!shapeOk) {
@@ -3136,10 +3150,24 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       // `-0.00` guard, same fix memory_feedback's avg_valence carries
       // (CodeRabbit on #146): valence can be negative and round to zero.
       const fmtSigned = (n: number): string => n.toFixed(2).replace(/^-0\.00$/, "0.00");
+      // Concept names are NOT this client's own text (CN-032): in a shared
+      // room they are whatever concept another member's memory_write
+      // supplied, so a newline or instruction-shaped string in `source`/
+      // `target` must not be interpolated raw into text a DIFFERENT
+      // principal's model then reads (Copilot review, round 1). Printed as
+      // an exact JSON literal (src/names.ts), the same treatment `@domain`
+      // and `[by "name"]` already get — not `safeInline`, which maps every
+      // non-ASCII `\w`-excluded character to a space and would silently
+      // erase a Cyrillic/CJK concept name the way it once erased author
+      // names (issue #66). `structuredContent` still carries the raw value
+      // (below): only the rendered TEXT needs the escape treatment.
+      const nameLiteral = (s: string): string =>
+        exactLiteral(s, MAX_DOMAIN_LITERAL)?.literal ?? "(name cannot be printed exactly)";
       const lines = sorted.map(
         (e, i) =>
-          `${i + 1}. ${e.source} — ${e.target} (weight: ${e.weight.toFixed(2)}, ` +
-          `valence: ${fmtSigned(e.valence)}, count: ${e.count})${formatDateTag(e.updated_at)}`,
+          `${i + 1}. ${nameLiteral(e.source)} — ${nameLiteral(e.target)} ` +
+          `(weight: ${e.weight.toFixed(2)}, valence: ${fmtSigned(e.valence)}, ` +
+          `count: ${e.count})${formatDateTag(e.updated_at)}`,
       );
       const header =
         `${edges.length} association edge${edges.length === 1 ? "" : "s"} found` +
@@ -3156,11 +3184,18 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           ? `\n\n(edges below weight ${minWeightApplied} were excluded — ` +
             `${min_weight === undefined ? "the engine's own floor at this depth" : "the min_weight you passed"})`
           : "");
-      const text = capResult([header, ...lines].join("\n") + tail);
+      // Legend appended AFTER capResult, like memory_read's: the cap
+      // truncates from the end, so applied first the legend would be the
+      // first thing an over-long page loses.
+      const text = withDomainEscapeLegend(
+        capResult([header, ...lines].join("\n") + tail),
+        ...edges.flatMap((e) => [e.source, e.target]),
+      );
 
       // structuredContent carries the validated nodes/edges EXACTLY, uncapped
-      // (OD-11, the same rule memory_read's items get): a client reading
-      // structured data reads these as the graph, not as a rendering of it.
+      // and unescaped (OD-11, the same rule memory_read's items get): a
+      // client reading structured data reads these as the graph, not as a
+      // rendering of it.
       return structured(text, { nodes, edges, truncated, min_weight_applied: minWeightApplied });
     },
   );

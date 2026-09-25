@@ -61,6 +61,23 @@ export const CORE_LIMITS = {
     maximum: 1000,
     default: 1,
   },
+  graphSeeds: {
+    minItems: 1,
+    maxItems: 20,
+  },
+  graphDepth: {
+    minimum: 1,
+    maximum: 3,
+    default: 1,
+  },
+  graphMinWeight: {
+    minimum: 0,
+  },
+  graphLimit: {
+    minimum: 1,
+    maximum: 500,
+    default: 100,
+  },
 } as const;
 
 /** The contract this file was generated from, for the freshness check. */

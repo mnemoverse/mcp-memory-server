@@ -28,6 +28,7 @@ interface JsonSchemaField {
   maxLength?: number;
   minimum?: number;
   maximum?: number;
+  minItems?: number;
   maxItems?: number;
 }
 
@@ -82,6 +83,19 @@ describe("every bounded field carries core's limit", () => {
     ["memory_invite_to_room", "max_uses", {
       minimum: CORE_LIMITS.inviteMaxUses.minimum,
       maximum: CORE_LIMITS.inviteMaxUses.maximum,
+    }],
+    ["memory_graph", "seeds", {
+      minItems: CORE_LIMITS.graphSeeds.minItems,
+      maxItems: CORE_LIMITS.graphSeeds.maxItems,
+    }],
+    ["memory_graph", "depth", {
+      minimum: CORE_LIMITS.graphDepth.minimum,
+      maximum: CORE_LIMITS.graphDepth.maximum,
+    }],
+    ["memory_graph", "min_weight", { minimum: CORE_LIMITS.graphMinWeight.minimum }],
+    ["memory_graph", "limit", {
+      minimum: CORE_LIMITS.graphLimit.minimum,
+      maximum: CORE_LIMITS.graphLimit.maximum,
     }],
   ];
 
