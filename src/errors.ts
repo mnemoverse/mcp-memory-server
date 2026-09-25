@@ -554,7 +554,7 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // `memory:<word>` and nothing else, so the api-key advice can name what to
   // grant even when `rawDetail: false` withholds the message (Copilot on
   // #175); a scope refusal that names no scope gets the generic sentence.
-  const named = [...new Set((m.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
+  const named = [...new Set(((m ?? "").match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
   const refused =
     named.length === 0
       ? "this call was refused for a missing scope so they can grant it on their side"
