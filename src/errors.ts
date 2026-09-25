@@ -520,12 +520,16 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // the generic sentence that guesses "most often the room it addressed"
   // (the hosted connector's own scope refusal did exactly that, step 4 review).
   const credential = oauth ? "this sign-in" : "this key";
+  // "Reading still works" is claimed only when the missing scope is a write
+  // scope (the message names "write"); a refusal for the read scope itself
+  // must not promise reads (Copilot on #175).
+  const writeScope = has(m, "write");
   const remedy = oauth
-    ? "tell the user to re-authorize this connector with write access"
+    ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
     : "tell the user to use a key that has it";
   const cause = has(m, "scope")
     ? `The permission this call needs is a scope ${credential} does not carry ` +
-      "(the engine's own words are in the detail below). Reading still works; " +
+      `(the engine's own words are in the detail below). ${writeScope ? "Reading still works; " : ""}` +
       `${remedy}. Do not work around it by trying another tool.`
     : has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +

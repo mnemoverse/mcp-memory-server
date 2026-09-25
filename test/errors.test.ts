@@ -1340,6 +1340,25 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(oauthText).not.toMatch(/\bkeys?\b/i);
   });
 
+  it("403 scope refusal for the READ scope does not promise that reading works (Copilot on #175)", () => {
+    const failure = {
+      status: 403,
+      body: envelope("FORBIDDEN", "the token lacks the memory:read scope", false),
+      method: "POST",
+      path: "/memory/read",
+      retryAfter: null,
+    };
+    const apiKey = explainApiFailure(failure).split("\n\n")[0] ?? "";
+    const oauthText = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
+    for (const text of [apiKey, oauthText]) {
+      expect(text).toContain("is a scope");
+      expect(text).not.toContain("Reading still works");
+      expect(text).not.toMatch(/room|most often/i);
+    }
+    expect(oauthText).toContain("re-authorize this connector with the access it needs");
+    expect(oauthText).not.toMatch(/\bkeys?\b/i);
+  });
+
   it("403 the engine never spoke to differs under oauth by exactly one word: it declines to blame the sign-in, not the key", () => {
     const apiKeyText = explainApiFailure(
       { status: 403, body: "<html>Forbidden</html>", method: "POST", path: "/memory/read", retryAfter: null },
