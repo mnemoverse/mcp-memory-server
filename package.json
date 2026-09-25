@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Hosted AI agent memory over MCP that learns from outcomes — feedback re-ranks recall — with shared rooms for multi-agent work; one key or OAuth across Claude Code, Cursor, VS Code & ChatGPT, no infra to run",
   "type": "module",
   "bin": {

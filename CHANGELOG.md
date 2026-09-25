@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-09-25
+
 ### Fixed
 
 - **A 403 for a missing scope is explained as a scope refusal, not as a room
