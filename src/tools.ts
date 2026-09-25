@@ -2959,7 +2959,17 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
           .array(
             z
               .string()
-              .max(200)
+              // CODE-POINT length, not `.max(200)` (Copilot review, round 2):
+              // zod's `.max()` on a string counts UTF-16 CODE UNITS, and
+              // core's 200-char/VARCHAR(200) bound counts Unicode CHARACTERS
+              // — 200 astral characters (many emoji, some CJK-extension
+              // ideographs) are 400 UTF-16 units and would be rejected here
+              // while remaining a valid seed core would accept. `[...s]`
+              // iterates by code point, the same technique `structuredText`
+              // and `capResult`'s hint already use (src/names.ts, src/tools.ts).
+              .refine((s) => [...s].length <= 200, {
+                message: "must be at most 200 characters",
+              })
               .refine((s) => s.trim().length > 0, { message: "must not be blank" }),
           )
           .min(CORE_LIMITS.graphSeeds.minItems)
@@ -3133,19 +3143,40 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
       const minWeightApplied = minWeightAppliedRaw;
 
       const hops = depth ?? 1;
+      // Computed BEFORE the empty-edges branch and shared with the non-empty
+      // one below (Copilot review, round 2): the early return used to skip
+      // both notes entirely, so a truncated, all-below-floor answer (0 edges
+      // survived the cut) told a text-only reader only "no association edges
+      // found" — indistinguishable from a genuinely quiet concept.
+      const truncatedNote = truncated
+        ? "\n\n(truncated — the store may hold more edges than this call " +
+          "reached; core does not promise these are sorted by weight before " +
+          "the cut, so a higher min_weight, not a lower limit, is what " +
+          "reliably narrows to the strongest ones)"
+        : "";
+      const floorAttribution =
+        min_weight === undefined ? "the engine's own floor at this depth" : "the min_weight you passed";
+      const floorNote =
+        minWeightApplied > 0
+          ? `\n\n(edges below weight ${minWeightApplied} were excluded — ${floorAttribution})`
+          : "";
       if (edges.length === 0) {
         return structured(
           `No association edges found for ${seeds.length === 1 ? "this seed" : "these seeds"} ` +
             `within ${hops} hop${hops === 1 ? "" : "s"}` +
             (minWeightApplied > 0 ? ` at or above weight ${minWeightApplied}` : "") +
-            `.`,
+            `.` +
+            truncatedNote +
+            floorNote,
           { nodes, edges, truncated, min_weight_applied: minWeightApplied },
         );
       }
 
       // Sorted by weight, strongest first (the brief for this tool, and the
       // one ranking a reader can act on — core does not promise the wire
-      // order is anything in particular).
+      // order is anything in particular). structuredContent.edges (below)
+      // deliberately keeps the SERVER's order — only this rendered `lines`
+      // array is reordered (llms.txt says so explicitly, Copilot round 2).
       const sorted = [...edges].sort((a, b) => b.weight - a.weight);
       // `-0.00` guard, same fix memory_feedback's avg_valence carries
       // (CodeRabbit on #146): valence can be negative and round to zero.
@@ -3173,22 +3204,11 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         `${edges.length} association edge${edges.length === 1 ? "" : "s"} found` +
         (minWeightApplied > 0 ? ` (weight ≥ ${minWeightApplied})` : "") +
         ":";
-      const tail =
-        (truncated
-          ? "\n\n(truncated — the store may hold more edges than are shown " +
-            "here; core does not promise these are sorted by weight before the " +
-            "cut, so a higher min_weight, not a lower limit, is what reliably " +
-            "narrows to the strongest ones)"
-          : "") +
-        (minWeightApplied > 0
-          ? `\n\n(edges below weight ${minWeightApplied} were excluded — ` +
-            `${min_weight === undefined ? "the engine's own floor at this depth" : "the min_weight you passed"})`
-          : "");
       // Legend appended AFTER capResult, like memory_read's: the cap
       // truncates from the end, so applied first the legend would be the
       // first thing an over-long page loses.
       const text = withDomainEscapeLegend(
-        capResult([header, ...lines].join("\n") + tail),
+        capResult([header, ...lines].join("\n") + truncatedNote + floorNote),
         ...edges.flatMap((e) => [e.source, e.target]),
       );
 

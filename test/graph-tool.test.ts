@@ -35,6 +35,10 @@ describe("memory_graph: input is refused here, before the request, out of bounds
     ["21 seeds", { seeds: Array(21).fill("c") }],
     ["a blank seed", { seeds: ["  "] }],
     ["a seed over 200 chars", { seeds: ["c".repeat(201)] }],
+    // 201 CODE POINTS of an astral character (each "🎉" is one code point,
+    // two UTF-16 units) — over the limit measured correctly, not merely over
+    // 200 UTF-16 units (see the code-point-length regression test below).
+    ["a seed over 200 code points, in astral characters", { seeds: ["🎉".repeat(201)] }],
     ["depth 0", { seeds: ["c"], depth: 0 }],
     ["depth 4", { seeds: ["c"], depth: 4 }],
     ["limit 501", { seeds: ["c"], limit: 501 }],
@@ -43,6 +47,20 @@ describe("memory_graph: input is refused here, before the request, out of bounds
     const res = await mcp.call("memory_graph", args as Record<string, unknown>);
     expect(res.isError, label).toBe(true);
     expect(mcp.calls, label).toHaveLength(0);
+  });
+
+  // Copilot review, round 2: `z.string().max(200)` counts UTF-16 code UNITS,
+  // not Unicode code points — 200 astral characters (400 UTF-16 units) is a
+  // VALID seed under core's 200-CHARACTER bound and must reach the wire, not
+  // be rejected here on a measurement this client got wrong.
+  it("accepts a seed of exactly 200 astral code points (400 UTF-16 units)", async () => {
+    mcp.on(GRAPH, LIVE_EXAMPLE);
+    const seed = "🎉".repeat(200);
+    expect([...seed].length).toBe(200);
+    expect(seed.length).toBe(400); // the measurement this check must NOT use
+    const res = await mcp.call("memory_graph", { seeds: [seed] });
+    expect(res.isError).toBeFalsy();
+    expect(mcp.calls).toHaveLength(1);
   });
 });
 
@@ -146,6 +164,34 @@ describe("memory_graph: happy path against core's own documented example", () =>
     expect(result.text).toContain("the engine's own floor at this depth");
   });
 
+  // Copilot review, round 2 (llms.txt clarity finding): sorting is a TEXT
+  // rendering choice, not a promise about structuredContent, which a
+  // consumer may read directly without ever seeing the text.
+  it("sorts the rendered text by weight but keeps structuredContent.edges in the server's own order", async () => {
+    const weak = { source: "a", target: "b", weight: 0.1, valence: 0, count: 1, updated_at: "2026-09-24T00:00:00Z" };
+    const strong = { source: "c", target: "d", weight: 0.9, valence: 0, count: 2, updated_at: "2026-09-24T00:00:00Z" };
+    mcp.on(GRAPH, {
+      nodes: [
+        { concept: "a", degree: 1 },
+        { concept: "c", degree: 1 },
+      ],
+      edges: [weak, strong], // weak-first on the wire, on purpose
+      truncated: false,
+      min_weight_applied: 0,
+    });
+
+    const result = await mcp.call("memory_graph", { seeds: ["a", "c"] });
+
+    // Text: strong edge printed first (sorted).
+    const strongLine = result.text.indexOf('"c" — "d"');
+    const weakLine = result.text.indexOf('"a" — "b"');
+    expect(strongLine).toBeGreaterThan(-1);
+    expect(weakLine).toBeGreaterThan(-1);
+    expect(strongLine).toBeLessThan(weakLine);
+    // structuredContent: wire order preserved (weak, then strong).
+    expect((result.structuredContent as { edges: unknown[] }).edges).toEqual([weak, strong]);
+  });
+
   it("a floored response says 'the min_weight you passed' when the caller set one explicitly", async () => {
     mcp.on(GRAPH, { ...LIVE_EXAMPLE, min_weight_applied: 0.3 });
 
@@ -167,6 +213,22 @@ describe("memory_graph: happy path against core's own documented example", () =>
       truncated: false,
       min_weight_applied: 0,
     });
+  });
+
+  // Copilot review, round 2: the empty-edges early return used to skip the
+  // truncated/floor notes entirely, so a walk that hit its cap before
+  // finding anything above the floor read exactly like a concept with no
+  // associations at all — the same could-not-check/does-not-exist collision
+  // this package's other tools already closed elsewhere.
+  it("no edges, but truncated and floored: both notes still appear", async () => {
+    mcp.on(GRAPH, { nodes: [], edges: [], truncated: true, min_weight_applied: 0.05 });
+
+    const result = await mcp.call("memory_graph", { seeds: ["nope"], depth: 2 });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toContain("at or above weight 0.05");
+    expect(result.text).toContain("truncated");
+    expect(result.text).toContain("the engine's own floor at this depth");
   });
 });
 

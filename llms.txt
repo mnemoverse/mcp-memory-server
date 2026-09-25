@@ -103,7 +103,7 @@ Parameters:
 - min_weight (number, optional): Only include edges at or above this weight (>= 0); honoured at every hop with no server override, 0 included.
 - limit (integer, optional, default 100): Max edges to return, 1-500.
 
-Returns: Edges sorted by weight — source, target, weight, valence, count, updated_at — and the concepts they touch (concept, degree); plus truncated and min_weight_applied.
+Returns: The rendered text lists edges sorted by weight, strongest first; the structured result keeps the server's own order. Each edge: source, target, weight, valence, count, updated_at. Plus the concepts they touch (concept, degree), truncated, and min_weight_applied.
 
 ### vault_list
 List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown.
