@@ -68,8 +68,10 @@ git history and the GitHub releases are the record.
   opening would contradict that, so this one 403 opens differently), that
   reading still works when the missing scope is the write scope and the read
   scope is not named too, and what to do (re-authorize with write access, or
-  with the access the call needs, under `auth: "oauth"`; use a key that has
-  it under api-key). Before this, such a 403 fell through to the generic
+  with the access the call needs, under `auth: "oauth"`; under api-key, tell
+  the user which scope was refused so they grant it on their side, since an
+  API key carries no scope selection this package knows of and a key swap is
+  not a fix it can promise). Before this, such a 403 fell through to the generic
   sentence, which guesses "most often the room it addressed" and points at
   `memory_list_rooms`, a wrong cause stated confidently. The room causes keep
   precedence: room membership is itself called a scope on this surface, so a

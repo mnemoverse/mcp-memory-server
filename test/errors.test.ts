@@ -1329,7 +1329,9 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     };
     const apiKey = explainApiFailure(failure).split("\n\n")[0] ?? "";
     const oauthText = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
-    expect(apiKey).toContain("refused (403). The API key identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user to use a key that has it.");
+    expect(apiKey).toContain("refused (403). The API key identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user which scope was refused so they can grant it on their side.");
+    // No impossible fix: an API key carries no scope selection (Copilot on #175).
+    expect(apiKey).not.toMatch(/use a key|another key|a key that/i);
     expect(oauthText).toContain("refused (403). Your sign-in identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user to re-authorize this connector with write access.");
     for (const text of [apiKey, oauthText]) {
       expect(text).not.toMatch(/room|membership|invite|archived|owner/i);
@@ -1356,7 +1358,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(text).not.toMatch(/room|most often/i);
     }
     expect(oauthText).toContain("detail below. Tell the user to re-authorize this connector with the access it needs.");
-    expect(apiKey).toContain("detail below. Tell the user to use a key that has it.");
+    expect(apiKey).toContain("detail below. Tell the user which scope was refused so they can grant it on their side.");
     expect(oauthText).not.toMatch(/\bkeys?\b/i);
   });
 
@@ -1386,7 +1388,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(text).toContain("Tell the user exactly what was refused so it can be reported");
       expect(text).not.toContain("does not carry a scope");
       expect(text).not.toContain("Reading still works");
-      expect(text).not.toMatch(/re-authorize|use a key|most often|room/i);
+      expect(text).not.toMatch(/re-authorize|grant it|most often|room/i);
     }
     // The route-policy branch is tried AFTER the room causes: a message that
     // carries both keeps its room diagnosis.

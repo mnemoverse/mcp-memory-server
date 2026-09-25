@@ -541,9 +541,16 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // scope and the read scope is not named too (Copilot and Sigma on #175).
   const writeScope =
     (has(m, "memory:write") || has(m, "write scope")) && !(has(m, "memory:read") || has(m, "read scope"));
+  // Under oauth the remedy is real: the connector's consent flow grants
+  // scopes. Under api-key it is credential-neutral: an API key carries no
+  // scope selection this package knows of (the scope rules are OIDC-only, and
+  // no producer sends a scope refusal to an API-key caller today), so the
+  // reply names no fix a key swap cannot deliver; the user is told which
+  // scope was refused and grants it on their side (Copilot and the internal
+  // refuter on #175).
   const remedy = oauth
     ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
-    : "tell the user to use a key that has it";
+    : "tell the user which scope was refused so they can grant it on their side";
   // The remedy either follows "Reading still works;" mid-sentence or opens
   // its own sentence, capitalised.
   const advice = writeScope ? `Reading still works; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
