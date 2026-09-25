@@ -29,6 +29,10 @@ name: release
 #      auto-generated commit list appended, .mcpb bundle attached.
 #  11. repository_dispatch to mnemoverse-docs so the docs site learns the new
 #      version immediately (#98); its daily cron is the fallback.
+#  12. repository_dispatch `mcp-memory-server-released` {version, tag} to each
+#      consumer of the MCP surface (today mnemoverse/ai-sdk), whose
+#      surface-bump contour then bumps, tests and releases; its schedule is
+#      the fallback.
 #
 # Why OIDC instead of a PAT:
 # The GitHub OIDC provider issues a short-lived JWT that the MCP Registry trusts on the basis
@@ -41,9 +45,10 @@ name: release
 # DOCS_DISPATCH_TOKEN both live:
 #   - NPM_TOKEN — npm automation token from npmjs.com/settings/{org}/tokens/granular-access-tokens/new
 #                 (select "Automation", grant publish access to @mnemoverse/mcp-memory-server).
-#   - DOCS_DISPATCH_TOKEN (optional) — fine-grained PAT, mnemoverse-docs only,
-#                 contents:write. Missing token degrades to a warning: the docs
-#                 site's daily cron catches up within a day.
+#   - DOCS_DISPATCH_TOKEN (optional) — fine-grained PAT, contents:write on
+#                 mnemoverse-docs and on each consumer repository in step 12
+#                 (mnemoverse/ai-sdk). Missing token degrades to a warning: the
+#                 docs site's daily cron and each consumer's schedule catch up.
 #
 # To release:
 #   1. Bump version in package.json (src/index.ts reads it from there) and run
@@ -492,6 +497,35 @@ jobs:
           else
             echo "::warning::dispatch failed (expired/revoked DOCS_DISPATCH_TOKEN?) — the docs cron will catch up within a day"
           fi
+
+      # Tell each consumer of the MCP surface that a release is on npm, with
+      # its version, so the consumer's surface-bump contour bumps its exact
+      # pin, runs its contract tests and releases right away (mnemoverse/ai-sdk
+      # docs/AUTO-UPDATE-CONTOUR.md). This runs only after npm serves the
+      # version (the wait step above), which is what the consumers expect.
+      # Same mechanism and token as the docs notice; every consumer also polls
+      # npm on a schedule, so a missing token or a failed dispatch costs hours
+      # of lag, never a failed release: a warning here. The payload is a hint:
+      # each consumer reads npm's latest itself.
+      - name: Notify consumers of the MCP surface
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::DOCS_DISPATCH_TOKEN not set — consumers of the MCP surface will catch up via their scheduled runs"
+            exit 0
+          fi
+          VERSION="${TAG#v}"
+          for REPO in mnemoverse/ai-sdk; do
+            if gh api "repos/$REPO/dispatches" -f event_type=mcp-memory-server-released \
+                -f "client_payload[version]=$VERSION" -f "client_payload[tag]=$TAG"; then
+              echo "✓ dispatched mcp-memory-server-released $VERSION to $REPO"
+            else
+              echo "::warning::dispatch to $REPO failed (DOCS_DISPATCH_TOKEN without access to it, expired or revoked?) — its scheduled run will catch up"
+            fi
+          done
 
   # ---------------------------------------------------------------------------
   # A failed release used to reach nobody.
