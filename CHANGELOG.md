@@ -89,6 +89,51 @@ git history and the GitHub releases are the record.
   release-wave surface, not a per-tool addition, and are tracked
   separately.
 
+## [0.12.1] — 2026-09-25
+
+### Fixed
+
+- **A 403 for a missing scope is explained as a scope refusal, not as a room
+  problem.** When the engine's 403 message names a scope in the vocabulary
+  core and the hosted connector use (`Token lacks memory:write scope`, `the
+  token lacks the memory:write scope`; a `memory:` name, or a lack verb such
+  as "lacks" or "missing" followed by the word "scope" in the same sentence,
+  is what marks it; a
+  write with a read-only token is how the connector refuses a write on the
+  package's surface at step 4 of ADR-025), the explanation says the
+  credential identified the account but
+  does not carry a scope the call needs (the usual "is NOT the problem"
+  opening would contradict that, so this one 403 opens differently), that
+  reads are not affected by the refusal (they need only the read scope) when
+  the refused scope is the write scope and the read scope is neither refused
+  nor stated lacking anywhere in the message, and what to do (re-authorize with write access, or
+  with the access the call needs, under `auth: "oauth"`; under api-key, tell
+  the user which scope was refused so they grant it on their side, since an
+  API key carries no scope selection this package knows of and a key swap is
+  not a fix it can promise). Before this, such a 403 fell through to the generic
+  sentence, which guesses "most often the room it addressed" and points at
+  `memory_list_rooms`, a wrong cause stated confidently. Under api-key the
+  reply names the refused scope(s) from the engine's own words, reading the
+  clause that states the lack (up to a sentence end, a comma, a dash, a
+  parenthesis, a conjunction such as "but", or a word such as "granted" or
+  "has"), and a scope the message says is held is not presented as refused in
+  the forms recognised (a name followed by "is held", "is granted", "is
+  available" or "is present", or after "granted", "has", "holds" or
+  "carries" in the same fragment); a message that
+  names scopes before the verb and says nothing of held scopes has them all
+  named; a comma-separated list of lacking scopes is cut to its first item
+  (no producer writes one: core names exactly one scope). The
+  pointer to the engine's own words appears only when `rawDetail` leaves the
+  raw detail in the reply. The room causes keep precedence: room
+  membership is itself called a scope on this surface, so a room refusal
+  that says "scope" keeps its room diagnosis (the read-only room cause now
+  needs the room vocabulary too, so a read-only token is a scope refusal),
+  and the bare word "scope" alone is not a scope refusal. Core's other scope sentence, `Route
+  has no scope policy; denied by default`, is a gap in the server's own
+  configuration, not a credential problem: it gets its own diagnosis, which
+  asks nothing of the credential and tells the agent to report exactly what
+  was refused. Text only, no shape change: PATCH by the rule above.
+
 ## [0.12.0] — 2026-09-25
 
 ### Added

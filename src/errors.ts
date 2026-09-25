@@ -514,6 +514,130 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   const holder = oauth ? "This account" : "This key";
   const holderLc = oauth ? "this account" : "this key";
   const m = env.message;
+  // A SCOPE refusal: the credential identified the account and lacks a
+  // permission the call needs (a write with a read-only token). Two producers
+  // today, both name the scope: core's middleware ("Token lacks memory:write
+  // scope") and the hosted connector's own gate ("the token lacks the
+  // memory:write scope"). It is not about a room, so it must not fall
+  // through to the generic sentence that guesses "most often the room it
+  // addressed" (the connector's refusal did exactly that, step 4 review).
+  // The check is keyed on that vocabulary (a scope NAME, or one of the lack
+  // verbs lacks, lacking, missing, without, requires, required, needs
+  // followed by the word "scope" in the same sentence), not on the bare word
+  // "scope" ("outside the scope of this plan and needs a review" is not a
+  // scope refusal), and it is tried AFTER the room causes: room
+  // membership is itself called a scope elsewhere on this surface, so a room
+  // refusal that happens to say "scope" keeps its room diagnosis (Sigma on
+  // #175).
+  const LACK_THEN_SCOPE = /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b[^.;]*\bscope\b/i;
+  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || LACK_THEN_SCOPE.test(m ?? ""));
+  // Core's other scope sentence, "Route has no scope policy; denied by
+  // default", is NOT about the credential: the route itself has no policy
+  // registered, and the middleware denies it by default. No re-authorization
+  // and no other credential changes that, so it gets its own diagnosis
+  // (CodeRabbit and Copilot on #175). Keyed on core's exact clause ("no
+  // scope policy"), so a message that names a lacking scope and merely
+  // mentions a scope policy stays a scope refusal; core's sentence itself
+  // names no scope and does not say "lacks", so it never matches
+  // `scopeRefusal` either.
+  const routePolicy = has(m, "no scope policy");
+  // Under oauth the remedy is real: the connector's consent flow grants
+  // scopes. Under api-key it is credential-neutral: an API key carries no
+  // scope selection this package knows of (the scope rules are OIDC-only, and
+  // no producer sends a scope refusal to an API-key caller today), so the
+  // reply names no fix a key swap cannot deliver; the user is told which
+  // scope was refused and grants it on their side (Copilot and the internal
+  // refuter on #175).
+  // The scope NAMES come from the engine's message itself, matched as
+  // `memory:<word>` and nothing else, so the api-key advice can name what to
+  // grant even when `rawDetail: false` withholds the message (Copilot on
+  // #175). Only the clause that states the lack is read: from "lacks",
+  // "missing", "without", "requires" or "needs" up to the end of the
+  // sentence, a comma, a dash (en, em, or a spaced hyphen), an opening
+  // parenthesis, a conjunction (but, while, whereas, although, though, yet,
+  // however, except), or a word that introduces what IS held ("granted",
+  // "has", "holds", "carries"), so a scope the message lists as held in any
+  // of those positions is not presented as refused (CodeRabbit on #175).
+  // The trade-off is deliberate: a comma-separated list of LACKING scopes is
+  // cut to its first item, and a held scope after a colon or after a
+  // connective not in that list ("with memory:read retained") would still
+  // be named; no producer writes either today (core names exactly one
+  // scope). A message that names scopes with the name
+  // BEFORE the verb ("memory:write scope is required") keeps them all,
+  // unless it also speaks of held scopes; a refusal that names none gets
+  // the generic sentence.
+  const text = m ?? "";
+  const scopesIn = (t: string): string[] =>
+    [...new Set((t.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
+  const lackClause =
+    text.match(
+      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries|but|while|whereas|although|though|yet|however|except)\b|\s-\s)[^.;(,\u2013\u2014])*)/i,
+    )?.[1] ?? "";
+  const speaksOfHeld = /\b(?:granted|held|has|holds|carries)\b/i.test(text);
+  // Names the message says are HELD are never refused, wherever they sit: a
+  // name followed by "is/are (already) held|granted|available|present", or
+  // any name after a held-word up to the end of that fragment (Sigma on
+  // #175: "lacks memory:write scope but memory:read is already held").
+  const heldNames = new Set([
+    // The window between the name and "is held" may not contain another
+    // scope name, or "memory:write scope but memory:read is held" would
+    // count memory:write as held.
+    ...[...text.matchAll(/\b(memory:[a-z_]+)\b(?:(?!memory:)[^.;,]){0,40}?\b(?:is|are)\s+(?:already\s+|still\s+)?(?:held|granted|available|present)\b/gi)].map((x) => x[1].toLowerCase()),
+    // The held fragment ends where a lack verb or a conjunction starts, so
+    // "has memory:read scope but lacks memory:write scope" holds only read.
+    ...[
+      ...text.matchAll(
+        /\b(?:granted|held|has|holds|carries)\b((?:(?!\b(?:lacks?|lacking|missing|without|requires?|required|needs?|but|while|whereas|although|though|yet|however|except)\b)[^.;])*)/gi,
+      ),
+      // A name the lack clause itself refuses is not held by this fragment
+      // ("has memory:write scope for room A but lacks memory:write scope
+      // for room B" refuses memory:write).
+    ].flatMap((x) => scopesIn(x[1])).filter((x) => !scopesIn(lackClause).includes(x)),
+  ]);
+  const candidates = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
+  const named = candidates.filter((x) => !heldNames.has(x));
+  // Reads are said to be unaffected only when the REFUSED scope is the write
+  // scope and the read scope is not among the refused (Copilot and Sigma on
+  // #175; the flag reads the refused names, not the whole message, so
+  // "lacks memory:admin scope; has memory:write scope" does not count as a
+  // write refusal); a refusal that names no scope falls back to the words
+  // "write scope"/"read scope". "Unaffected by this refusal" is all the
+  // refusal supports: whether reads work depends on the read scope, which it
+  // says nothing about.
+  // And never when the message states the read scope lacking anywhere, even
+  // past the cut of the lack clause ("lacks memory:write scope, memory:read
+  // scope"): a read name that is not held, or the words "read scope".
+  const readStatedLacking = (scopesIn(text).includes("memory:read") && !heldNames.has("memory:read")) || has(m, "read scope");
+  const writeScope =
+    named.length > 0
+      ? named.includes("memory:write") && !named.includes("memory:read") && !readStatedLacking
+      : has(m, "write scope") && !has(m, "read scope");
+  const list = named.length <= 2 ? named.join(" and ") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  const refused =
+    named.length === 0
+      ? "this call was refused for a missing scope so they can grant it on their side"
+      : named.length === 1
+        ? `the ${named[0]} scope was refused so they can grant it on their side`
+        : `the ${list} scopes were refused so they can grant them on their side`;
+  const remedy = oauth
+    ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
+    : `tell the user ${refused}`;
+  // The remedy either follows the reads clause mid-sentence or opens its own
+  // sentence, capitalised.
+  const advice = writeScope ? `Reads are not affected by this refusal, since they need only the read scope; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
+  // The opening clause of the reply (below) already says what is missing, so
+  // the cause carries the pointer to the engine's words, the advice, and the
+  // one prohibition. The pointer exists only when the raw-detail paragraph
+  // will be there: under `rawDetail: false` the consumer withholds the body,
+  // and a pointer to withheld content is a lie (Copilot on #175).
+  const pointer = wording.rawDetail ? "The engine's own words are in the detail below. " : "";
+  const scopeCause = `${pointer}${advice} ` + "Do not work around it by trying another tool.";
+  const routePolicyCause =
+    "The engine denies this route by default because no scope policy is " +
+    "registered for it: a gap in the server's own configuration, not anything " +
+    `about ${holderLc}, so no re-authorization and no other credential changes ` +
+    "it. Tell the user exactly what was refused so it can be reported, and do " +
+    "not work around it by trying another tool.";
   const cause = has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +
       "and every write, for its owner as much as for a member, and this client " +
@@ -522,7 +646,7 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
       ? `${holder} is not an active member of the room you addressed. Ask the ` +
         "room's owner for an invite; memory_list_rooms shows the rooms it can " +
         "already reach."
-      : has(m, "read-only")
+      : has(m, "read-only") && (has(m, "membership") || has(m, "room"))
         ? `${holder}'s membership in that room is read-only — it can read the ` +
           "room but not write to it. Ask the room's owner for write access."
         : has(m, "invalid room address")
@@ -532,16 +656,26 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
           : has(m, "own this room")
             ? "That room belongs to another account, and only its owner can do " +
               `this. memory_list_rooms shows which rooms ${holderLc} owns.`
-            : `Something about this request is not permitted for ${holderLc} — ` +
-              "most often the room it addressed. Check memory_list_rooms, and " +
-              "if nothing there explains it, tell the user exactly what was " +
-              "refused instead of guessing.";
+            : routePolicy
+              ? routePolicyCause
+              : scopeRefusal
+                ? scopeCause
+                : `Something about this request is not permitted for ${holderLc} — ` +
+                "most often the room it addressed. Check memory_list_rooms, and " +
+                "if nothing there explains it, tell the user exactly what was " +
+                "refused instead of guessing.";
   const subject = oauth ? "Your sign-in" : "The API key";
-  return (
-    `Mnemoverse: this request was refused (403). ${subject} is NOT the problem ` +
-    "— it identified the account fine, and this was a permission decision. " +
-    `${cause} Do not retry the same call: it will be refused again.`
-  );
+  // The innocent clause ("NOT the problem") would contradict the scope cause
+  // that follows it: for that one refusal the credential did identify the
+  // account, and the decision was about a scope it does not carry, so the
+  // clause says exactly that (CodeRabbit on #175). Every other 403, the room
+  // causes and the route-policy denial included, keeps the clause byte for
+  // byte.
+  const opening =
+    cause === scopeCause
+      ? `${subject} identified the account fine, but it does not carry a scope this call needs. `
+      : `${subject} is NOT the problem — it identified the account fine, and this was a permission decision. `;
+  return `Mnemoverse: this request was refused (403). ${opening}${cause} Do not retry the same call: it will be refused again.`;
 }
 
 /**
