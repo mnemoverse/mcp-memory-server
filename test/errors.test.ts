@@ -1438,16 +1438,18 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     // message itself, so it survives rawDetail: false (Copilot on #175).
     expect(compound).toContain("Tell the user the memory:read and memory:write scopes were refused so they can grant them on their side.");
     // Only the scopes the lack clause names are presented as refused: a scope
-    // the message lists as HELD is not (CodeRabbit on #175).
+    // the message lists as HELD is not (CodeRabbit on #175). When the held
+    // scope is memory:read the reads clause precedes the remedy, so these
+    // pins accept the remedy in either case.
     const held = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "Token has memory:read scope but lacks memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
     ).split("\n\n")[0] ?? "";
-    expect(held).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+    expect(held).toMatch(/[Tt]ell the user the memory:write scope was refused so they can grant it on their side\./);
     expect(held).not.toMatch(/memory:read scope was refused|memory:read and memory:write/);
     const granted = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:write scope (granted: memory:read)", false), method: "POST", path: "/memory/write", retryAfter: null },
     ).split("\n\n")[0] ?? "";
-    expect(granted).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+    expect(granted).toMatch(/[Tt]ell the user the memory:write scope was refused so they can grant it on their side\./);
     expect(granted).not.toMatch(/memory:read scope was refused|memory:read and memory:write|memory:write and memory:read/);
     // The held scope after a comma, and after a held-word with no punctuation
     // (this one couples the stop-word list; the refuter on cf28f17).
@@ -1458,7 +1460,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       const held2 = explainApiFailure(
         { status: 403, body: envelope("FORBIDDEN", message, false), method: "POST", path: "/memory/write", retryAfter: null },
       ).split("\n\n")[0] ?? "";
-      expect(held2).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+      expect(held2).toMatch(/[Tt]ell the user the memory:write scope was refused so they can grant it on their side\./);
       expect(held2).not.toMatch(/memory:read scope was refused|memory:write and memory:read/);
     }
     // The connector's older sentence: the token is "read-only" with no room
@@ -1493,9 +1495,54 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       const bounded = explainApiFailure(
         { status: 403, body: envelope("FORBIDDEN", message, false), method: "POST", path: "/memory/write", retryAfter: null },
       ).split("\n\n")[0] ?? "";
-      expect(bounded).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+      expect(bounded).toMatch(/[Tt]ell the user the memory:write scope was refused so they can grant it on their side\./);
       expect(bounded).not.toMatch(/memory:read scope was refused|memory:write and memory:read/);
     }
+    // A held scope named BEFORE the held-word inside the lack clause is not
+    // refused either (Sigma on #175), nor one the message says "is held".
+    for (const message of [
+      "Token lacks memory:write scope but memory:read is already held",
+      "Token lacks memory:write scope and memory:read is granted",
+      "Token lacks memory:write scope but memory:read still works",
+    ]) {
+      const swept = explainApiFailure(
+        { status: 403, body: envelope("FORBIDDEN", message, false), method: "POST", path: "/memory/write", retryAfter: null },
+      ).split("\n\n")[0] ?? "";
+      expect(swept).toMatch(/[Tt]ell the user the memory:write scope was refused so they can grant it on their side\./);
+      expect(swept).not.toMatch(/memory:read scope was refused|memory:write and memory:read/);
+    }
+    // The write-access remedy and the reads clause follow the REFUSED scope,
+    // not any "memory:write" in the message (Copilot on #175).
+    const adminRefused = {
+      status: 403,
+      body: envelope("FORBIDDEN", "Token lacks memory:admin scope; token has memory:write scope", false),
+      method: "POST",
+      path: "/memory/reset",
+      retryAfter: null,
+    };
+    const adminKey = explainApiFailure(adminRefused).split("\n\n")[0] ?? "";
+    const adminOauth = explainApiFailure(adminRefused, OAUTH).split("\n\n")[0] ?? "";
+    expect(adminKey).toContain("Tell the user the memory:admin scope was refused so they can grant it on their side.");
+    expect(adminOauth).toContain("Tell the user to re-authorize this connector with the access it needs.");
+    for (const text of [adminKey, adminOauth]) {
+      expect(text).not.toContain("not affected by this refusal");
+      expect(text).not.toContain("write access");
+    }
+    // A lack verb next to "scope" is a scope refusal even without a
+    // memory: name (Copilot on #175): the remedy stays generic, and the
+    // write-access wording follows the words "write scope".
+    const verbOnly = {
+      status: 403,
+      body: envelope("FORBIDDEN", "Token is missing the write scope", false),
+      method: "POST",
+      path: "/memory/write",
+      retryAfter: null,
+    };
+    const verbKey = explainApiFailure(verbOnly).split("\n\n")[0] ?? "";
+    const verbOauth = explainApiFailure(verbOnly, OAUTH).split("\n\n")[0] ?? "";
+    expect(verbKey).toContain("does not carry a scope this call needs. The engine's own words are in the detail below. Reads are not affected by this refusal, since they need only the read scope; tell the user this call was refused for a missing scope so they can grant it on their side.");
+    expect(verbOauth).toContain("Reads are not affected by this refusal, since they need only the read scope; tell the user to re-authorize this connector with write access.");
+    for (const text of [verbKey, verbOauth]) expect(text).not.toMatch(/most often|room/i);
     // Three scopes read as a list.
     const three = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:read scope and memory:write scope and memory:admin scope", false), method: "POST", path: "/memory/write", retryAfter: null },

@@ -521,12 +521,14 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // memory:write scope"). It is not about a room, so it must not fall
   // through to the generic sentence that guesses "most often the room it
   // addressed" (the connector's refusal did exactly that, step 4 review).
-  // The check is keyed on that vocabulary (a scope NAME or "lacks"), not on
-  // the bare word "scope", and it is tried AFTER the room causes: room
+  // The check is keyed on that vocabulary (a scope NAME, or a lack verb:
+  // lacks, missing, without, requires, needs), not on the bare word "scope",
+  // and it is tried AFTER the room causes: room
   // membership is itself called a scope elsewhere on this surface, so a room
   // refusal that happens to say "scope" keeps its room diagnosis (Sigma on
   // #175).
-  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || has(m, "lacks"));
+  const LACK_VERB = /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b/i;
+  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || LACK_VERB.test(m ?? ""));
   // Core's other scope sentence, "Route has no scope policy; denied by
   // default", is NOT about the credential: the route itself has no policy
   // registered, and the middleware denies it by default. No re-authorization
@@ -537,12 +539,6 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // names no scope and does not say "lacks", so it never matches
   // `scopeRefusal` either.
   const routePolicy = has(m, "no scope policy");
-  // Reads are said to be unaffected only when the missing scope is the write
-  // scope and the read scope is not named too (Copilot and Sigma on #175);
-  // and "unaffected by this refusal" is all the refusal supports: whether
-  // reads work depends on the read scope, which it says nothing about.
-  const writeScope =
-    (has(m, "memory:write") || has(m, "write scope")) && !(has(m, "memory:read") || has(m, "read scope"));
   // Under oauth the remedy is real: the connector's consent flow grants
   // scopes. Under api-key it is credential-neutral: an API key carries no
   // scope selection this package knows of (the scope rules are OIDC-only, and
@@ -571,10 +567,40 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
     [...new Set((t.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
   const lackClause =
     text.match(
-      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b|\s-\s)[^.;(,\u2013\u2014])*)/i,
+      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries|but|while|whereas|although|though|yet|however|except)\b|\s-\s)[^.;(,\u2013\u2014])*)/i,
     )?.[1] ?? "";
   const speaksOfHeld = /\b(?:granted|held|has|holds|carries)\b/i.test(text);
-  const named = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
+  // Names the message says are HELD are never refused, wherever they sit: a
+  // name followed by "is/are (already) held|granted|available|present", or
+  // any name after a held-word up to the end of that fragment (Sigma on
+  // #175: "lacks memory:write scope but memory:read is already held").
+  const heldNames = new Set([
+    // The window between the name and "is held" may not contain another
+    // scope name, or "memory:write scope but memory:read is held" would
+    // count memory:write as held.
+    ...[...text.matchAll(/\b(memory:[a-z_]+)\b(?:(?!memory:)[^.;,]){0,40}?\b(?:is|are)\s+(?:already\s+|still\s+)?(?:held|granted|available|present)\b/gi)].map((x) => x[1].toLowerCase()),
+    // The held fragment ends where a lack verb or a conjunction starts, so
+    // "has memory:read scope but lacks memory:write scope" holds only read.
+    ...[
+      ...text.matchAll(
+        /\b(?:granted|held|has|holds|carries)\b((?:(?!\b(?:lacks?|lacking|missing|without|requires?|required|needs?|but|while|whereas|although|though|yet|however|except)\b)[^.;])*)/gi,
+      ),
+    ].flatMap((x) => scopesIn(x[1])),
+  ]);
+  const candidates = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
+  const named = candidates.filter((x) => !heldNames.has(x));
+  // Reads are said to be unaffected only when the REFUSED scope is the write
+  // scope and the read scope is not among the refused (Copilot and Sigma on
+  // #175; the flag reads the refused names, not the whole message, so
+  // "lacks memory:admin scope; has memory:write scope" does not count as a
+  // write refusal); a refusal that names no scope falls back to the words
+  // "write scope"/"read scope". "Unaffected by this refusal" is all the
+  // refusal supports: whether reads work depends on the read scope, which it
+  // says nothing about.
+  const writeScope =
+    named.length > 0
+      ? named.includes("memory:write") && !named.includes("memory:read")
+      : has(m, "write scope") && !has(m, "read scope");
   const list = named.length <= 2 ? named.join(" and ") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
   const refused =
     named.length === 0

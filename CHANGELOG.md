@@ -61,14 +61,16 @@ git history and the GitHub releases are the record.
 - **A 403 for a missing scope is explained as a scope refusal, not as a room
   problem.** When the engine's 403 message names a scope in the vocabulary
   core and the hosted connector use (`Token lacks memory:write scope`, `the
-  token lacks the memory:write scope`; a write with a read-only token is how
-  the connector refuses a write on the package's surface at step 4 of
-  ADR-025), the explanation says the credential identified the account but
+  token lacks the memory:write scope`; a `memory:` name, or a lack verb such
+  as "lacks" or "missing" next to the word "scope", is what marks it; a
+  write with a read-only token is how the connector refuses a write on the
+  package's surface at step 4 of ADR-025), the explanation says the
+  credential identified the account but
   does not carry a scope the call needs (the usual "is NOT the problem"
   opening would contradict that, so this one 403 opens differently), that
   reads are not affected by the refusal (they need only the read scope) when
-  the missing scope is the write scope and the read scope is not named too,
-  and what to do (re-authorize with write access, or
+  the refused scope is the write scope and the read scope is not refused
+  too, and what to do (re-authorize with write access, or
   with the access the call needs, under `auth: "oauth"`; under api-key, tell
   the user which scope was refused so they grant it on their side, since an
   API key carries no scope selection this package knows of and a key swap is
@@ -77,11 +79,12 @@ git history and the GitHub releases are the record.
   `memory_list_rooms`, a wrong cause stated confidently. Under api-key the
   reply names the refused scope(s) from the engine's own words, reading the
   clause that states the lack (up to a sentence end, a comma, a dash, a
-  parenthesis, or a word such as "granted" or "has"), so a scope the message
-  lists as held in any of those positions is not presented as refused; a
-  message that names scopes before the verb and says nothing of held scopes
-  has them all named; a comma-separated list of lacking scopes is cut to its
-  first item (no producer writes one: core names exactly one scope). The
+  parenthesis, a conjunction such as "but", or a word such as "granted" or
+  "has"), and a scope the message says is held ("memory:read is already
+  held", "has memory:read") is never presented as refused; a message that
+  names scopes before the verb and says nothing of held scopes has them all
+  named; a comma-separated list of lacking scopes is cut to its first item
+  (no producer writes one: core names exactly one scope). The
   pointer to the engine's own words appears only when `rawDetail` leaves the
   raw detail in the reply. The room causes keep precedence: room
   membership is itself called a scope on this surface, so a room refusal
