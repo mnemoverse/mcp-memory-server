@@ -74,10 +74,14 @@ git history and the GitHub releases are the record.
   API key carries no scope selection this package knows of and a key swap is
   not a fix it can promise). Before this, such a 403 fell through to the generic
   sentence, which guesses "most often the room it addressed" and points at
-  `memory_list_rooms`, a wrong cause stated confidently. The room causes keep
-  precedence: room membership is itself called a scope on this surface, so a
-  room refusal that says "scope" keeps its room diagnosis, and the bare word
-  "scope" alone is not a scope refusal. Core's other scope sentence, `Route
+  `memory_list_rooms`, a wrong cause stated confidently. Under api-key the
+  reply names the refused scope(s) from the engine's own words, reading only
+  the clause that states the lack, so a scope the message lists as held is
+  never presented as refused. The room causes keep precedence: room
+  membership is itself called a scope on this surface, so a room refusal
+  that says "scope" keeps its room diagnosis (the read-only room cause now
+  needs the room vocabulary too, so a read-only token is a scope refusal),
+  and the bare word "scope" alone is not a scope refusal. Core's other scope sentence, `Route
   has no scope policy; denied by default`, is a gap in the server's own
   configuration, not a credential problem: it gets its own diagnosis, which
   asks nothing of the credential and tells the agent to report exactly what

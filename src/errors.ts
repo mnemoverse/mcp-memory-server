@@ -553,8 +553,17 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // The scope NAMES come from the engine's message itself, matched as
   // `memory:<word>` and nothing else, so the api-key advice can name what to
   // grant even when `rawDetail: false` withholds the message (Copilot on
-  // #175); a scope refusal that names no scope gets the generic sentence.
-  const named = [...new Set(((m ?? "").match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
+  // #175). Only the clause that states the lack is read: from "lacks",
+  // "missing", "without", "requires" or "needs" up to the end of the
+  // sentence, an opening parenthesis, or a word that introduces what IS held
+  // ("granted", "has", "holds", "carries"), so a scope the message lists as
+  // held is never presented as refused (CodeRabbit on #175); a refusal that
+  // names no scope there gets the generic sentence.
+  const lackClause =
+    (m ?? "").match(
+      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b)[^.;(])*)/i,
+    )?.[1] ?? "";
+  const named = [...new Set((lackClause.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
   const refused =
     named.length === 0
       ? "this call was refused for a missing scope so they can grant it on their side"
@@ -588,7 +597,7 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
       ? `${holder} is not an active member of the room you addressed. Ask the ` +
         "room's owner for an invite; memory_list_rooms shows the rooms it can " +
         "already reach."
-      : has(m, "read-only")
+      : has(m, "read-only") && (has(m, "membership") || has(m, "room"))
         ? `${holder}'s membership in that room is read-only — it can read the ` +
           "room but not write to it. Ask the room's owner for write access."
         : has(m, "invalid room address")

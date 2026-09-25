@@ -1432,6 +1432,26 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     // The api-key advice names every scope the message names, from the
     // message itself, so it survives rawDetail: false (Copilot on #175).
     expect(compound).toContain("Tell the user the memory:read and memory:write scopes were refused so they can grant them on their side.");
+    // Only the scopes the lack clause names are presented as refused: a scope
+    // the message lists as HELD is not (CodeRabbit on #175).
+    const held = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Token has memory:read scope but lacks memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(held).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+    expect(held).not.toMatch(/memory:read scope was refused|memory:read and memory:write/);
+    const granted = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:write scope (granted: memory:read)", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(granted).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+    expect(granted).not.toMatch(/memory:read scope was refused|memory:read and memory:write|memory:write and memory:read/);
+    // A read-only TOKEN is a scope refusal, not a read-only room membership:
+    // the room cause needs the room vocabulary (CodeRabbit on #175).
+    const readOnlyToken = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Read-only token lacks memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(readOnlyToken).toContain("does not carry a scope this call needs");
+    expect(readOnlyToken).toContain("the memory:write scope was refused");
+    expect(readOnlyToken).not.toMatch(/membership|room/i);
     const unnamed = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "Token lacks the scope this route requires", false), method: "POST", path: "/memory/write", retryAfter: null },
       { rawDetail: false },
