@@ -555,21 +555,29 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // grant even when `rawDetail: false` withholds the message (Copilot on
   // #175). Only the clause that states the lack is read: from "lacks",
   // "missing", "without", "requires" or "needs" up to the end of the
-  // sentence, an opening parenthesis, or a word that introduces what IS held
-  // ("granted", "has", "holds", "carries"), so a scope the message lists as
-  // held is never presented as refused (CodeRabbit on #175); a refusal that
-  // names no scope there gets the generic sentence.
+  // sentence, a comma, a dash, an opening parenthesis, or a word that
+  // introduces what IS held ("granted", "has", "holds", "carries"), so a
+  // scope the message lists as held in any of those positions is not
+  // presented as refused (CodeRabbit on #175). A message that names scopes
+  // but states the lack some other way ("memory:write scope is required")
+  // keeps them all, unless it also speaks of held scopes; a refusal that
+  // names none gets the generic sentence.
+  const text = m ?? "";
+  const scopesIn = (t: string): string[] =>
+    [...new Set((t.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
   const lackClause =
-    (m ?? "").match(
-      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b)[^.;(])*)/i,
+    text.match(
+      /\b(?:lacks?|lacking|missing|without|requires?|required|needs?)\b((?:(?!\b(?:granted|held|has|holds|carries)\b)[^.;(,\u2013\u2014])*)/i,
     )?.[1] ?? "";
-  const named = [...new Set((lackClause.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
+  const speaksOfHeld = /\b(?:granted|held|has|holds|carries)\b/i.test(text);
+  const named = scopesIn(lackClause).length > 0 || speaksOfHeld ? scopesIn(lackClause) : scopesIn(text);
+  const list = named.length <= 2 ? named.join(" and ") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
   const refused =
     named.length === 0
       ? "this call was refused for a missing scope so they can grant it on their side"
       : named.length === 1
         ? `the ${named[0]} scope was refused so they can grant it on their side`
-        : `the ${named.join(" and ")} scopes were refused so they can grant them on their side`;
+        : `the ${list} scopes were refused so they can grant them on their side`;
   const remedy = oauth
     ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
     : `tell the user ${refused}`;

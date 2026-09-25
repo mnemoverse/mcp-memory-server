@@ -1258,9 +1258,12 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(guidanceOf(text)).not.toMatch(/\bkeys?\b/i);
   });
 
-  /** Every 403 cause the engine actually sends (mirrors "a 403 names the
-   *  permission" above), plus the two structural branches (saidNothing and
-   *  no-match). */
+  /** Every 403 cause this module diagnoses (mirrors "a 403 names the
+   *  permission" above), the two scope refusals the hosted connector sends
+   *  (its package-surface gate, and its older tool-level sentence), plus the
+   *  two structural branches (saidNothing and no-match). Core also sends 403s
+   *  this module does not diagnose (OIDC claim problems, a reset guard); they
+   *  take the generic branch, which is unchanged here. */
   const failures403: ReadonlyArray<readonly [string, string]> = [
     ["room archived", envelope("FORBIDDEN", "Room is archived", false)],
     ["not a member", envelope("FORBIDDEN", "Not an active member of this room", false)],
@@ -1270,6 +1273,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ["no clause matches", envelope("FORBIDDEN", "Operation not allowed for this plan", false)],
     ["a scope refusal", envelope("FORBIDDEN", "this connector is not authorized to modify memory: the token lacks the memory:write scope. Re-authorize with write access to use this tool.", false)],
     ["a route with no scope policy", envelope("FORBIDDEN", "Route has no scope policy; denied by default", false)],
+    ["the connector's older read-only-token sentence", envelope("FORBIDDEN", "Error: this connector is not authorized to modify memory \u2014 your token is read-only (missing the memory:write scope). Re-authorize with write access to use this tool.", false)],
     ["the engine said nothing parseable", "<html>Forbidden</html>"],
   ];
 
@@ -1444,6 +1448,37 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ).split("\n\n")[0] ?? "";
     expect(granted).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
     expect(granted).not.toMatch(/memory:read scope was refused|memory:read and memory:write|memory:write and memory:read/);
+    // The held scope after a comma, and after a held-word with no punctuation
+    // (this one couples the stop-word list; the refuter on cf28f17).
+    for (const message of [
+      "Token lacks memory:write scope, only memory:read was granted",
+      "Token lacks memory:write scope but has memory:read",
+    ]) {
+      const held2 = explainApiFailure(
+        { status: 403, body: envelope("FORBIDDEN", message, false), method: "POST", path: "/memory/write", retryAfter: null },
+      ).split("\n\n")[0] ?? "";
+      expect(held2).toContain("Tell the user the memory:write scope was refused so they can grant it on their side.");
+      expect(held2).not.toMatch(/memory:read scope was refused|memory:write and memory:read/);
+    }
+    // The connector's older sentence: the lack verb is "missing", the token is
+    // "read-only" with no room vocabulary, so it is a scope refusal that names
+    // memory:write (couples the verb list; the refuter on cf28f17).
+    const legacy = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Error: this connector is not authorized to modify memory \u2014 your token is read-only (missing the memory:write scope). Re-authorize with write access to use this tool.", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(legacy).toContain("does not carry a scope this call needs");
+    expect(legacy).toContain("the memory:write scope was refused");
+    expect(legacy).not.toMatch(/membership|room/i);
+    // A message that names the scope without a lack verb keeps the name.
+    const stated = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "memory:write scope is required to call this tool", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(stated).toContain("the memory:write scope was refused");
+    // Three scopes read as a list.
+    const three = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:read scope and memory:write scope and memory:admin scope", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(three).toContain("the memory:read, memory:write and memory:admin scopes were refused so they can grant them on their side");
     // A read-only TOKEN is a scope refusal, not a read-only room membership:
     // the room cause needs the room vocabulary (CodeRabbit on #175).
     const readOnlyToken = explainApiFailure(

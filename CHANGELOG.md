@@ -76,8 +76,11 @@ git history and the GitHub releases are the record.
   sentence, which guesses "most often the room it addressed" and points at
   `memory_list_rooms`, a wrong cause stated confidently. Under api-key the
   reply names the refused scope(s) from the engine's own words, reading only
-  the clause that states the lack, so a scope the message lists as held is
-  never presented as refused. The room causes keep precedence: room
+  the clause that states the lack (up to a sentence end, a comma, a dash, a
+  parenthesis, or a word such as "granted" or "has"), so a scope the message
+  lists as held in any of those positions is not presented as refused; the
+  pointer to the engine's own words appears only when `rawDetail` leaves the
+  raw detail in the reply. The room causes keep precedence: room
   membership is itself called a scope on this surface, so a room refusal
   that says "scope" keeps its room diagnosis (the read-only room cause now
   needs the room vocabulary too, so a read-only token is a scope refusal),
