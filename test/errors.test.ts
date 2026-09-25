@@ -1269,6 +1269,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ["not the owner", envelope("FORBIDDEN", "You do not own this room.", false)],
     ["no clause matches", envelope("FORBIDDEN", "Operation not allowed for this plan", false)],
     ["a scope refusal", envelope("FORBIDDEN", "this connector is not authorized to modify memory: the token lacks the memory:write scope. Re-authorize with write access to use this tool.", false)],
+    ["a route with no scope policy", envelope("FORBIDDEN", "Route has no scope policy; denied by default", false)],
     ["the engine said nothing parseable", "<html>Forbidden</html>"],
   ];
 
@@ -1376,7 +1377,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     };
     const policyKey = explainApiFailure(failure).split("\n\n")[0] ?? "";
     const policyOauth = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
-    expect(policyKey).toContain("The API key is NOT the problem");
+    expect(policyKey).toContain("refused (403). The API key is NOT the problem \u2014 it identified the account fine, and this was a permission decision. The engine denies");
     expect(policyKey).toContain("no scope policy is registered for it: a gap in the server's own configuration, not anything about this key, so no re-authorization and no other credential changes it.");
     expect(policyOauth).toContain("Your sign-in is NOT the problem");
     expect(policyOauth).toContain("not anything about this account, so no re-authorization");
@@ -1387,6 +1388,13 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
       expect(text).not.toContain("Reading still works");
       expect(text).not.toMatch(/re-authorize|use a key|most often|room/i);
     }
+    // The route-policy branch is tried AFTER the room causes: a message that
+    // carries both keeps its room diagnosis.
+    const archivedToo = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Room is archived; route has no scope policy", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(archivedToo).toContain("The room you addressed is archived");
+    expect(archivedToo).not.toContain("no scope policy is registered");
   });
 
   it("403 room refusal that happens to say 'scope' keeps its room diagnosis; a compound read+write scope refusal does not promise reads (Sigma on #175)", () => {
@@ -1407,6 +1415,13 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ).split("\n\n")[0] ?? "";
     expect(compound).toContain("does not carry a scope this call needs");
     expect(compound).not.toContain("Reading still works");
+    // A lacking scope that merely MENTIONS a scope policy is still a scope
+    // refusal: the route-policy needle is core's exact clause, "no scope policy".
+    const mentions = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:write scope under the route's scope policy", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(mentions).toContain("does not carry a scope this call needs");
+    expect(mentions).not.toContain("no scope policy is registered");
     // The bare word "scope" without the scope vocabulary is not a scope refusal.
     const bare = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "This operation is outside the scope of this plan", false), method: "POST", path: "/memory/write", retryAfter: null },

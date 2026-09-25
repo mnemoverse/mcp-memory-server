@@ -531,10 +531,12 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // default", is NOT about the credential: the route itself has no policy
   // registered, and the middleware denies it by default. No re-authorization
   // and no other credential changes that, so it gets its own diagnosis
-  // (CodeRabbit and Copilot on #175). It says "scope" but names no scope and
-  // does not say "lacks", so it never matches `scopeRefusal`.
-  const routePolicy = has(m, "scope policy");
-  const credential = oauth ? "this sign-in" : "this key";
+  // (CodeRabbit and Copilot on #175). Keyed on core's exact clause ("no
+  // scope policy"), so a message that names a lacking scope and merely
+  // mentions a scope policy stays a scope refusal; core's sentence itself
+  // names no scope and does not say "lacks", so it never matches
+  // `scopeRefusal` either.
+  const routePolicy = has(m, "no scope policy");
   // "Reading still works" is claimed only when the missing scope is the write
   // scope and the read scope is not named too (Copilot and Sigma on #175).
   const writeScope =
