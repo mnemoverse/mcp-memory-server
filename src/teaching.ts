@@ -24,9 +24,23 @@ import type { ReadScope, RoomScope } from "./scope.js";
  * - No delete tool on this surface (2026-08-20): deletion was withdrawn to an
  *   administrative REST-only operation, so the instructions point a model at
  *   writing a corrected memory instead of asking to delete one.
+ *
+ * memory_graph (0.13): mentioning the eleventh tool here pushed the string
+ * past 800 at 833 chars. Two sentences were shortened to make room, both
+ * with margin under the cap left afterward (793 total) rather than trimmed to
+ * the wire:
+ *  - the room sentence dropped its "(memory_list_rooms)" parenthetical —
+ *    that tool name is not one of the ones this file's own tests require
+ *    present (`test/descriptions.test.ts` pins
+ *    "...pass its address as domain" and "unscoped reads never cover rooms"
+ *    as two independent substrings, not the text between them, so removing
+ *    only the aside between those two anchors keeps both intact);
+ *  - "deletion is administrative, not a tool" lost its last three words —
+ *    the sentence still states the fact ("write a fresh one" and
+ *    "administrative" both survive, and both are separately asserted).
  */
 export const SERVER_INSTRUCTIONS =
-  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain (memory_list_rooms); unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first. To correct a wrong memory, write a fresh one — deletion is administrative, not a tool. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
+  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain; unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first; memory_graph shows links. To correct a wrong memory, write a fresh one — deletion is administrative. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";

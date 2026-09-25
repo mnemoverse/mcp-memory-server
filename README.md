@@ -292,6 +292,7 @@ If it doesn't remember: check that the client was fully restarted and the config
 | `memory_invite_to_room` | Mint an invite (code + link) for a room you own; single-use unless `max_uses` allows more |
 | `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
 | `memory_list_rooms` | List rooms you own or joined, with each room's address to use as `domain` |
+| `memory_graph` | Read the association edges around given concepts — weight, outcome valence, co-activation count |
 | `vault_list` | List Vault secrets by alias and purpose — the secret value is never returned |
 
 ### Prompts
@@ -465,6 +466,7 @@ What each tool sends:
 | `memory_create_room` | the room `name` and `description` |
 | `memory_invite_to_room` | the `room_id`, invite `scope`, and expiry |
 | `memory_join_room` | the invite `code` |
+| `memory_graph` | the `seeds`, plus any of `depth`, `domain`, `min_weight`, `limit` you pass |
 | `memory_stats` / `memory_list_rooms` / `vault_list` | no request body — authenticated GETs |
 
 One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).

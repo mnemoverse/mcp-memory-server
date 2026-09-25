@@ -62,6 +62,14 @@ export interface WriteArgs {
   domain?: string;
 }
 
+export interface GraphArgs {
+  seeds: string[];
+  depth?: number;
+  domain?: string;
+  min_weight?: number;
+  limit?: number;
+}
+
 /**
  * Supplier-vouched authorship for a write (STEP4-5, owner 2026-09-24),
  * mirroring core's `ProvenanceWriteSchema` field for field
@@ -122,6 +130,30 @@ export function recentRequestBody(a: RecentArgs): Record<string, unknown> {
     exclude_author: a.exclude_author || undefined,
     limit: a.limit || 20,
     cursor: a.cursor || undefined,
+  };
+}
+
+/**
+ * memory_graph. `depth` and `limit` are sent with an explicit default (1 and
+ * 100), the same convention `readRequestBody` uses for `top_k` — this
+ * server's own default rather than a field left out for the engine's to
+ * apply, so it stays stated here even though, unlike `top_k`, both currently
+ * match the engine's own (GraphRequestSchema `depth.default`/`limit.default`).
+ *
+ * `min_weight` is `??`, never `||`: `0.0` is a meaningful, contract-honoured
+ * value (an explicit floor of zero, honoured at every hop with no server
+ * override — GraphRequestSchema), not a falsy placeholder for "unset". It is
+ * omitted from the body entirely when the caller passed none, so core applies
+ * its OWN default (no floor at depth 1; its own 0.05 floor from depth 2) —
+ * this package does not invent one.
+ */
+export function graphRequestBody(a: GraphArgs): Record<string, unknown> {
+  return {
+    seeds: a.seeds,
+    depth: a.depth ?? 1,
+    domain: searchedScope(a.domain),
+    ...(a.min_weight === undefined ? {} : { min_weight: a.min_weight }),
+    limit: a.limit ?? 100,
   };
 }
 

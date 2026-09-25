@@ -56,6 +56,39 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`memory_graph`, an eleventh tool: reads the association edges around given
+  concepts.** Wraps the live `POST /memory/graph` (core's
+  `GraphRequestSchema`/`GraphResponseSchema`). Input: `seeds` (1-20 concept
+  names, each ≤200 chars, non-blank), `depth` (1-3, default 1), `domain`
+  (an `xroom:` address reads that room's own association graph instead of
+  yours — the ONE mechanism it shares with `memory_read`'s `domain`; any
+  other value is inert here, since `hebbian_edges` has no `domain` column),
+  `min_weight` (≥0, honoured at every hop with no server override, `0`
+  included) and `limit` (1-500, default 100, mirrors `memory_read`'s
+  `top_k` bounds). Output: `nodes` (`concept`, `degree` — edges in THIS
+  response touching it, not the concept's whole-store degree), `edges`
+  (`source`, `target`, `weight`, `valence`, `count`, `updated_at`),
+  `truncated`, and `min_weight_applied` (the floor actually used — the
+  engine floors at 0.05 from every hop of a depth ≥2 walk when the caller
+  left `min_weight` unset). Text rendering sorts edges by weight,
+  strongest first, and states `truncated`/`min_weight_applied` as a
+  trailing note when either is non-default; an unreadable 2xx (any of the
+  four required response fields absent or mis-shaped, on any node or edge)
+  answers `isError` rather than rendering a partial or fabricated graph,
+  the same rule every other tool here applies to its own response shape.
+  Annotations: `readOnlyHint: true`, `destructiveHint: false`,
+  `openWorldHint: false`. The server instructions in `src/teaching.ts` now
+  name it too (`memory_graph shows links`); fitting that mention under the
+  800-char cap shortened two existing sentences there — see the comment
+  above `SERVER_INSTRUCTIONS`. **Not done in this slice, deliberately:**
+  the "ten tools" count on the README's stability-contract line, the
+  `llms-install.md` copy, `docs/shared.md`, and this package's own
+  `src/tools.ts` header comments all still say ten — those are a
+  release-wave surface, not a per-tool addition, and are tracked
+  separately.
+
 ## [0.12.0] — 2026-09-25
 
 ### Added

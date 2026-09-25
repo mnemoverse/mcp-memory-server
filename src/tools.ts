@@ -16,6 +16,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   CURSOR_RE,
+  formatDateTag,
   formatReadItem,
   formatRecentPage,
   rawAuthorName,
@@ -38,6 +39,7 @@ import {
   type ReadScope,
 } from "./scope.js";
 import {
+  graphRequestBody,
   readRequestBody,
   recentRequestBody,
   writeRequestBody,
@@ -2934,6 +2936,230 @@ export function registerMemoryTools(server: McpServer, deps: MemoryToolDeps): vo
         );
       }
       return structured(finalText, { secrets: secretsStructured });
+    },
+  );
+
+  // --- Tool: memory_graph ---
+
+  server.registerTool(
+    "memory_graph",
+    {
+      description:
+        "Reads the association edges around given concepts: which concepts the memory has linked together, with each link's weight, outcome valence and co-activation count. Use to inspect what a memory store has learned or to explain why a read expanded to a concept. Read-only.",
+      inputSchema: {
+        seeds: z
+          .array(
+            z
+              .string()
+              .max(200)
+              .refine((s) => s.trim().length > 0, { message: "must not be blank" }),
+          )
+          .min(1)
+          .max(20)
+          .describe(
+            "Concepts to center the graph on (1-20, each ≤200 chars, non-blank) — e.g. ['deploy', 'staging']. An unrecognised concept simply contributes no edges; it is not an error.",
+          ),
+        depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(3)
+          .optional()
+          .describe(
+            "Hops to expand from the seeds (1-3, default 1). At depth 2 or 3, if min_weight is omitted the engine floors edge weight at 0.05 at EVERY hop — including the first — so a hub concept cannot fan out across the whole store before limit applies; pass min_weight explicitly (0 included) to see every edge anyway.",
+          ),
+        domain: z
+          .string()
+          .optional()
+          .describe(
+            "Read a shared room's graph instead of your own: pass that room's address (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms. Unlike memory_read, any OTHER value has no effect here — the association store has no domain column, so a plain domain name behaves exactly like omitting this field.",
+          ),
+        min_weight: z
+          .number()
+          .finite()
+          .min(0)
+          .optional()
+          .describe(
+            "Only include edges at or above this weight (≥ 0). Omit for no floor at depth 1; at depth 2/3 the engine applies its own 0.05 floor when this is omitted (see depth) — pass 0 to see every edge at every depth.",
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe(
+            "Max edges to return (1-500, default 100 — mirrors memory_read's top_k bounds).",
+          ),
+      },
+      // Field names and descriptions follow core's GraphNodeSchema/GraphEdgeSchema
+      // (https://core.mnemoverse.com/openapi.json) directly — this is a new
+      // endpoint with no back-compat surface, so there is no prior wire shape to
+      // reconcile the way memory_read's MEMORY_ITEM_OUTPUT does.
+      outputSchema: {
+        nodes: z
+          .array(
+            z.object({
+              concept: z.string().describe("The concept name."),
+              degree: z
+                .number()
+                .int()
+                .describe(
+                  "Edges in THIS response touching this concept — not its total degree across the whole store, which limit/truncated may cut short.",
+                ),
+            }),
+          )
+          .describe(
+            "Concepts touched by edges below. A seed with no surviving edge (unrecognised concept, or every edge fell below the weight floor) is not listed.",
+          ),
+        edges: z
+          .array(
+            z.object({
+              source: z
+                .string()
+                .describe("One side of the edge (storage order, not learn order)."),
+              target: z
+                .string()
+                .describe("The other side of the edge (storage order, not learn order)."),
+              weight: z.number().describe("Co-activation strength, 0 and up."),
+              valence: z.number().describe("Outcome polarity, -1 to 1."),
+              count: z.number().int().describe("Co-activation count."),
+              updated_at: z.string().describe("UTC instant this edge was last reinforced."),
+            }),
+          )
+          .describe("Association edges found within the requested depth."),
+        truncated: z
+          .boolean()
+          .describe(
+            "True when a per-hop server cap or limit cut the walk short — the store may hold more edges than are reported here.",
+          ),
+        min_weight_applied: z
+          .number()
+          .describe(
+            "The weight floor actually used at every hop: your min_weight when you set one (0 included); otherwise 0.05 from depth 2, or 0 at depth 1.",
+          ),
+      },
+      annotations: {
+        title: "Association graph",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ seeds, depth, domain, min_weight, limit }) => {
+      const r = await apiFetch<{
+        nodes?: { concept?: unknown; degree?: unknown }[];
+        edges?: {
+          source?: unknown;
+          target?: unknown;
+          weight?: unknown;
+          valence?: unknown;
+          count?: unknown;
+          updated_at?: unknown;
+        }[];
+        truncated?: unknown;
+        min_weight_applied?: unknown;
+      }>("/memory/graph", {
+        method: "POST",
+        body: JSON.stringify(graphRequestBody({ seeds, depth, domain, min_weight, limit })),
+      });
+
+      // core's GraphResponseSchema sends all four of these on every 200
+      // (nodes, edges, truncated, min_weight_applied are all required) — the
+      // same "unreadable 2xx" class memory_read's item guard catches one
+      // level up, here for the whole response shape and for each edge/node.
+      // All-or-nothing, like memory_write's atom_id guard: there is no honest
+      // partial rendering of a graph this client could not fully validate.
+      const nodesRaw = r?.nodes;
+      const edgesRaw = r?.edges;
+      const truncatedRaw = r?.truncated;
+      const minWeightAppliedRaw = r?.min_weight_applied;
+      const shapeOk =
+        Array.isArray(nodesRaw) &&
+        Array.isArray(edgesRaw) &&
+        typeof truncatedRaw === "boolean" &&
+        typeof minWeightAppliedRaw === "number" &&
+        Number.isFinite(minWeightAppliedRaw) &&
+        nodesRaw.every(
+          (n) =>
+            typeof n?.concept === "string" &&
+            typeof n?.degree === "number" &&
+            Number.isFinite(n.degree),
+        ) &&
+        edgesRaw.every(
+          (e) =>
+            typeof e?.source === "string" &&
+            typeof e?.target === "string" &&
+            typeof e?.weight === "number" &&
+            Number.isFinite(e.weight) &&
+            typeof e?.valence === "number" &&
+            Number.isFinite(e.valence) &&
+            typeof e?.count === "number" &&
+            Number.isFinite(e.count) &&
+            typeof e?.updated_at === "string",
+        );
+      if (!shapeOk) {
+        return unreadableAnswerReply(
+          "The graph result",
+          "a set of association edges",
+          "these concepts have no associations",
+        );
+      }
+      const nodes = nodesRaw as { concept: string; degree: number }[];
+      const edges = edgesRaw as {
+        source: string;
+        target: string;
+        weight: number;
+        valence: number;
+        count: number;
+        updated_at: string;
+      }[];
+      const truncated = truncatedRaw;
+      const minWeightApplied = minWeightAppliedRaw;
+
+      const hops = depth ?? 1;
+      if (edges.length === 0) {
+        return structured(
+          `No association edges found for ${seeds.length === 1 ? "this seed" : "these seeds"} ` +
+            `within ${hops} hop${hops === 1 ? "" : "s"}` +
+            (minWeightApplied > 0 ? ` at or above weight ${minWeightApplied}` : "") +
+            `.`,
+          { nodes, edges, truncated, min_weight_applied: minWeightApplied },
+        );
+      }
+
+      // Sorted by weight, strongest first (the brief for this tool, and the
+      // one ranking a reader can act on — core does not promise the wire
+      // order is anything in particular).
+      const sorted = [...edges].sort((a, b) => b.weight - a.weight);
+      // `-0.00` guard, same fix memory_feedback's avg_valence carries
+      // (CodeRabbit on #146): valence can be negative and round to zero.
+      const fmtSigned = (n: number): string => n.toFixed(2).replace(/^-0\.00$/, "0.00");
+      const lines = sorted.map(
+        (e, i) =>
+          `${i + 1}. ${e.source} — ${e.target} (weight: ${e.weight.toFixed(2)}, ` +
+          `valence: ${fmtSigned(e.valence)}, count: ${e.count})${formatDateTag(e.updated_at)}`,
+      );
+      const header =
+        `${edges.length} association edge${edges.length === 1 ? "" : "s"} found` +
+        (minWeightApplied > 0 ? ` (weight ≥ ${minWeightApplied})` : "") +
+        ":";
+      const tail =
+        (truncated
+          ? "\n\n(truncated — more edges exist than are shown here; a higher " +
+            "min_weight or a lower limit surfaces the strongest ones first)"
+          : "") +
+        (minWeightApplied > 0
+          ? `\n\n(edges below weight ${minWeightApplied} were excluded — ` +
+            `${min_weight === undefined ? "the engine's own floor at this depth" : "the min_weight you passed"})`
+          : "");
+      const text = capResult([header, ...lines].join("\n") + tail);
+
+      // structuredContent carries the validated nodes/edges EXACTLY, uncapped
+      // (OD-11, the same rule memory_read's items get): a client reading
+      // structured data reads these as the graph, not as a rendering of it.
+      return structured(text, { nodes, edges, truncated, min_weight_applied: minWeightApplied });
     },
   );
 }

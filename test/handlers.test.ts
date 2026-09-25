@@ -105,7 +105,7 @@ describe("what a connecting client is actually told", () => {
     expect(mcp.client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
   });
 
-  it("advertises ten tools by their public names — no delete tool on this surface", async () => {
+  it("advertises eleven tools by their public names — no delete tool on this surface", async () => {
     // memory_delete / memory_delete_domain removed 2026-08-20: deletion was
     // withdrawn from the agent-facing surface to an administrative REST-only
     // operation (see CHANGELOG). This surface never exposes a delete tool.
@@ -113,6 +113,7 @@ describe("what a connecting client is actually told", () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "memory_create_room",
       "memory_feedback",
+      "memory_graph",
       "memory_invite_to_room",
       "memory_join_room",
       "memory_list_recent",

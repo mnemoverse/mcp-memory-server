@@ -2,7 +2,7 @@
  * The shared entry point: what mnemoverse-mcp-remote imports (ADR-025).
  *
  * Three properties another server relies on, each pinned here:
- *  - the ten tools register on a server this package did not create;
+ *  - the eleven tools register on a server this package did not create;
  *  - they reach the API only through the injected `apiFetch` (never through
  *    this package's own environment-based client);
  *  - importing the entry starts nothing: it does not pull in src/index.ts,
@@ -27,9 +27,10 @@ import {
   type WriteAuthor,
 } from "../src/shared.js";
 
-const TEN_TOOLS = [
+const ELEVEN_TOOLS = [
   "memory_create_room",
   "memory_feedback",
+  "memory_graph",
   "memory_invite_to_room",
   "memory_join_room",
   "memory_list_recent",
@@ -54,12 +55,12 @@ async function connect(apiFetch: ApiFetch) {
 }
 
 describe("the shared entry point", () => {
-  it("registers the ten memory tools on a server it did not create", async () => {
+  it("registers the eleven memory tools on a server it did not create", async () => {
     const { client, server } = await connect(async () => {
       throw new Error("listing tools must not call the API");
     });
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(TEN_TOOLS);
+    expect(tools.map((t) => t.name).sort()).toEqual(ELEVEN_TOOLS);
     await server.close();
   });
 

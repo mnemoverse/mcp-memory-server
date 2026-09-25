@@ -40,7 +40,7 @@ describe("tool annotations", () => {
 
   it("no tool reaches an open world", async () => {
     const { tools } = await mcp.client.listTools();
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(11);
     for (const tool of tools) {
       expect(tool.annotations?.openWorldHint, tool.name).toBe(false);
     }

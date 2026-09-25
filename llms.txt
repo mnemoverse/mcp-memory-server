@@ -93,6 +93,18 @@ Parameters: none
 
 Returns: Room list with addresses; archived rooms are marked, and every read of an archived room is refused.
 
+### memory_graph
+Read the association edges around given concepts — which concepts the memory has linked together, with each edge's weight, outcome valence, and co-activation count. Read-only; use to inspect what a memory store has learned or explain why a read expanded to a concept.
+
+Parameters:
+- seeds (string[], required): Concepts to center the graph on, 1-20 items, each 1-200 chars, non-blank.
+- depth (integer, optional, default 1): Hops to expand from the seeds, 1-3. At depth 2/3 with no min_weight set, the engine floors edge weight at 0.05 at every hop.
+- domain (string, optional): A room's address (xroom:...) reads that room's graph instead of your own. Any other value is inert here — the association store has no domain column.
+- min_weight (number, optional): Only include edges at or above this weight (>= 0); honoured at every hop with no server override, 0 included.
+- limit (integer, optional, default 100): Max edges to return, 1-500.
+
+Returns: Edges sorted by weight — source, target, weight, valence, count, updated_at — and the concepts they touch (concept, degree); plus truncated and min_weight_applied.
+
 ### vault_list
 List the secrets in your Mnemoverse Vault by alias and purpose only — the secret value is never returned or shown.
 
