@@ -1382,6 +1382,13 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ).split("\n\n")[0] ?? "";
     expect(roomText).toContain("membership in that room is read-only");
     expect(roomText).not.toContain("is a scope this key does not carry");
+    // A message that names BOTH a room cause and a scope in the scope
+    // vocabulary keeps the room diagnosis: the room causes are tried first.
+    const both = explainApiFailure(
+      { status: 403, body: envelope("FORBIDDEN", "Read-only membership: token lacks memory:write scope for this room", false), method: "POST", path: "/memory/write", retryAfter: null },
+    ).split("\n\n")[0] ?? "";
+    expect(both).toContain("membership in that room is read-only");
+    expect(both).not.toContain("is a scope this key does not carry");
     const compound = explainApiFailure(
       { status: 403, body: envelope("FORBIDDEN", "Token lacks memory:read scope and memory:write scope", false), method: "POST", path: "/memory/write", retryAfter: null },
     ).split("\n\n")[0] ?? "";
