@@ -517,17 +517,23 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // A SCOPE refusal: the credential identified the account and lacks a
   // permission the call needs (a write with a read-only token). Two producers
   // today, both name the scope: core's middleware ("Token lacks memory:write
-  // scope", "Route has no scope policy; denied by default") and the hosted
-  // connector's own gate ("the token lacks the memory:write scope"). It is
-  // not about a room, so it must not fall through to the generic sentence
-  // that guesses "most often the room it addressed" (the connector's refusal
-  // did exactly that, step 4 review). The check is keyed on that vocabulary
-  // (a scope NAME or "lacks", or the route-policy wording), not on the bare
-  // word "scope", and it is tried AFTER the room causes: room membership is
-  // itself called a scope elsewhere on this surface, so a room refusal that
-  // happens to say "scope" keeps its room diagnosis (Sigma on #175).
-  const scopeRefusal =
-    (has(m, "scope") && (has(m, "memory:") || has(m, "lacks"))) || has(m, "scope policy");
+  // scope") and the hosted connector's own gate ("the token lacks the
+  // memory:write scope"). It is not about a room, so it must not fall
+  // through to the generic sentence that guesses "most often the room it
+  // addressed" (the connector's refusal did exactly that, step 4 review).
+  // The check is keyed on that vocabulary (a scope NAME or "lacks"), not on
+  // the bare word "scope", and it is tried AFTER the room causes: room
+  // membership is itself called a scope elsewhere on this surface, so a room
+  // refusal that happens to say "scope" keeps its room diagnosis (Sigma on
+  // #175).
+  const scopeRefusal = has(m, "scope") && (has(m, "memory:") || has(m, "lacks"));
+  // Core's other scope sentence, "Route has no scope policy; denied by
+  // default", is NOT about the credential: the route itself has no policy
+  // registered, and the middleware denies it by default. No re-authorization
+  // and no other credential changes that, so it gets its own diagnosis
+  // (CodeRabbit and Copilot on #175). It says "scope" but names no scope and
+  // does not say "lacks", so it never matches `scopeRefusal`.
+  const routePolicy = has(m, "scope policy");
   const credential = oauth ? "this sign-in" : "this key";
   // "Reading still works" is claimed only when the missing scope is the write
   // scope and the read scope is not named too (Copilot and Sigma on #175).
@@ -539,10 +545,18 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // The remedy either follows "Reading still works;" mid-sentence or opens
   // its own sentence, capitalised.
   const advice = writeScope ? `Reading still works; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
+  // The opening clause of the reply (below) already says what is missing, so
+  // the cause carries the pointer to the engine's words, the advice, and the
+  // one prohibition.
   const scopeCause =
-    `The permission this call needs is a scope ${credential} does not carry ` +
-    `(the engine's own words are in the detail below). ${advice} ` +
+    `The engine's own words are in the detail below. ${advice} ` +
     "Do not work around it by trying another tool.";
+  const routePolicyCause =
+    "The engine denies this route by default because no scope policy is " +
+    "registered for it: a gap in the server's own configuration, not anything " +
+    `about ${holderLc}, so no re-authorization and no other credential changes ` +
+    "it. Tell the user exactly what was refused so it can be reported, and do " +
+    "not work around it by trying another tool.";
   const cause = has(m, "archiv")
     ? "The room you addressed is archived. An archived room refuses every read " +
       "and every write, for its owner as much as for a member, and this client " +
@@ -561,18 +575,26 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
           : has(m, "own this room")
             ? "That room belongs to another account, and only its owner can do " +
               `this. memory_list_rooms shows which rooms ${holderLc} owns.`
-            : scopeRefusal
-              ? scopeCause
-              : `Something about this request is not permitted for ${holderLc} — ` +
+            : routePolicy
+              ? routePolicyCause
+              : scopeRefusal
+                ? scopeCause
+                : `Something about this request is not permitted for ${holderLc} — ` +
                 "most often the room it addressed. Check memory_list_rooms, and " +
                 "if nothing there explains it, tell the user exactly what was " +
                 "refused instead of guessing.";
   const subject = oauth ? "Your sign-in" : "The API key";
-  return (
-    `Mnemoverse: this request was refused (403). ${subject} is NOT the problem ` +
-    "— it identified the account fine, and this was a permission decision. " +
-    `${cause} Do not retry the same call: it will be refused again.`
-  );
+  // The innocent clause ("NOT the problem") would contradict the scope cause
+  // that follows it: for that one refusal the credential did identify the
+  // account, and the decision was about a scope it does not carry, so the
+  // clause says exactly that (CodeRabbit on #175). Every other 403, the room
+  // causes and the route-policy denial included, keeps the clause byte for
+  // byte.
+  const opening =
+    cause === scopeCause
+      ? `${subject} identified the account fine, but it does not carry a scope this call needs. `
+      : `${subject} is NOT the problem — it identified the account fine, and this was a permission decision. `;
+  return `Mnemoverse: this request was refused (403). ${opening}${cause} Do not retry the same call: it will be refused again.`;
 }
 
 /**
