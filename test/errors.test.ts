@@ -1268,6 +1268,7 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     ["invalid room address", envelope("FORBIDDEN", "Invalid room address", false)],
     ["not the owner", envelope("FORBIDDEN", "You do not own this room.", false)],
     ["no clause matches", envelope("FORBIDDEN", "Operation not allowed for this plan", false)],
+    ["a scope refusal", envelope("FORBIDDEN", "this connector is not authorized to modify memory: the token lacks the memory:write scope. Re-authorize with write access to use this tool.", false)],
     ["the engine said nothing parseable", "<html>Forbidden</html>"],
   ];
 
@@ -1315,6 +1316,28 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     );
     expect(text).toContain("Your sign-in is NOT the problem");
     expect(text).not.toContain("The API key is NOT the problem");
+  });
+
+  it("403 scope refusal: its own cause under both modes, never a room, never a guess (step 4 review)", () => {
+    const failure = {
+      status: 403,
+      body: envelope("FORBIDDEN", "this connector is not authorized to modify memory: the token lacks the memory:write scope. Re-authorize with write access to use this tool.", false),
+      method: "POST",
+      path: "/memory/write",
+      retryAfter: null,
+    };
+    const apiKey = explainApiFailure(failure).split("\n\n")[0] ?? "";
+    const oauthText = explainApiFailure(failure, OAUTH).split("\n\n")[0] ?? "";
+    expect(apiKey).toContain("is a scope this key does not carry");
+    expect(apiKey).toContain("use a key that has it");
+    expect(oauthText).toContain("is a scope this sign-in does not carry");
+    expect(oauthText).toContain("re-authorize this connector with write access");
+    for (const text of [apiKey, oauthText]) {
+      expect(text).not.toMatch(/room|membership|invite|archived|owner/i);
+      expect(text).not.toContain("most often");
+      expect(text).toContain("Reading still works");
+    }
+    expect(oauthText).not.toMatch(/\bkeys?\b/i);
   });
 
   it("403 the engine never spoke to differs under oauth by exactly one word: it declines to blame the sign-in, not the key", () => {

@@ -56,6 +56,19 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A 403 for a missing scope is explained as a scope refusal, not as a room
+  problem.** When the engine's 403 message names a `scope` (a write with a
+  read-only token, which is how the hosted connector refuses a write on the
+  package's surface at step 4 of ADR-025), the explanation says the credential
+  does not carry the scope the call needs, that reading still works, and what
+  to do (re-authorize with write access under `auth: "oauth"`, use a key that
+  has it under api-key). Before this, such a 403 fell through to the generic
+  sentence, which guesses "most often the room it addressed" and points at
+  `memory_list_rooms`, a wrong cause stated confidently. Text only, no shape
+  change: PATCH by the rule above.
+
 ## [0.12.0] — 2026-09-25
 
 ### Added
