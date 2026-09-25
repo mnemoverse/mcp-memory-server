@@ -38,7 +38,10 @@ describe("memory_graph: input is refused here, before the request, out of bounds
     // 201 CODE POINTS of an astral character (each "🎉" is one code point,
     // two UTF-16 units) — over the limit measured correctly, not merely over
     // 200 UTF-16 units (see the code-point-length regression test below).
-    ["a seed over 200 code points, in astral characters", { seeds: ["🎉".repeat(201)] }],
+    [
+      "a seed over 200 code points, in astral characters",
+      { seeds: ["🎉".repeat(201)] },
+    ],
     ["depth 0", { seeds: ["c"], depth: 0 }],
     ["depth 4", { seeds: ["c"], depth: 4 }],
     ["limit 501", { seeds: ["c"], limit: 501 }],
@@ -117,7 +120,9 @@ describe("memory_graph: happy path against core's own documented example", () =>
   it("structuredContent matches the outputSchema shape and carries the response exactly", async () => {
     mcp.on(GRAPH, LIVE_EXAMPLE);
 
-    const result = await mcp.call("memory_graph", { seeds: ["rotation", "symmetry"] });
+    const result = await mcp.call("memory_graph", {
+      seeds: ["rotation", "symmetry"],
+    });
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toEqual(LIVE_EXAMPLE);
@@ -126,7 +131,9 @@ describe("memory_graph: happy path against core's own documented example", () =>
   it("renders the edge, sorted, with weight/valence/count and no truncation/floor note", async () => {
     mcp.on(GRAPH, LIVE_EXAMPLE);
 
-    const result = await mcp.call("memory_graph", { seeds: ["rotation", "symmetry"] });
+    const result = await mcp.call("memory_graph", {
+      seeds: ["rotation", "symmetry"],
+    });
 
     expect(result.text).toContain("1 association edge found:");
     // Names print as exact JSON literals (CN-032), not raw — see the
@@ -157,7 +164,10 @@ describe("memory_graph: happy path against core's own documented example", () =>
       min_weight_applied: 0.05,
     });
 
-    const result = await mcp.call("memory_graph", { seeds: ["rotation"], depth: 2 });
+    const result = await mcp.call("memory_graph", {
+      seeds: ["rotation"],
+      depth: 2,
+    });
 
     expect(result.text).toContain("(weight ≥ 0.05)");
     expect(result.text).toContain("truncated");
@@ -168,8 +178,22 @@ describe("memory_graph: happy path against core's own documented example", () =>
   // rendering choice, not a promise about structuredContent, which a
   // consumer may read directly without ever seeing the text.
   it("sorts the rendered text by weight but keeps structuredContent.edges in the server's own order", async () => {
-    const weak = { source: "a", target: "b", weight: 0.1, valence: 0, count: 1, updated_at: "2026-09-24T00:00:00Z" };
-    const strong = { source: "c", target: "d", weight: 0.9, valence: 0, count: 2, updated_at: "2026-09-24T00:00:00Z" };
+    const weak = {
+      source: "a",
+      target: "b",
+      weight: 0.1,
+      valence: 0,
+      count: 1,
+      updated_at: "2026-09-24T00:00:00Z",
+    };
+    const strong = {
+      source: "c",
+      target: "d",
+      weight: 0.9,
+      valence: 0,
+      count: 2,
+      updated_at: "2026-09-24T00:00:00Z",
+    };
     mcp.on(GRAPH, {
       nodes: [
         { concept: "a", degree: 1 },
@@ -189,24 +213,37 @@ describe("memory_graph: happy path against core's own documented example", () =>
     expect(weakLine).toBeGreaterThan(-1);
     expect(strongLine).toBeLessThan(weakLine);
     // structuredContent: wire order preserved (weak, then strong).
-    expect((result.structuredContent as { edges: unknown[] }).edges).toEqual([weak, strong]);
+    expect((result.structuredContent as { edges: unknown[] }).edges).toEqual([
+      weak,
+      strong,
+    ]);
   });
 
   it("a floored response says 'the min_weight you passed' when the caller set one explicitly", async () => {
     mcp.on(GRAPH, { ...LIVE_EXAMPLE, min_weight_applied: 0.3 });
 
-    const result = await mcp.call("memory_graph", { seeds: ["rotation"], min_weight: 0.3 });
+    const result = await mcp.call("memory_graph", {
+      seeds: ["rotation"],
+      min_weight: 0.3,
+    });
 
     expect(result.text).toContain("the min_weight you passed");
   });
 
   it("no edges: an honest miss, not an unreadable-answer error", async () => {
-    mcp.on(GRAPH, { nodes: [], edges: [], truncated: false, min_weight_applied: 0 });
+    mcp.on(GRAPH, {
+      nodes: [],
+      edges: [],
+      truncated: false,
+      min_weight_applied: 0,
+    });
 
     const result = await mcp.call("memory_graph", { seeds: ["nope"] });
 
     expect(result.isError).toBeFalsy();
-    expect(result.text).toContain("No association edges found for this seed within 1 hop.");
+    expect(result.text).toContain(
+      "No association edges found for this seed within 1 hop.",
+    );
     expect(result.structuredContent).toEqual({
       nodes: [],
       edges: [],
@@ -221,9 +258,17 @@ describe("memory_graph: happy path against core's own documented example", () =>
   // associations at all — the same could-not-check/does-not-exist collision
   // this package's other tools already closed elsewhere.
   it("no edges, but truncated and floored: both notes still appear", async () => {
-    mcp.on(GRAPH, { nodes: [], edges: [], truncated: true, min_weight_applied: 0.05 });
+    mcp.on(GRAPH, {
+      nodes: [],
+      edges: [],
+      truncated: true,
+      min_weight_applied: 0.05,
+    });
 
-    const result = await mcp.call("memory_graph", { seeds: ["nope"], depth: 2 });
+    const result = await mcp.call("memory_graph", {
+      seeds: ["nope"],
+      depth: 2,
+    });
 
     expect(result.isError).toBeFalsy();
     expect(result.text).toContain("at or above weight 0.05");
@@ -246,7 +291,14 @@ describe("memory_graph: untrusted concept names are escaped in text, raw in stru
         { concept: "b", degree: 1 },
       ],
       edges: [
-        { source: HOSTILE, target: "b", weight: 0.5, valence: 0, count: 1, updated_at: "2026-09-24T00:00:00Z" },
+        {
+          source: HOSTILE,
+          target: "b",
+          weight: 0.5,
+          valence: 0,
+          count: 1,
+          updated_at: "2026-09-24T00:00:00Z",
+        },
       ],
       truncated: false,
       min_weight_applied: 0,
@@ -277,9 +329,14 @@ describe("memory_graph: domain reaches the wire unchanged", () => {
   it("passes a room address through, byte for byte", async () => {
     mcp.on(GRAPH, LIVE_EXAMPLE);
 
-    await mcp.call("memory_graph", { seeds: ["rotation"], domain: "xroom:room_01ABC" });
+    await mcp.call("memory_graph", {
+      seeds: ["rotation"],
+      domain: "xroom:room_01ABC",
+    });
 
-    expect(mcp.requestTo(GRAPH).body).toMatchObject({ domain: "xroom:room_01ABC" });
+    expect(mcp.requestTo(GRAPH).body).toMatchObject({
+      domain: "xroom:room_01ABC",
+    });
   });
 
   it("omits domain from the body when the caller passes none", async () => {
@@ -302,7 +359,9 @@ describe("memory_graph: an unreadable 2xx is isError, not a fabricated or partia
       "an edge missing updated_at",
       {
         nodes: [{ concept: "a", degree: 1 }],
-        edges: [{ source: "a", target: "b", weight: 0.5, valence: 0, count: 1 }],
+        edges: [
+          { source: "a", target: "b", weight: 0.5, valence: 0, count: 1 },
+        ],
         truncated: false,
         min_weight_applied: 0,
       },
@@ -312,7 +371,14 @@ describe("memory_graph: an unreadable 2xx is isError, not a fabricated or partia
       {
         nodes: [{ concept: "a", degree: 1.5 }],
         edges: [
-          { source: "a", target: "b", weight: 0.5, valence: 0, count: 1, updated_at: "2026-09-24T00:00:00Z" },
+          {
+            source: "a",
+            target: "b",
+            weight: 0.5,
+            valence: 0,
+            count: 1,
+            updated_at: "2026-09-24T00:00:00Z",
+          },
         ],
         truncated: false,
         min_weight_applied: 0,
@@ -323,7 +389,14 @@ describe("memory_graph: an unreadable 2xx is isError, not a fabricated or partia
       {
         nodes: [{ concept: "a", degree: 1 }],
         edges: [
-          { source: "a", target: "b", weight: 0.5, valence: 0, count: 1.5, updated_at: "2026-09-24T00:00:00Z" },
+          {
+            source: "a",
+            target: "b",
+            weight: 0.5,
+            valence: 0,
+            count: 1.5,
+            updated_at: "2026-09-24T00:00:00Z",
+          },
         ],
         truncated: false,
         min_weight_applied: 0,
@@ -335,5 +408,41 @@ describe("memory_graph: an unreadable 2xx is isError, not a fabricated or partia
     expect(res.isError, label).toBe(true);
     expect(res.text, label).toContain("shape this client does not recognise");
     expect(res.structuredContent, label).toBeUndefined();
+  });
+});
+
+describe("memory_graph: a response too large for the 25K token cap", () => {
+  it("names the levers this tool has — limit and min_weight — not a query it does not accept", async () => {
+    // 500 edges with 180-character concept names render well past
+    // MAX_RESULT_CHARS, so capResult appends its notice; the hint must not
+    // be the generic "Use a more specific query" — memory_graph has no
+    // `query` argument (Sigma Charlie [P2] on #174).
+    const name = (i: number, side: string) =>
+      `${side}-${String(i).padStart(4, "0")}-` + "x".repeat(170);
+    const edges = Array.from({ length: 500 }, (_, i) => ({
+      count: 1,
+      source: name(i, "a"),
+      target: name(i, "b"),
+      updated_at: "2026-09-24T00:00:00Z",
+      valence: 0,
+      weight: 0.5,
+    }));
+    const nodes = edges.flatMap((e) => [
+      { concept: e.source, degree: 1 },
+      { concept: e.target, degree: 1 },
+    ]);
+    mcp.on(GRAPH, { edges, min_weight_applied: 0, nodes, truncated: true });
+
+    const result = await mcp.call("memory_graph", {
+      seeds: ["a-0000-" + "x".repeat(170)],
+      limit: 500,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toContain("[…truncated to fit the 25K token limit.");
+    expect(result.text).toContain(
+      "Lower `limit` or raise `min_weight` to see fewer edges.",
+    );
+    expect(result.text).not.toContain("more specific query");
   });
 });
