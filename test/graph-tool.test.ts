@@ -431,7 +431,7 @@ describe("memory_graph: a response too large for the 25K token cap", () => {
       { concept: e.source, degree: 1 },
       { concept: e.target, degree: 1 },
     ]);
-    mcp.on(GRAPH, { edges, min_weight_applied: 0, nodes, truncated: true });
+    mcp.on(GRAPH, { edges, min_weight_applied: 0.25, nodes, truncated: true });
 
     const result = await mcp.call("memory_graph", {
       seeds: ["a-0000-" + "x".repeat(170)],
@@ -444,5 +444,15 @@ describe("memory_graph: a response too large for the 25K token cap", () => {
       "Lower `limit` or raise `min_weight` to see fewer edges.",
     );
     expect(result.text).not.toContain("more specific query");
+    // The two status notes precede the edge lines, so the cap (which cuts
+    // from the end) cannot swallow them (CodeRabbit on #174): a text-only
+    // reader still learns the page is incomplete and which floor applied.
+    expect(result.text).toContain("(truncated — the store may hold more edges");
+    expect(result.text).toContain(
+      "(edges below weight 0.25 were excluded — the engine's own floor at this depth)",
+    );
+    expect(result.text.indexOf("(truncated — the store")).toBeLessThan(
+      result.text.indexOf("\n1. "),
+    );
   });
 });

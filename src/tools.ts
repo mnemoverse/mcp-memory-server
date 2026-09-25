@@ -3375,12 +3375,16 @@ export function registerMemoryTools(
         `${edges.length} association edge${edges.length === 1 ? "" : "s"} found` +
         (minWeightApplied > 0 ? ` (weight ≥ ${minWeightApplied})` : "") +
         ":";
-      // Legend appended AFTER capResult, like memory_read's: the cap
-      // truncates from the end, so applied first the legend would be the
-      // first thing an over-long page loses.
+      // The two status notes go BEFORE the edge lines, not after them: the
+      // cap truncates from the end, so a page long enough to be cut would
+      // otherwise lose exactly the lines that say it is incomplete and what
+      // floor applied (CodeRabbit on #174, after the 0.12.1 merge). Legend
+      // appended AFTER capResult, like memory_read's, for the same reason.
+      const notes = truncatedNote + floorNote;
+      const preface = notes ? header + notes + "\n" : header;
       const text = withDomainEscapeLegend(
         capResult(
-          [header, ...lines].join("\n") + truncatedNote + floorNote,
+          [preface, ...lines].join("\n"),
           "Lower `limit` or raise `min_weight` to see fewer edges.",
         ),
         ...edges.flatMap((e) => [e.source, e.target]),
