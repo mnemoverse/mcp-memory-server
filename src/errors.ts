@@ -550,9 +550,20 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   // reply names no fix a key swap cannot deliver; the user is told which
   // scope was refused and grants it on their side (Copilot and the internal
   // refuter on #175).
+  // The scope NAMES come from the engine's message itself, matched as
+  // `memory:<word>` and nothing else, so the api-key advice can name what to
+  // grant even when `rawDetail: false` withholds the message (Copilot on
+  // #175); a scope refusal that names no scope gets the generic sentence.
+  const named = [...new Set((m.match(/\bmemory:[a-z_]+/gi) ?? []).map((x) => x.toLowerCase()))];
+  const refused =
+    named.length === 0
+      ? "this call was refused for a missing scope so they can grant it on their side"
+      : named.length === 1
+        ? `the ${named[0]} scope was refused so they can grant it on their side`
+        : `the ${named.join(" and ")} scopes were refused so they can grant them on their side`;
   const remedy = oauth
     ? `tell the user to re-authorize this connector with ${writeScope ? "write access" : "the access it needs"}`
-    : "tell the user which scope was refused so they can grant it on their side";
+    : `tell the user ${refused}`;
   // The remedy either follows the reads clause mid-sentence or opens its own
   // sentence, capitalised.
   const advice = writeScope ? `Reads are not affected by this refusal, since they need only the read scope; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
