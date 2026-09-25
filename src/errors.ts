@@ -556,10 +556,11 @@ function explain403(env: ErrorEnvelope, wording: ResolvedWording): string {
   const advice = writeScope ? `Reading still works; ${remedy}.` : `${remedy[0].toUpperCase()}${remedy.slice(1)}.`;
   // The opening clause of the reply (below) already says what is missing, so
   // the cause carries the pointer to the engine's words, the advice, and the
-  // one prohibition.
-  const scopeCause =
-    `The engine's own words are in the detail below. ${advice} ` +
-    "Do not work around it by trying another tool.";
+  // one prohibition. The pointer exists only when the raw-detail paragraph
+  // will be there: under `rawDetail: false` the consumer withholds the body,
+  // and a pointer to withheld content is a lie (Copilot on #175).
+  const pointer = wording.rawDetail ? "The engine's own words are in the detail below. " : "";
+  const scopeCause = `${pointer}${advice} ` + "Do not work around it by trying another tool.";
   const routePolicyCause =
     "The engine denies this route by default because no scope policy is " +
     "registered for it: a gap in the server's own configuration, not anything " +

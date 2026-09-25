@@ -1332,6 +1332,18 @@ describe("wording.auth === \"oauth\": no explanation of a 401, 403 or 429 names 
     expect(apiKey).toContain("refused (403). The API key identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user which scope was refused so they can grant it on their side.");
     // No impossible fix: an API key carries no scope selection (Copilot on #175).
     expect(apiKey).not.toMatch(/use a key|another key|a key that/i);
+    // Under rawDetail: false the raw-body paragraph is withheld, so the reply
+    // must not point at it (Copilot on #175); everything else stays.
+    for (const quiet of [
+      explainApiFailure(failure, { rawDetail: false }),
+      explainApiFailure(failure, { auth: "oauth", rawDetail: false }),
+    ]) {
+      expect(quiet).not.toContain("\n\n");
+      expect(quiet).not.toMatch(/detail below/i);
+      expect(quiet).toContain("does not carry a scope this call needs. Reading still works; tell the user");
+    }
+    expect(explainApiFailure(failure, { rawDetail: false })).toContain("this call needs. Reading still works; tell the user which scope was refused so they can grant it on their side. Do not work around it");
+    expect(explainApiFailure(failure, { auth: "oauth", rawDetail: false })).toContain("this call needs. Reading still works; tell the user to re-authorize this connector with write access. Do not work around it");
     expect(oauthText).toContain("refused (403). Your sign-in identified the account fine, but it does not carry a scope this call needs. The engine's own words are in the detail below. Reading still works; tell the user to re-authorize this connector with write access.");
     for (const text of [apiKey, oauthText]) {
       expect(text).not.toMatch(/room|membership|invite|archived|owner/i);
