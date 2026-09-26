@@ -218,7 +218,7 @@ jobs:
       # Belt to the pre-build gate above: catches a generator that is itself
       # non-deterministic between two runs in the same job.
       - name: Verify no drift between source.json and generated artifacts
-        run: npm run verify:configs
+        run: npm run verify:configs && npm run verify:tools
 
       # The manifest.json fixes shipped in 0.8.x reached nobody: no workflow
       # ever packed the .mcpb bundle (#85). Pack BEFORE npm publish so a broken

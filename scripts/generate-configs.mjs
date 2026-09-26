@@ -40,21 +40,23 @@ const PACKAGE_VERSION = JSON.parse(
 // The tool list is NOT in source.json. It is tools.json, produced by
 // scripts/generate-tools-manifest.mjs from the built server (dist/shared.js),
 // so the .mcpb manifest below declares exactly what the server registers.
-// A missing file is an error, not an empty list: a manifest with no tools
-// would pass every drift check and ship a Desktop Extension that declares
-// nothing.
+// A missing file never becomes an empty list (a manifest with no tools would
+// pass every drift check and ship a Desktop Extension that declares nothing).
+// It is only possible on the FIRST build of a fresh checkout without the
+// committed file: `prebuild` runs this generator before tsc, and `postbuild`
+// writes tools.json and runs this generator again. So in generate mode a
+// missing file leaves manifest.json untouched with a notice, and postbuild
+// completes it; in --check mode it is a failure (Copilot on #179).
 const TOOLS_PATH = resolve(ROOT, "tools.json");
-if (!existsSync(TOOLS_PATH)) {
-  console.error("✗ tools.json not found at " + TOOLS_PATH);
-  console.error(
-    "  It is generated from the built server: run `npm run build` (its postbuild",
-  );
-  console.error(
-    "  step writes it), or `node scripts/generate-tools-manifest.mjs` on an existing dist/.",
-  );
-  process.exit(1);
+const TOOLS_MANIFEST = existsSync(TOOLS_PATH) ? JSON.parse(readFileSync(TOOLS_PATH, "utf8")) : null;
+if (!TOOLS_MANIFEST) {
+  const how = "it is generated from the built server by `npm run build` (postbuild), or by `node scripts/generate-tools-manifest.mjs` on an existing dist/";
+  if (process.argv.includes("--check")) {
+    console.error(`✗ tools.json not found at ${TOOLS_PATH}: ${how}.`);
+    process.exit(1);
+  }
+  console.warn(`! tools.json not found: manifest.json is left as it is this run; ${how}.`);
 }
-const TOOLS_MANIFEST = JSON.parse(readFileSync(TOOLS_PATH, "utf8"));
 
 // Helper: extract { KEY: "value" } from source.env (which has nested {value, description, ...})
 function envValues(envObj) {
@@ -801,7 +803,9 @@ const OUTPUTS = [
   {
     // Claude Desktop Extension manifest — see genMcpbManifest() above.
     path: "manifest.json",
-    content: JSON.stringify(genMcpbManifest(), null, 2) + "\n",
+    // null only on a first build without tools.json (see TOOLS_MANIFEST above):
+    // the file is then left as it is and postbuild regenerates it.
+    content: TOOLS_MANIFEST ? JSON.stringify(genMcpbManifest(), null, 2) + "\n" : null,
   },
   // ─── Markdown partials (consumed by README + mnemoverse-docs) ──────────────
   {
@@ -857,6 +861,7 @@ let written = 0;
 let unchanged = 0;
 
 for (const { path, content } of OUTPUTS) {
+  if (content === null) continue;
   const fullPath = resolve(ROOT, path);
   mkdirSync(dirname(fullPath), { recursive: true });
 
