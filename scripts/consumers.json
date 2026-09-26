@@ -15,15 +15,15 @@
     },
     {
       "id": "marketing-card",
-      "name": "marketing site (server-card.json)",
+      "name": "marketing site (server-card.json → the connector card)",
       "kind": "track",
       "repo": "mnemoverse/mnemoverse-marketing",
       "probe": {
         "type": "json-field",
         "url": "https://mnemoverse.com/.well-known/mcp/server-card.json",
-        "field": "serverInfo.version"
+        "field": "package.version"
       },
-      "fix": "until the static card becomes a redirect to the connector's live card (mnemoverse-workspace#30 S5): merge a \"chore(mcp): version stamps\" PR in mnemoverse-marketing that sets serverInfo.version to <version> in public/.well-known/mcp/server-card.json."
+      "fix": "the marketing card redirects to the connector's live card (mnemoverse-marketing card-redirect PR); it serves <version> once the connector serves it: see the connector line. Before that redirect is deployed: merge a \"chore(mcp): version stamps\" PR in mnemoverse-marketing."
     },
     {
       "id": "connector",
