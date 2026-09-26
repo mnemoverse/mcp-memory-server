@@ -114,7 +114,6 @@ function tick() {
     // that there is nothing to report: fail, so open waves do not silently
     // stop being ticked (Copilot on #178).
     throw new Error(`no result file at ${path}: the probe step failed before writing one`);
-    return;
   }
   const result = JSON.parse(readFileSync(path, "utf8"));
   // Validate before any write (Copilot on #178): the version must be this

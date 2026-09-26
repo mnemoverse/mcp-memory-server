@@ -95,9 +95,11 @@ jobs:
       # exit is tolerated only when a non-empty result was written: a crash
       # before that fails the job instead of passing as 'nothing to tick'
       # (Copilot on #178).
-      - name: Probe the consumers (trusted code, no write token)
+      # No token here: issues: write is job-wide, so the probe step gets none
+      # and reads the public GitHub release endpoint unauthenticated (Copilot
+      # on #178). Only the tick step below holds GH_TOKEN.
+      - name: Probe the consumers (trusted code, no token)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_SYNC_RESULT: ${{ runner.temp }}/release-sync-result.json
         run: node scripts/check-release-sync.mjs || test -s "$RELEASE_SYNC_RESULT"
       - name: Tick the open wave issue from the probes
