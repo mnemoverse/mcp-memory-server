@@ -13,7 +13,7 @@
  *     check's JSON result, re-tick the probed lines of the open wave issue for
  *     that version, comment when something changed, close it when every
  *     probed line is green (and no manual line is left unticked), label it
- *     `stale-wave` after three days without full green. No open wave for
+ *     `stale-wave` when it is still open three days after the release. No open wave for
  *     that version (an old release, or the issue was closed by hand) is not
  *     an error: nothing to tick.
  *
@@ -81,7 +81,7 @@ function open() {
   if (!version) throw new Error("--version is required");
   const runUrl = arg("--run-url") ?? "";
   ensureLabel(LABEL, "0e8a16", "A release wave: every consumer of the MCP surface that must move");
-  ensureLabel(STALE_LABEL, "d93f0b", "A release wave with a consumer that has not moved for three days");
+  ensureLabel(STALE_LABEL, "d93f0b", "A release wave still open three days after the release");
   const existing = findOpenWave(version);
   if (existing) {
     gh(["api", "-X", "POST", `repos/${REPO}/issues/${existing.number}/comments`, "-f",

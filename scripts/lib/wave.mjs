@@ -127,7 +127,7 @@ export function renderWaveBody({ version, consumers, results = {}, runUrl = "" }
   const probed = consumers.filter((c) => c.kind !== "manual");
   const manual = consumers.filter((c) => c.kind === "manual");
   const lines = [
-    `Release **v${v}** of \`@mnemoverse/mcp-memory-server\` is on npm, the Official MCP Registry and GitHub${runUrl ? ` ([run](${runUrl}))` : ""}. This issue lists every consumer of the MCP surface that has to move, from \`scripts/consumers.json\`. The daily \`release-sync check\` ticks the probed lines from live probes and closes this issue when all of them serve v${v}; after three days without movement it labels the issue \`stale-wave\`. Manual lines are ticked by a person.`,
+    `Release **v${v}** of \`@mnemoverse/mcp-memory-server\` is on npm, the Official MCP Registry and GitHub${runUrl ? ` ([run](${runUrl}))` : ""}. This issue lists every consumer of the MCP surface that has to move, from \`scripts/consumers.json\`. The daily \`release-sync check\` ticks the probed lines from live probes and closes this issue when all of them serve v${v}; if it is still open three days after the release it is labelled \`stale-wave\`. Manual lines are ticked by a person.`,
     "",
     "## Probed consumers",
     "",

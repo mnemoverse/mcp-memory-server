@@ -213,7 +213,7 @@ consumer that can be probed and a fix for each. Two things read it:
   checklist line per consumer.
 - `release-sync-check.yml` (daily) probes every probed consumer, ticks its line,
   closes the wave when every line is green (a person ticks the manual lines),
-  and labels it `stale-wave` after three days without full green.
+  and labels it `stale-wave` if it is still open three days after the release.
 
 Adding a consumer: one entry in `scripts/consumers.json` (and the matching row
 in the surface registry, `mnemoverse-agent-pack/skills/release-wave/references/surfaces.yaml`);
