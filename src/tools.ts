@@ -1,5 +1,5 @@
 /**
- * The eleven memory tools, as one function any MCP server can register.
+ * The eleven tools (ten memory tools and vault_list), as one function any MCP server can register.
  *
  * ADR-025 (mnemoverse-core): this package defines the MCP surface, and every
  * server that exposes Mnemoverse memory over MCP registers the SAME tools from
@@ -429,7 +429,7 @@ const MEMORY_ITEM_OUTPUT = {
 };
 
 /**
- * Register the eleven memory tools on `server`. Call once per server instance.
+ * Register the eleven tools on `server`. Call once per server instance.
  * `deps.apiFetch` is the only way the tools reach the API.
  */
 export function registerMemoryTools(
