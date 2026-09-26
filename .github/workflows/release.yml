@@ -604,6 +604,46 @@ jobs:
   # The issue text lives in `env` as a block scalar, not inside the script, so
   # the markdown can carry real backticks with no escaping.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Step 13: the wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md).
+  # One issue per release, "Wave vX.Y.Z", with a checklist line per consumer of
+  # the MCP surface (scripts/consumers.json). The daily release-sync check ticks
+  # the probed lines from live probes and closes the wave when every line is
+  # green; a person ticks the manual lines. GITHUB_TOKEN can open issues here,
+  # so no extra secret; a failure of this job never fails the release.
+  # ---------------------------------------------------------------------------
+  open-wave-tracker:
+    name: Open the wave tracker issue for this release
+    needs: [release]
+    # Two runs for the same tag (a re-run, a manual dispatch) must not both see
+    # "no wave yet" and create two issues: one open-wave job per tag at a time,
+    # and the second one then finds the first one's issue and comments.
+    concurrency:
+      group: open-wave-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # Only the default branch's code runs with the issues: write token: the
+      # tag or dispatch ref could carry any code, main carries only code that
+      # passed its required checks (Copilot on #178).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Open (or bump) the Wave issue with the consumer checklist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/wave-issue.mjs open --version "${TAG#v}" --run-url "$RUN_URL"
+
   notify-on-failure:
     name: A failed release must reach a human
     needs: [release]

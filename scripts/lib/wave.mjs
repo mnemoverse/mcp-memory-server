@@ -1,0 +1,281 @@
+/**
+ * The release wave: the consumer registry (scripts/consumers.json), the probes
+ * that read a consumer's live version, and the "Wave vX.Y.Z" issue body with
+ * one checklist line per consumer.
+ *
+ * Pure functions, no I/O of their own: `probeVersion` takes its fetchers as an
+ * argument so tests pass stubs, and the issue text is rendered and re-ticked
+ * as strings so the same code runs in a test and in scripts/wave-issue.mjs.
+ *
+ * Why a wave issue at all: a release reaches the docs as a bot PR and every
+ * other consumer by a person's memory. The issue is the list of everything
+ * that must move, ticked by the daily check from live probes, so a consumer
+ * that nobody remembered stays visibly unticked (mnemoverse-agent-pack,
+ * protocols/surface-contour.md).
+ */
+
+export const norm = (v) => (v ?? "").toString().replace(/^v/, "").trim();
+
+/**
+ * A probed surface must yield a readable X.Y.Z. Anything else (an empty
+ * capture, a placeholder, a template that did not render) means the version
+ * served there is unknown, which is COULD NOT BE CHECKED and never lag.
+ */
+export function readableVersion(raw, where) {
+  const v = norm(raw);
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(v)) {
+    throw new Error(`${where} carries no readable version (got ${JSON.stringify(raw ?? null)})`);
+  }
+  return v;
+}
+
+/** `getPath({a:{b:1}}, "a.b")` → 1; undefined when any step is missing. */
+export function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+const KINDS = new Set(["auto", "track", "manual"]);
+const PROBE_TYPES = new Set(["json-field", "text-regex"]);
+
+/** Validate the registry's shape and return its consumers. Loud on a bad row. */
+export function loadConsumers(json) {
+  const list = json?.consumers;
+  if (!Array.isArray(list) || list.length === 0) throw new Error("consumers.json: no consumers[]");
+  const ids = new Set();
+  for (const c of list) {
+    for (const key of ["id", "name", "kind", "repo", "fix"]) {
+      if (typeof c[key] !== "string" || c[key].length === 0) {
+        throw new Error(`consumers.json: entry ${JSON.stringify(c.id ?? "?")} lacks ${key}`);
+      }
+    }
+    if (!/^[a-z0-9-]+$/.test(c.id)) throw new Error(`consumers.json: id ${c.id} must be [a-z0-9-]`);
+    if (ids.has(c.id)) throw new Error(`consumers.json: duplicate id ${c.id}`);
+    ids.add(c.id);
+    if (!KINDS.has(c.kind)) throw new Error(`consumers.json: ${c.id} has unknown kind ${c.kind}`);
+    if (c.kind === "manual") {
+      if (c.probe) throw new Error(`consumers.json: manual consumer ${c.id} must not carry a probe`);
+      continue;
+    }
+    const p = c.probe;
+    if (!p || !PROBE_TYPES.has(p.type)) throw new Error(`consumers.json: ${c.id} needs a probe of type ${[...PROBE_TYPES].join("|")}`);
+    if (typeof p.url !== "string" || !/^https:\/\//.test(p.url)) throw new Error(`consumers.json: ${c.id} probe.url must be https`);
+    if (p.type === "json-field" && typeof p.field !== "string") throw new Error(`consumers.json: ${c.id} json-field probe needs field`);
+    if (p.type === "text-regex") {
+      if (typeof p.regex !== "string") throw new Error(`consumers.json: ${c.id} text-regex probe needs regex`);
+      new RegExp(p.regex); // throws on a bad pattern
+    }
+  }
+  return list;
+}
+
+/**
+ * Read the version a consumer serves. `io` = { getJson(url), getText(url) }.
+ * Throws when the surface did not answer or carries no readable version: the
+ * caller records COULD NOT BE CHECKED, never lag.
+ */
+export async function probeVersion(consumer, io) {
+  const p = consumer.probe;
+  if (!p) throw new Error(`${consumer.id} has no probe (manual consumer)`);
+  if (p.type === "json-field") {
+    const j = await io.getJson(p.url);
+    const v = getPath(j, p.field);
+    if (v == null) throw new Error(`${p.field} missing from ${p.url}`);
+    return { version: readableVersion(v, `${p.field} at ${p.url}`) };
+  }
+  if (p.type === "text-regex") {
+    const t = await io.getText(p.url);
+    const m = t.match(new RegExp(p.regex));
+    if (!m) throw new Error(`no match for /${p.regex}/ at ${p.url}`);
+    return { version: readableVersion(m[1], `/${p.regex}/ at ${p.url}`) };
+  }
+  throw new Error(`unknown probe type ${p.type}`);
+}
+
+export function waveTitle(version) {
+  return `Wave v${norm(version)}`;
+}
+
+/**
+ * A wave tracker is an issue this repository's workflow opened: the exact
+ * title AND the github-actions bot as its author. The repository is public, so
+ * anyone can open an issue titled "Wave v0.13.0"; adopting it by title alone
+ * would let an outsider suppress the real tracker or have the workflow edit
+ * and close their issue (Sigma on #178). Pull requests are never waves.
+ */
+export function isWaveIssue(issue) {
+  return (
+    !issue?.pull_request &&
+    issue?.user?.type === "Bot" &&
+    issue?.user?.login === "github-actions[bot]" &&
+    waveVersion(issue?.title) !== null
+  );
+}
+
+/** The version a "Wave vX.Y.Z" title names, or null for any other title. */
+export function waveVersion(title) {
+  const m = /^Wave v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/.exec(title ?? "");
+  return m ? m[1] : null;
+}
+
+/**
+ * a >= b by semver precedence: build metadata (+...) is ignored, a pre-release
+ * sorts below its release, and pre-release identifiers compare one by one,
+ * numeric ones numerically (rc.10 > rc.2), numeric below alphanumeric
+ * (Copilot on #178).
+ */
+export function atLeast(a, b) {
+  const parse = (v) => {
+    const noBuild = norm(v).split("+", 1)[0];
+    const dash = noBuild.indexOf("-");
+    const core = dash === -1 ? noBuild : noBuild.slice(0, dash);
+    const pre = dash === -1 ? null : noBuild.slice(dash + 1).split(".");
+    return { n: core.split(".").map((x) => Number.parseInt(x, 10) || 0), pre };
+  };
+  const x = parse(a), y = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if ((x.n[i] ?? 0) !== (y.n[i] ?? 0)) return (x.n[i] ?? 0) > (y.n[i] ?? 0);
+  }
+  if (x.pre === null) return true;
+  if (y.pre === null) return false;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const p = x.pre[i], q = y.pre[i];
+    if (p === undefined) return false;
+    if (q === undefined) return true;
+    if (p === q) continue;
+    const pn = /^\d+$/.test(p), qn = /^\d+$/.test(q);
+    if (pn && qn) return Number(p) > Number(q);
+    if (pn !== qn) return !pn;
+    return p > q;
+  }
+  return true;
+}
+
+/**
+ * The results of one probe run, read for a given wave: a consumer that serves
+ * the wave's version or a later one has done its part for that wave, so an
+ * older wave still open after the next release can be closed too.
+ */
+export function resultsForWave(results, waveVer) {
+  const out = {};
+  for (const [id, r] of Object.entries(results)) {
+    if (r.status === "unchecked") out[id] = r;
+    // A result with no readable version proves nothing: it stays unchecked
+    // instead of parsing as 0.0.0 (CodeRabbit on #178).
+    else if (norm(r.version) === "") out[id] = { ...r, status: "unchecked", error: r.error ?? "no version in the result" };
+    else out[id] = { ...r, status: atLeast(r.version, waveVer) ? "ok" : "lag" };
+  }
+  return out;
+}
+
+const STATUS_TEXT = {
+  ok: (r) => `serves v${r.version}`,
+  lag: (r) => `still v${r.version || "?"}`,
+  unchecked: (r) => `could not be checked${r.error ? `: ${r.error}` : ""}`,
+};
+
+function statusLine(r) {
+  if (!r) return "not checked yet";
+  const f = STATUS_TEXT[r.status];
+  return f ? f(r) : `status ${r.status}`;
+}
+
+/**
+ * One checklist line per consumer. The `<!-- wave:id -->` marker is what
+ * `applyResults` keys on, and the `<!-- status:id -->…<!-- /status:id -->`
+ * span is the only part it rewrites, so a person can add notes anywhere else.
+ */
+export function renderConsumerLine(consumer, version, result) {
+  const checked = result?.status === "ok" ? "x" : " ";
+  const fix = consumer.fix.replaceAll("<version>", norm(version));
+  const how =
+    consumer.kind === "manual"
+      ? "no live probe: tick this line by hand when it is done"
+      : `probe: ${consumer.probe.url}${consumer.probe.field ? ` → ${consumer.probe.field}` : ""}`;
+  return `- [${checked}] <!-- wave:${consumer.id} --> **${consumer.name}** (${consumer.kind}). ${how}. Fix: ${fix} <!-- status:${consumer.id} -->${statusLine(result)}<!-- /status:${consumer.id} -->`;
+}
+
+export function renderWaveBody({ version, consumers, results = {}, runUrl = "" }) {
+  const v = norm(version);
+  const probed = consumers.filter((c) => c.kind !== "manual");
+  const manual = consumers.filter((c) => c.kind === "manual");
+  const lines = [
+    `Release **v${v}** of \`@mnemoverse/mcp-memory-server\` is on npm, the Official MCP Registry and GitHub${runUrl ? ` ([run](${runUrl}))` : ""}. This issue lists every consumer of the MCP surface that has to move, from \`scripts/consumers.json\`. The daily \`release-sync check\` ticks the probed lines from live probes and closes this issue when all of them serve v${v}; if it is still open three days after the release it is labelled \`stale-wave\`. Manual lines are ticked by a person.`,
+    "",
+    "## Probed consumers",
+    "",
+    ...probed.map((c) => renderConsumerLine(c, v, results[c.id])),
+    "",
+    "## Manual items",
+    "",
+    ...manual.map((c) => renderConsumerLine(c, v, results[c.id])),
+    "",
+    "_Protocol: mnemoverse-agent-pack, protocols/surface-contour.md. Registry: skills/release-wave/references/surfaces.yaml._",
+    "",
+    // The consumer set this wave was opened with, kept apart from the
+    // checklist: deleting a line from the list does not drop the obligation.
+    `<!-- wave-consumers:${consumers.map((c) => c.id).join(",")} -->`,
+  ];
+  return lines.join("\n") + "\n";
+}
+
+/** Re-tick the probed lines of an existing body from fresh results. Manual lines and any prose a person added are left alone. */
+export function applyResults(body, consumers, results) {
+  let out = body;
+  for (const c of consumers) {
+    if (c.kind === "manual") continue;
+    const r = results[c.id];
+    if (!r) continue;
+    const marker = `<!-- wave:${c.id} -->`;
+    const lineRe = new RegExp(`^- \\[( |x)\\] ${escapeRe(marker)}`, "m");
+    out = out.replace(lineRe, `- [${r.status === "ok" ? "x" : " "}] ${marker}`);
+    const spanRe = new RegExp(`<!-- status:${c.id} -->[^]*?<!-- /status:${c.id} -->`);
+    out = out.replace(spanRe, `<!-- status:${c.id} -->${statusLine(r)}<!-- /status:${c.id} -->`);
+  }
+  return out;
+}
+
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Every probed consumer answered with the expected version. */
+export function allProbedGreen(consumers, results) {
+  return consumers.filter((c) => c.kind !== "manual").every((c) => results[c.id]?.status === "ok");
+}
+
+/**
+ * The consumers a wave issue tracks: those whose line the issue carries. A
+ * wave is rendered from the registry of its release; a consumer added to the
+ * registry later joins the next wave. Without this an open wave could never
+ * close once the registry grew, since its body has no line for the newcomer
+ * (Copilot and Sigma on #178).
+ */
+export function waveConsumers(body, consumers) {
+  // The ids come from the body, in its order; the registry only adds what it
+  // knows about each. A line whose consumer has since been removed or renamed
+  // in the registry stays tracked, as a manual line a person ticks, so the
+  // wave cannot close with that line unchecked (Copilot on #178).
+  // The set recorded when the wave opened wins over the checklist, so a line
+  // deleted from the list is still required: allTicked finds no ticked line
+  // for it and the wave stays open (Copilot and CodeRabbit on #178). A wave
+  // opened before the record existed falls back to its checklist markers.
+  const byId = new Map(consumers.map((c) => [c.id, c]));
+  const recorded = /<!-- wave-consumers:([a-z0-9,-]*) -->/.exec(body ?? "");
+  const ids = recorded
+    ? recorded[1].split(",").filter(Boolean)
+    : [...(body ?? "").matchAll(/<!-- wave:([a-z0-9-]+) -->/g)].map((m) => m[1]);
+  return [...new Set(ids)].map(
+    (id) => byId.get(id) ?? { id, name: id, kind: "manual", repo: "", fix: "no longer in scripts/consumers.json: tick by hand" },
+  );
+}
+
+/** Every line, probed and manual, is ticked in the body. */
+export function allTicked(body, consumers) {
+  return consumers.every((c) => new RegExp(`^- \\[x\\] <!-- wave:${c.id} -->`, "m").test(body));
+}
+
+export function isStale(createdAtIso, nowMs, days = 3) {
+  const created = Date.parse(createdAtIso);
+  if (Number.isNaN(created)) return false;
+  return nowMs - created > days * 24 * 60 * 60 * 1000;
+}

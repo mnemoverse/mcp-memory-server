@@ -1,8 +1,9 @@
 name: release-sync check
 
 # Issue #31: confirm every first-party public surface (npm, the Official MCP
-# Registry, the GitHub release) AND every follow-up surface (the docs site's
-# llms-full.txt, the marketing site's server-card.json) is still tracking
+# Registry, the GitHub release) AND every follow-up surface (every probed
+# consumer in scripts/consumers.json: the docs site's llms-full.txt, the
+# marketing server card, the connector's /health) is still tracking
 # package.json#version — so a half-landed release (e.g. npm published but the
 # registry publish failed), or a forgotten bump PR in another repository,
 # can't drift silently and make directories, docs readers or visitors read us
@@ -15,8 +16,8 @@ name: release-sync check
 # first-party surface DRIFTED (it answered with the wrong version, so a
 # release half-landed: open release.yml and re-run the missing leg), a
 # follow-up surface LAGGED (it answered with an older version because a bump
-# PR in a different repository (mnemoverse-docs or mnemoverse-marketing)
-# hasn't been merged yet; the release pipeline itself is fine), or a surface
+# PR or deploy in a different repository (the consumer's repo in
+# scripts/consumers.json) hasn't landed yet; the release pipeline itself is fine), or a surface
 # COULD NOT BE CHECKED (it did not answer, so its version is unknown). Only
 # the first is drift. The second is a pending merge elsewhere, not a pipeline
 # problem. The third is still red, because an unverified surface is not a
@@ -55,6 +56,54 @@ jobs:
         run: npm run check:release-sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # The wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md):
+  # release.yml opens a "Wave vX.Y.Z" issue with one line per consumer of the
+  # MCP surface; this job probes the consumers itself and re-ticks those
+  # lines, closes the wave when every line is green, and labels it stale-wave
+  # three days after the release. It runs only the default branch's code and
+  # takes nothing from the check job: an artifact from a job that ran a
+  # dispatched ref could be forged to tick or close a wave (Copilot on #178),
+  # so the probes run here, in the trusted job, and the version comes from
+  # the default branch's package.json.
+  tick-wave:
+    name: Tick the wave tracker
+    needs: [check]
+    if: always()
+    # One tick at a time (a scheduled run and a manual one must not interleave
+    # their read-modify-write of the issue body).
+    concurrency:
+      group: tick-wave
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # Only the default branch's code runs with the issues: write token: the
+      # tag or dispatch ref could carry any code, main carries only code that
+      # passed its required checks (Copilot on #178).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # The probes are pure fetch (no dependencies) and read-only; a red check
+      # is the check job's business, this step only wants the result. A red
+      # exit is tolerated only when a non-empty result was written: a crash
+      # before that fails the job instead of passing as 'nothing to tick'
+      # (Copilot on #178).
+      - name: Probe the consumers (trusted code, no write token)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SYNC_RESULT: ${{ runner.temp }}/release-sync-result.json
+        run: node scripts/check-release-sync.mjs || test -s "$RELEASE_SYNC_RESULT"
+      - name: Tick the open wave issue from the probes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/wave-issue.mjs tick --result "${{ runner.temp }}/release-sync-result.json"
 
   # The check above is correct, and it was correct on the morning it mattered.
   # What was missing is that a scheduled workflow's failure is invisible unless
@@ -108,8 +157,9 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       ISSUE_BODY: |
         `release-sync check` is red. At least one first-party surface (npm, the Official
-        MCP Registry, the GitHub release) or follow-up surface (the docs site's
-        `llms-full.txt`, the marketing site's `server-card.json`) either did **not match**
+        MCP Registry, the GitHub release) or follow-up surface (every probed consumer in
+        `scripts/consumers.json`: today the docs site's `llms-full.txt`, the marketing
+        site's server card and the hosted connector's `/health`) either did **not match**
         `package.json#version`, or could **not be checked at all**. Those are three
         different events and the run log reports them separately, surface by surface.
         [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
@@ -121,18 +171,15 @@ jobs:
           then the Official MCP Registry, then the GitHub release, and each is skipped once
           an earlier one fails, so the **first** drifted surface in the list is where to
           look.
-        * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (docs or marketing)
-          answered with an older version. This is **not** drift and does **not** mean a
-          release half-landed: the release pipeline already succeeded. It means a small
-          bump PR in a *different* repository has not merged yet: for docs, merge the PR
-          that `mcp-version-watch.yml` (in `mnemoverse-docs`) opens from branch
-          `bot/mcp-version-X.Y.Z`, or open one by hand from that branch if the bot could
-          not; for marketing, merge a `chore(mcp): version stamps` PR (in
-          `mnemoverse-marketing`) that sets `serverInfo.version` in
-          `public/.well-known/mcp/server-card.json`. Do not touch `release.yml` for this
-          outcome: it did its job.
+        * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (a consumer from
+          `scripts/consumers.json`) answered with an older version. This is **not** drift
+          and does **not** mean a release half-landed: the release pipeline already
+          succeeded. It means a bump in a *different* repository has not merged or deployed
+          yet. The run log prints the fix for each lagging consumer, taken from its
+          `fix` in `scripts/consumers.json`, and the open `Wave vX.Y.Z` issue carries the
+          same fix on its line. Do not touch `release.yml` for this outcome: it did its job.
         * `? could not be checked` means the surface did not answer at all (a timeout, a
-          5xx, a rate limit), or, for docs/marketing, that its body could not be parsed for
+          5xx, a rate limit), or, for a follow-up surface, that its body could not be parsed for
           a version at all. The version it serves is unknown, so this is **not** evidence
           of a failed release or a pending PR, and it is not counted as drift or lag. Re-run
           this check, or let tomorrow's cron settle it, before acting on it.

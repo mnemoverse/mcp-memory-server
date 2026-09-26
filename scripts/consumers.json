@@ -1,0 +1,69 @@
+{
+  "$comment": "Consumers of this package's MCP surface, for the release wave (mnemoverse-agent-pack protocols/surface-contour.md; registry skills/release-wave/references/surfaces.yaml). release.yml opens a 'Wave vX.Y.Z' issue with one checklist line per entry; scripts/check-release-sync.mjs probes every non-manual entry daily and ticks the line. `kind`: auto (updates without a person), track (a person merges, the probe proves it), manual (no live probe; a person ticks the line). `fix` may use <version>. Add a consumer here and in surfaces.yaml in the same change.",
+  "consumers": [
+    {
+      "id": "docs",
+      "name": "docs site (llms-full.txt)",
+      "kind": "track",
+      "repo": "mnemoverse/mnemoverse-docs",
+      "probe": {
+        "type": "text-regex",
+        "url": "https://mnemoverse.com/docs/llms-full.txt",
+        "regex": "Current release: \\*\\*v([^*]+)\\*\\*"
+      },
+      "fix": "merge the bump PR that mcp-version-watch.yml (in mnemoverse-docs) opens from branch bot/mcp-version-<version>, or, if the bot could not open it, open one by hand from that branch."
+    },
+    {
+      "id": "marketing-card",
+      "name": "marketing site (server-card.json → the connector card)",
+      "kind": "track",
+      "repo": "mnemoverse/mnemoverse-marketing",
+      "probe": {
+        "type": "json-field",
+        "url": "https://mnemoverse.com/.well-known/mcp/server-card.json",
+        "field": "package.version"
+      },
+      "fix": "the marketing card redirects to the connector's live card (mnemoverse-marketing card-redirect PR); it serves <version> once the connector serves it: see the connector line. Before that redirect is deployed: merge a \"chore(mcp): version stamps\" PR in mnemoverse-marketing."
+    },
+    {
+      "id": "connector",
+      "name": "hosted connector (/health package.version)",
+      "kind": "track",
+      "repo": "mnemoverse/mnemoverse-mcp-remote",
+      "probe": {
+        "type": "json-field",
+        "url": "https://mcp.mnemoverse.com/health",
+        "field": "package.version"
+      },
+      "fix": "merge the pin bump in mnemoverse-mcp-remote (the Dependabot PR or the receiver's PR) and let Railway deploy it; the package field appears once step 4 PR 4 (observability) is deployed."
+    },
+    {
+      "id": "ai-sdk",
+      "name": "@mnemoverse/ai-sdk (pin; private repository, no public probe)",
+      "kind": "manual",
+      "repo": "mnemoverse/ai-sdk",
+      "fix": "its surface-bump.yml contour runs on the dispatch from release.yml and every 6 h; confirm in that repository that the pin is <version> (and, once it is published, that npm serves the matching surface)."
+    },
+    {
+      "id": "vscode-readme",
+      "name": "VS Code extension README and SKILL.md (tool list)",
+      "kind": "manual",
+      "repo": "mnemoverse/mnemoverse-vscode",
+      "fix": "the runtime spawns npx @latest and needs nothing; if the release changed the tool set, update the tool list in README.md and skills/mnemoverse-memory/SKILL.md (or replace it with a link, mnemoverse-workspace#30 S7)."
+    },
+    {
+      "id": "plugins-readme",
+      "name": "plugin READMEs (claude-plugin, cursor-plugin, gemini-extension)",
+      "kind": "manual",
+      "repo": "mnemoverse/claude-plugin",
+      "fix": "if the release changed the tool set, update the lists in the three READMEs (or replace them with a link, mnemoverse-workspace#30 S7)."
+    },
+    {
+      "id": "catalogs",
+      "name": "catalog submissions (Claude connectors directory, Cursor Marketplace, Smithery, ChatGPT)",
+      "kind": "manual",
+      "repo": "mnemoverse/mnemoverse-distribution",
+      "fix": "the Official MCP Registry, Glama and PulseMCP ingest automatically; for the form-based catalogs check the ledger in mnemoverse-distribution/STATUS.md and resubmit if the version or the tool list they show is behind <version>."
+    }
+  ]
+}

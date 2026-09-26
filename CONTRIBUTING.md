@@ -201,6 +201,25 @@ same as "nothing partial gets published": whatever already succeeded stays publi
   lag, not drift, and closing it means merging those PRs, not touching this release
   pipeline.
 
+### The wave tracker: what happens after the release
+
+A release is not finished when npm serves the version. Every consumer of the
+MCP surface has to move: the docs site, the hosted connector's pin, the
+marketing card, the ai-sdk pin, the READMEs that list tools, the catalogs that
+took a form. `scripts/consumers.json` is that list, with a live probe for each
+consumer that can be probed and a fix for each. Two things read it:
+
+- `release.yml` (job `open-wave-tracker`) opens an issue `Wave vX.Y.Z` with one
+  checklist line per consumer.
+- `release-sync-check.yml` (daily) probes every probed consumer, ticks its line,
+  closes the wave when every line is green (a person ticks the manual lines),
+  and labels it `stale-wave` if it is still open three days after the release.
+
+Adding a consumer: one entry in `scripts/consumers.json` (and the matching row
+in the surface registry, `mnemoverse-agent-pack/skills/release-wave/references/surfaces.yaml`);
+`test/wave.test.ts` validates the shape. The protocol behind this is
+`mnemoverse-agent-pack/protocols/surface-contour.md`.
+
 ### One-time setup for the workflow
 
 A single secret must be added at [Settings → Secrets → Actions](https://github.com/mnemoverse/mcp-memory-server/settings/secrets/actions):

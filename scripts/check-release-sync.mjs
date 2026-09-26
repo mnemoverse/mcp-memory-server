@@ -18,13 +18,14 @@
  *                             (+ the hosted `remotes` endpoint must be present)
  *   - GitHub release          api.github.com → releases/latest tag
  *
- * Follow-up surfaces (a human merges a small bump PR in ANOTHER repository
- * after each release; an old version there is FOLLOW-UP LAG, never drift):
- *   - docs (llms-full.txt)    mnemoverse.com/docs/llms-full.txt → the
- *                             `Current release: **vX.Y.Z**` line, rendered by
- *                             mnemoverse-docs from its data/facts.json
- *   - marketing (server-card) mnemoverse.com/.well-known/mcp/server-card.json
- *                             → `serverInfo.version`, set by mnemoverse-marketing
+ * Follow-up surfaces (a human merges or deploys in ANOTHER repository after
+ * each release; an old version there is FOLLOW-UP LAG, never drift): every
+ * probed consumer in scripts/consumers.json, the single list. Today:
+ *   - docs (llms-full.txt)    the `Current release: **vX.Y.Z**` line
+ *   - marketing card          the server card's `package.version`
+ *   - connector               mcp.mnemoverse.com/health → `package.version`
+ * Add or change one there, not here; manual consumers in that file have no
+ * probe and appear only on the wave issue.
  *
  * Downstream surfaces (PulseMCP / Glama / VS Code gallery) AUTO-INGEST from the
  * registry on their own schedule, so they're reported FOR INFO ONLY — never gated
@@ -38,8 +39,8 @@
  * without touching any network code path. Leaving it unset changes nothing:
  * EXPECTED falls back to package.json#version exactly as before this existed.
  *
- * Exit 0 = every first-party surface answered AND matched, AND both follow-up
- *          surfaces answered AND matched.
+ * Exit 0 = every first-party surface answered AND matched, AND every probed
+ *          follow-up consumer in scripts/consumers.json answered AND matched.
  * Exit 1 = at least one surface DRIFTED (first-party, answered with the wrong
  *          version: a release half-landed), or LAGGED (follow-up, answered
  *          with an older version: a bump PR elsewhere hasn't merged yet), or
@@ -61,8 +62,9 @@
  * check exists to prevent. What changed is what the red run CLAIMS.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { loadConsumers, probeVersion, norm } from "./lib/wave.mjs";
 
 const PKG = JSON.parse(
   readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
@@ -71,8 +73,12 @@ const EXPECTED = process.env.RELEASE_SYNC_EXPECTED || PKG.version;
 const NPM_NAME = "@mnemoverse/mcp-memory-server";
 const REGISTRY_NAME = "io.github.mnemoverse/mcp-memory-server";
 const GH_REPO = "mnemoverse/mcp-memory-server";
-const DOCS_LLMS_FULL_URL = "https://mnemoverse.com/docs/llms-full.txt";
-const MARKETING_SERVER_CARD_URL = "https://mnemoverse.com/.well-known/mcp/server-card.json";
+// The consumers of the MCP surface that a person moves after a release: one
+// registry (scripts/consumers.json) feeds both this check and the wave issue
+// that release.yml opens (scripts/wave-issue.mjs). Manual entries have no probe.
+const CONSUMERS = loadConsumers(
+  JSON.parse(readFileSync(fileURLToPath(new URL("./consumers.json", import.meta.url)), "utf8")),
+);
 
 const TIMEOUT_MS = 20_000;
 
@@ -106,7 +112,6 @@ async function getText(url, headers = {}) {
   }
 }
 
-const norm = (v) => (v ?? "").toString().replace(/^v/, "").trim();
 
 async function checkNpm() {
   const j = await getJson(`https://registry.npmjs.org/${NPM_NAME}/latest`);
@@ -148,48 +153,27 @@ async function checkGithubRelease() {
   return { version: norm(j.tag_name) };
 }
 
-// A follow-up surface must yield a readable X.Y.Z. Anything else (an empty
-// capture, a placeholder, a template that did not render) means the version
-// served there is unknown, which is COULD NOT BE CHECKED and never lag: a lag
-// tells the responder to merge a PR, and that advice needs a real version.
-function readableVersion(raw, where) {
-  const v = norm(raw);
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(v)) {
-    throw new Error(`${where} carries no readable version (got ${JSON.stringify(raw ?? null)})`);
-  }
-  return v;
-}
-
-async function checkDocsLlmsFull() {
-  const text = await getText(DOCS_LLMS_FULL_URL);
-  const m = text.match(/Current release: \*\*v([^*]+)\*\*/);
-  if (!m) throw new Error('no "Current release: **v...**" line found in llms-full.txt');
-  return { version: readableVersion(m[1], "the Current release line in llms-full.txt") };
-}
-
-async function checkMarketingServerCard() {
-  const j = await getJson(MARKETING_SERVER_CARD_URL);
-  const v = j?.serverInfo?.version;
-  if (!v) throw new Error("serverInfo.version missing from server-card.json");
-  return { version: readableVersion(v, "serverInfo.version in server-card.json") };
-}
-
 // Follow-up surfaces carry their own remediation text because "merge a PR"
 // means a different PR, in a different repository, for each of them: a
 // responder reading only the failure output should not have to go find that
-// out on their own.
-const FOLLOW_UP = [
-  {
-    name: "docs (llms-full.txt)",
-    check: checkDocsLlmsFull,
-    fix: `merge the bump PR that mcp-version-watch.yml (in mnemoverse-docs) opens from branch bot/mcp-version-${EXPECTED}, or, if the bot could not open it, open one by hand from that branch.`,
-  },
-  {
-    name: "marketing (server-card)",
-    check: checkMarketingServerCard,
-    fix: `merge a "chore(mcp): version stamps" PR (in mnemoverse-marketing) that sets serverInfo.version to ${EXPECTED} in public/.well-known/mcp/server-card.json.`,
-  },
-];
+// out on their own. The text lives in scripts/consumers.json next to the probe.
+const FOLLOW_UP = CONSUMERS.filter((c) => c.kind !== "manual").map((c) => ({
+  id: c.id,
+  name: c.name,
+  check: () => probeVersion(c, { getJson, getText }),
+  fix: c.fix.replaceAll("<version>", EXPECTED),
+}));
+
+// The machine-readable outcome, for scripts/wave-issue.mjs (the wave tracker
+// ticks its checklist from this). Written whenever RELEASE_SYNC_RESULT names a
+// path, before the exit code is decided, so a red run still leaves a result.
+function writeResult(firstParty, consumers) {
+  const path = process.env.RELEASE_SYNC_RESULT;
+  if (!path) return;
+  const out = { expected: EXPECTED, checkedAt: new Date().toISOString(), firstParty, consumers };
+  writeFileSync(path, JSON.stringify(out, null, 2) + "\n");
+  console.log(`\n  result written to ${path}`);
+}
 
 function line(name, status, version, extra = "") {
   const v = version ? `v${version}`.padEnd(10) : "—".padEnd(10);
@@ -211,11 +195,14 @@ async function main() {
   const drifted = [];
   const lagging = [];
   const unchecked = [];
+  const firstPartyResults = {};
+  const consumerResults = {};
 
   for (const [name, fn] of firstParty) {
     try {
       const { version, extra } = await fn();
       const ok = version === EXPECTED && extra !== "remote MISSING";
+      firstPartyResults[name] = { status: ok ? "ok" : "drift", version };
       if (!ok) drifted.push(name);
       const status = version === EXPECTED ? (extra === "remote MISSING" ? "✗ remote missing" : "✓") : `✗ DRIFT (have v${version || "?"})`;
       console.log(line(name, status, version, extra && extra !== "remote MISSING" ? extra : ""));
@@ -224,30 +211,36 @@ async function main() {
       // answer, so the version it serves is UNKNOWN. Recording that as drift
       // asserted a half-landed release the run had no evidence for.
       unchecked.push(name);
+      firstPartyResults[name] = { status: "unchecked", error: err.message };
       console.log(line(name, `? could not be checked: ${err.message}`, null));
     }
   }
 
-  for (const { name, check, fix } of FOLLOW_UP) {
+  for (const { id, name, check, fix } of FOLLOW_UP) {
     try {
       const { version } = await check();
       if (version === EXPECTED) {
+        consumerResults[id] = { status: "ok", version };
         console.log(line(name, "✓", version));
       } else {
         // NOT drift either. This surface is updated by a human merging a PR
         // in a different repository, so an old version here means that PR
         // hasn't merged yet: the release pipeline itself already succeeded.
         lagging.push({ name, version, fix });
+        consumerResults[id] = { status: "lag", version };
         console.log(line(name, `✗ FOLLOW-UP LAG (have v${version || "?"})`, version));
       }
     } catch (err) {
       unchecked.push(name);
+      consumerResults[id] = { status: "unchecked", error: err.message };
       console.log(line(name, `? could not be checked: ${err.message}`, null));
     }
   }
 
+  writeResult(firstPartyResults, consumerResults);
+
   console.log(
-    "\n  (note) downstream surfaces — PulseMCP / Glama / VS Code gallery — auto-ingest from the registry on their own schedule; not gated here. The two follow-up surfaces above are different: they're gated, but a lag there is a pending PR in another repository, not a drift we caused.",
+    "\n  (note) downstream surfaces — PulseMCP / Glama / VS Code gallery — auto-ingest from the registry on their own schedule; not gated here. The follow-up surfaces above (every probed consumer in scripts/consumers.json) are different: they're gated, but a lag there is a pending merge or deploy in another repository, not a drift we caused.",
   );
 
   if (drifted.length > 0) {
@@ -265,7 +258,7 @@ async function main() {
   if (drifted.length > 0 || lagging.length > 0 || unchecked.length > 0) {
     process.exit(1);
   }
-  console.log(`\nAll first-party surfaces in sync at v${EXPECTED}, and both follow-up surfaces (docs, marketing) have caught up.`);
+  console.log(`\nAll first-party surfaces in sync at v${EXPECTED}, and every probed consumer (${FOLLOW_UP.map((f) => f.name).join(", ")}) has caught up.`);
 }
 
 main().catch((err) => {
