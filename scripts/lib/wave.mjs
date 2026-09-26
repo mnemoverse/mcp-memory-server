@@ -247,7 +247,15 @@ export function allProbedGreen(consumers, results) {
  * (Copilot and Sigma on #178).
  */
 export function waveConsumers(body, consumers) {
-  return consumers.filter((c) => (body ?? "").includes(`<!-- wave:${c.id} -->`));
+  // The ids come from the body, in its order; the registry only adds what it
+  // knows about each. A line whose consumer has since been removed or renamed
+  // in the registry stays tracked, as a manual line a person ticks, so the
+  // wave cannot close with that line unchecked (Copilot on #178).
+  const byId = new Map(consumers.map((c) => [c.id, c]));
+  const ids = [...(body ?? "").matchAll(/<!-- wave:([a-z0-9-]+) -->/g)].map((m) => m[1]);
+  return [...new Set(ids)].map(
+    (id) => byId.get(id) ?? { id, name: id, kind: "manual", repo: "", fix: "no longer in scripts/consumers.json: tick by hand" },
+  );
 }
 
 /** Every line, probed and manual, is ticked in the body. */

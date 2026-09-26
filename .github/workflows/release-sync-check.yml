@@ -1,8 +1,9 @@
 name: release-sync check
 
 # Issue #31: confirm every first-party public surface (npm, the Official MCP
-# Registry, the GitHub release) AND every follow-up surface (the docs site's
-# llms-full.txt, the marketing site's server-card.json) is still tracking
+# Registry, the GitHub release) AND every follow-up surface (every probed
+# consumer in scripts/consumers.json: the docs site's llms-full.txt, the
+# marketing server card, the connector's /health) is still tracking
 # package.json#version — so a half-landed release (e.g. npm published but the
 # registry publish failed), or a forgotten bump PR in another repository,
 # can't drift silently and make directories, docs readers or visitors read us
@@ -15,8 +16,8 @@ name: release-sync check
 # first-party surface DRIFTED (it answered with the wrong version, so a
 # release half-landed: open release.yml and re-run the missing leg), a
 # follow-up surface LAGGED (it answered with an older version because a bump
-# PR in a different repository (mnemoverse-docs or mnemoverse-marketing)
-# hasn't been merged yet; the release pipeline itself is fine), or a surface
+# PR or deploy in a different repository (the consumer's repo in
+# scripts/consumers.json) hasn't landed yet; the release pipeline itself is fine), or a surface
 # COULD NOT BE CHECKED (it did not answer, so its version is unknown). Only
 # the first is drift. The second is a pending merge elsewhere, not a pipeline
 # problem. The third is still red, because an unverified surface is not a

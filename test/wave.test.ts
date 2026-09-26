@@ -196,6 +196,18 @@ describe("a wave keeps the consumers it was opened with (Copilot and Sigma on #1
     expect(allTicked(green, grown)).toBe(false);
   });
 
+  it("a line whose consumer left the registry stays tracked as a manual line, so the wave cannot close past it", () => {
+    const body = renderWaveBody({ version: "0.13.0", consumers: FIXTURE.slice(0, 2) });
+    const shrunk = [FIXTURE[0]];
+    const own = waveConsumers(body, shrunk);
+    expect(own.map((c) => c.id)).toEqual(["docs", "card"]);
+    expect(own[1].kind).toBe("manual");
+    const ticked = applyResults(body, own, { docs: { status: "ok", version: "0.13.0" } });
+    expect(allProbedGreen(own, { docs: { status: "ok" } })).toBe(true);
+    expect(allTicked(ticked, own)).toBe(false);
+    expect(allTicked(ticked.replace("- [ ] <!-- wave:card -->", "- [x] <!-- wave:card -->"), own)).toBe(true);
+  });
+
   it("a result without a version stays unchecked instead of reading as 0.0.0 (CodeRabbit on #178)", () => {
     const r = resultsForWave({ docs: { status: "ok" as const } }, "0.0.0");
     expect(r.docs.status).toBe("unchecked");
