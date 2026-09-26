@@ -55,6 +55,48 @@ jobs:
         run: npm run check:release-sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The machine-readable outcome, ticked into the wave issue below.
+          RELEASE_SYNC_RESULT: ${{ runner.temp }}/release-sync-result.json
+      - name: Keep the result for the wave tracker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-sync-result
+          path: ${{ runner.temp }}/release-sync-result.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # The wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md):
+  # release.yml opens a "Wave vX.Y.Z" issue with one line per consumer of the
+  # MCP surface; this job re-ticks those lines from the probes above, closes
+  # the wave when every line is green, and labels it stale-wave after three
+  # days. A separate job for the same reason as notify-on-failure: the
+  # `issues: write` scope never sits on the job that runs repository code.
+  tick-wave:
+    name: Tick the wave tracker
+    needs: [check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: release-sync-result
+          path: ${{ runner.temp }}/sync
+      - name: Tick the open wave issue from the probes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/wave-issue.mjs tick --result "${{ runner.temp }}/sync/release-sync-result.json"
 
   # The check above is correct, and it was correct on the morning it mattered.
   # What was missing is that a scheduled workflow's failure is invisible unless

@@ -591,6 +591,36 @@ jobs:
   # The issue text lives in `env` as a block scalar, not inside the script, so
   # the markdown can carry real backticks with no escaping.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Step 13: the wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md).
+  # One issue per release, "Wave vX.Y.Z", with a checklist line per consumer of
+  # the MCP surface (scripts/consumers.json). The daily release-sync check ticks
+  # the probed lines from live probes and closes the wave when every line is
+  # green; a person ticks the manual lines. GITHUB_TOKEN can open issues here,
+  # so no extra secret; a failure of this job never fails the release.
+  # ---------------------------------------------------------------------------
+  open-wave-tracker:
+    name: Open the wave tracker issue for this release
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Open (or bump) the Wave issue with the consumer checklist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/wave-issue.mjs open --version "${TAG#v}" --run-url "$RUN_URL"
+
   notify-on-failure:
     name: A failed release must reach a human
     needs: [release]
