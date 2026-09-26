@@ -58,12 +58,11 @@ function ghJson(args, input) {
   return JSON.parse(gh(args, input));
 }
 
+// Idempotent: --force creates the label or updates an existing one, so the
+// only failures left are real ones (auth, network, 5xx), and those propagate
+// instead of leaving a wave unlabelled (Copilot on #178).
 function ensureLabel(name, color, description) {
-  try {
-    gh(["api", "-X", "POST", `repos/${REPO}/labels`, "-f", `name=${name}`, "-f", `color=${color}`, "-f", `description=${description}`]);
-  } catch {
-    // exists already (422): fine
-  }
+  gh(["label", "create", name, "--repo", REPO, "--color", color, "--description", description, "--force"]);
 }
 
 // Every open wave, found by its exact title over every page of open issues:

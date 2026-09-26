@@ -39,8 +39,8 @@
  * without touching any network code path. Leaving it unset changes nothing:
  * EXPECTED falls back to package.json#version exactly as before this existed.
  *
- * Exit 0 = every first-party surface answered AND matched, AND both follow-up
- *          surfaces answered AND matched.
+ * Exit 0 = every first-party surface answered AND matched, AND every probed
+ *          follow-up consumer in scripts/consumers.json answered AND matched.
  * Exit 1 = at least one surface DRIFTED (first-party, answered with the wrong
  *          version: a release half-landed), or LAGGED (follow-up, answered
  *          with an older version: a bump PR elsewhere hasn't merged yet), or
