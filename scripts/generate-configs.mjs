@@ -4,7 +4,10 @@
  *
  * Single source of truth → all distribution channel configs.
  *
- * Reads: src/configs/source.json
+ * Reads: src/configs/source.json (every channel's identity, command, env)
+ *        tools.json (the tool list, generated from the built server by
+ *        scripts/generate-tools-manifest.mjs; the .mcpb manifest's tools[]
+ *        is derived from it, never typed by hand)
  * Writes: docs/configs/*, docs/snippets/*, server.json, manifest.json,
  *         README.md install block
  *
@@ -33,6 +36,25 @@ const source = JSON.parse(readFileSync(SOURCE_PATH, "utf8"));
 const PACKAGE_VERSION = JSON.parse(
   readFileSync(resolve(ROOT, "package.json"), "utf8"),
 ).version;
+
+// The tool list is NOT in source.json. It is tools.json, produced by
+// scripts/generate-tools-manifest.mjs from the built server (dist/shared.js),
+// so the .mcpb manifest below declares exactly what the server registers.
+// A missing file is an error, not an empty list: a manifest with no tools
+// would pass every drift check and ship a Desktop Extension that declares
+// nothing.
+const TOOLS_PATH = resolve(ROOT, "tools.json");
+if (!existsSync(TOOLS_PATH)) {
+  console.error("✗ tools.json not found at " + TOOLS_PATH);
+  console.error(
+    "  It is generated from the built server: run `npm run build` (its postbuild",
+  );
+  console.error(
+    "  step writes it), or `node scripts/generate-tools-manifest.mjs` on an existing dist/.",
+  );
+  process.exit(1);
+}
+const TOOLS_MANIFEST = JSON.parse(readFileSync(TOOLS_PATH, "utf8"));
 
 // Helper: extract { KEY: "value" } from source.env (which has nested {value, description, ...})
 function envValues(envObj) {
@@ -683,11 +705,17 @@ function genServerJson() {
  * injected into the server env as ${user_config.api_key} at runtime — never
  * hardcoded into the bundle. `version` is taken from package.json so the .mcpb
  * always matches the npm release; identity fields reuse source.metadata; the
- * MCPB-specific extras (privacy policy, user_config, tools, icon, compatibility)
- * live under source.mcpb.
+ * MCPB-specific extras (privacy policy, user_config, icon, compatibility) live
+ * under source.mcpb. `tools` comes from tools.json (see TOOLS_MANIFEST above):
+ * the MCPB shape is `{name, description}` per tool, so the other fields the
+ * artifact carries (title, annotations) are dropped here, not restated.
  */
 function genMcpbManifest() {
   const m = source.mcpb;
+  const tools = TOOLS_MANIFEST.tools.map(({ name, description }) => ({
+    name,
+    description,
+  }));
   return {
     manifest_version: "0.3",
     name: m.name,
@@ -723,7 +751,7 @@ function genMcpbManifest() {
         },
       },
     },
-    tools: m.tools,
+    tools,
     user_config: m.userConfig,
     compatibility: {
       claude_desktop: m.compatibility.claudeDesktop,
