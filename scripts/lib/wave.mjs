@@ -95,6 +95,42 @@ export function waveTitle(version) {
   return `Wave v${norm(version)}`;
 }
 
+/** The version a "Wave vX.Y.Z" title names, or null for any other title. */
+export function waveVersion(title) {
+  const m = /^Wave v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/.exec(title ?? "");
+  return m ? m[1] : null;
+}
+
+/** a >= b on X.Y.Z (a pre-release suffix sorts below its release). */
+export function atLeast(a, b) {
+  const parse = (v) => {
+    const [core, pre] = norm(v).split(/[-+]/, 2);
+    return { n: core.split(".").map((x) => Number.parseInt(x, 10) || 0), pre: pre ?? null };
+  };
+  const x = parse(a), y = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if (x.n[i] !== y.n[i]) return x.n[i] > y.n[i];
+  }
+  if (x.pre === y.pre) return true;
+  if (x.pre === null) return true;
+  if (y.pre === null) return false;
+  return x.pre >= y.pre;
+}
+
+/**
+ * The results of one probe run, read for a given wave: a consumer that serves
+ * the wave's version or a later one has done its part for that wave, so an
+ * older wave still open after the next release can be closed too.
+ */
+export function resultsForWave(results, waveVer) {
+  const out = {};
+  for (const [id, r] of Object.entries(results)) {
+    if (r.status === "unchecked") out[id] = r;
+    else out[id] = { ...r, status: atLeast(r.version, waveVer) ? "ok" : "lag" };
+  }
+  return out;
+}
+
 const STATUS_TEXT = {
   ok: (r) => `serves v${r.version}`,
   lag: (r) => `still v${r.version || "?"}`,

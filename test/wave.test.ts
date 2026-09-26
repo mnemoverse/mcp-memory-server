@@ -23,6 +23,9 @@ import {
   renderWaveBody,
   waveTitle,
   type Consumer,
+  waveVersion,
+  atLeast,
+  resultsForWave,
 } from "../scripts/lib/wave.mjs";
 
 const registry = JSON.parse(readFileSync(new URL("../scripts/consumers.json", import.meta.url), "utf8"));
@@ -121,5 +124,42 @@ describe("the wave issue text", () => {
     expect(isStale(created, Date.parse(created) + 2 * day)).toBe(false);
     expect(isStale(created, Date.parse(created) + 4 * day)).toBe(true);
     expect(isStale("garbage", 0)).toBe(false);
+  });
+});
+
+describe("every open wave is maintained, not only the current version's (Copilot on #178)", () => {
+  it("reads the version from an exact 'Wave vX.Y.Z' title only", () => {
+    expect(waveVersion("Wave v0.13.0")).toBe("0.13.0");
+    expect(waveVersion("Wave v0.13.0-rc.1")).toBe("0.13.0-rc.1");
+    expect(waveVersion("Wave v0.13")).toBeNull();
+    expect(waveVersion("Re: Wave v0.13.0")).toBeNull();
+  });
+
+  it("compares versions numerically, a pre-release below its release", () => {
+    expect(atLeast("0.13.0", "0.12.1")).toBe(true);
+    expect(atLeast("0.12.10", "0.12.9")).toBe(true);
+    expect(atLeast("0.12.1", "0.13.0")).toBe(false);
+    expect(atLeast("0.13.0-rc.1", "0.13.0")).toBe(false);
+    expect(atLeast("0.13.0", "0.13.0-rc.1")).toBe(true);
+    expect(atLeast("v0.12.1", "0.12.1")).toBe(true);
+  });
+
+  it("a consumer serving a later version completes an older wave; an older one lags; unchecked stays unchecked", () => {
+    const probed = {
+      docs: { status: "ok" as const, version: "0.13.0" },
+      card: { status: "lag" as const, version: "0.12.0" },
+      connector: { status: "unchecked" as const, error: "HTTP 502" },
+    };
+    const forOld = resultsForWave(probed, "0.12.1");
+    expect(forOld.docs.status).toBe("ok");
+    expect(forOld.card.status).toBe("lag");
+    expect(forOld.connector.status).toBe("unchecked");
+    // Lagging behind the current release (0.14.0) but past an older wave's
+    // version: done for that older wave. This is the case the recompute exists for.
+    const behindCurrent = resultsForWave({ docs: { status: "lag" as const, version: "0.13.0" } }, "0.12.1");
+    expect(behindCurrent.docs.status).toBe("ok");
+    const forNew = resultsForWave(probed, "0.13.0");
+    expect(forNew.docs.status).toBe("ok");
+    expect(forNew.card.status).toBe("lag");
   });
 });

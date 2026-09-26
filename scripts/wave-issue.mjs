@@ -31,6 +31,8 @@ import {
   allTicked,
   isStale,
   waveTitle,
+  waveVersion,
+  resultsForWave,
   norm,
 } from "./lib/wave.mjs";
 
@@ -62,13 +64,19 @@ function ensureLabel(name, color, description) {
   }
 }
 
+// Every open wave, found by its exact title over every page of open issues:
+// not by label (a label that failed to apply would hide a wave and a re-run
+// would open a duplicate) and not from the first page only (Copilot on #178).
+function listOpenWaves() {
+  const pages = gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues?state=open&per_page=100`]);
+  return JSON.parse(pages)
+    .flat()
+    .filter((i) => !i.pull_request && waveVersion(i.title) !== null);
+}
+
 function findOpenWave(version) {
   const title = waveTitle(version);
-  const list = ghJson([
-    "api",
-    `repos/${REPO}/issues?state=open&labels=${LABEL}&per_page=100`,
-  ]);
-  return list.find((i) => i.title === title && !i.pull_request) ?? null;
+  return listOpenWaves().find((i) => i.title === title) ?? null;
 }
 
 function arg(name) {
@@ -121,32 +129,41 @@ function tick() {
     if (r.status === "ok" && norm(r.version) !== trusted) throw new Error(`result marks ${id} ok at v${norm(r.version)}, not v${trusted}; refusing to tick`);
     results[id] = { status: r.status, version: r.version == null ? undefined : String(r.version).slice(0, 40), error: r.error == null ? undefined : String(r.error).slice(0, 200) };
   }
-  const issue = findOpenWave(version);
-  if (!issue) {
-    console.log(`no open wave issue for v${version}; nothing to tick`);
+  // Every open wave, not only the current version's: after the next release an
+  // older wave is still maintained (ticked, closed, labelled stale) instead of
+  // staying open forever (Copilot on #178). A consumer serving the wave's
+  // version or a later one has done its part for that wave.
+  const waves = listOpenWaves();
+  if (waves.length === 0) {
+    console.log(`no open wave issue; nothing to tick`);
     return;
   }
+  for (const issue of waves) tickWave(issue, waveVersion(issue.title), results, result.checkedAt);
+}
+
+function tickWave(issue, waveVer, results, checkedAtRaw) {
+  const waveResults = resultsForWave(results, waveVer);
   // Re-read the body right before rewriting it, so a person's edit made while
   // this run was probing is the base of the rewrite, not lost to it. The jobs
   // that tick are serialized (concurrency group tick-wave), so the only other
   // writer is a person; the remaining window is one API round trip.
   const fresh = ghJson(["api", `repos/${REPO}/issues/${issue.number}`]);
   const before = fresh.body ?? "";
-  const after = applyResults(before, consumers, results);
-  const green = allProbedGreen(consumers, results);
+  const after = applyResults(before, consumers, waveResults);
+  const green = allProbedGreen(consumers, waveResults);
   const done = green && allTicked(after, consumers);
   const changed = after !== before;
-  const checkedAt = result.checkedAt ?? new Date().toISOString();
+  const checkedAt = checkedAtRaw ?? new Date().toISOString();
   if (changed) {
     gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${issue.number}`, "--input", "-"], JSON.stringify({ body: after }));
   }
   const summary = consumers
     .filter((c) => c.kind !== "manual")
-    .map((c) => `${results[c.id]?.status === "ok" ? "✓" : "✗"} ${c.name}`)
+    .map((c) => `${waveResults[c.id]?.status === "ok" ? "✓" : "✗"} ${c.name}`)
     .join("; ");
   if (done) {
     gh(["api", "-X", "POST", `repos/${REPO}/issues/${issue.number}/comments`, "-f",
-      `body=Every consumer serves v${version} (${checkedAt}): ${summary}. Closing the wave.`]);
+      `body=Every consumer serves v${waveVer} or later (${checkedAt}): ${summary}. Closing the wave.`]);
     gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${issue.number}`, "-f", "state=closed", "-f", "state_reason=completed"]);
     console.log(`wave #${issue.number} closed: all green`);
     return;

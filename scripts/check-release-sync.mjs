@@ -239,7 +239,7 @@ async function main() {
   writeResult(firstPartyResults, consumerResults);
 
   console.log(
-    "\n  (note) downstream surfaces — PulseMCP / Glama / VS Code gallery — auto-ingest from the registry on their own schedule; not gated here. The two follow-up surfaces above are different: they're gated, but a lag there is a pending PR in another repository, not a drift we caused.",
+    "\n  (note) downstream surfaces — PulseMCP / Glama / VS Code gallery — auto-ingest from the registry on their own schedule; not gated here. The follow-up surfaces above (every probed consumer in scripts/consumers.json) are different: they're gated, but a lag there is a pending merge or deploy in another repository, not a drift we caused.",
   );
 
   if (drifted.length > 0) {
