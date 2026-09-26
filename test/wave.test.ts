@@ -24,6 +24,7 @@ import {
   waveTitle,
   type Consumer,
   waveVersion,
+  isWaveIssue,
   atLeast,
   resultsForWave,
 } from "../scripts/lib/wave.mjs";
@@ -168,5 +169,16 @@ describe("every open wave is maintained, not only the current version's (Copilot
     const forNew = resultsForWave(probed, "0.13.0");
     expect(forNew.docs.status).toBe("ok");
     expect(forNew.card.status).toBe("lag");
+  });
+});
+
+describe("only the workflow's own issue is a wave (Sigma on #178)", () => {
+  const bot = { type: "Bot", login: "github-actions[bot]" };
+  it("adopts an issue with the exact title opened by github-actions[bot], nothing else", () => {
+    expect(isWaveIssue({ title: "Wave v0.13.0", user: bot })).toBe(true);
+    expect(isWaveIssue({ title: "Wave v0.13.0", user: { type: "User", login: "someone" } })).toBe(false);
+    expect(isWaveIssue({ title: "Wave v0.13.0", user: { type: "Bot", login: "other-bot[bot]" } })).toBe(false);
+    expect(isWaveIssue({ title: "Wave v0.13.0", user: bot, pull_request: {} })).toBe(false);
+    expect(isWaveIssue({ title: "Wave 0.13.0", user: bot })).toBe(false);
   });
 });

@@ -32,6 +32,7 @@ import {
   isStale,
   waveTitle,
   waveVersion,
+  isWaveIssue,
   resultsForWave,
   norm,
 } from "./lib/wave.mjs";
@@ -71,7 +72,7 @@ function listOpenWaves() {
   const pages = gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues?state=open&per_page=100`]);
   return JSON.parse(pages)
     .flat()
-    .filter((i) => !i.pull_request && waveVersion(i.title) !== null);
+    .filter(isWaveIssue);
 }
 
 function findOpenWave(version) {

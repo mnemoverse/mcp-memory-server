@@ -95,6 +95,22 @@ export function waveTitle(version) {
   return `Wave v${norm(version)}`;
 }
 
+/**
+ * A wave tracker is an issue this repository's workflow opened: the exact
+ * title AND the github-actions bot as its author. The repository is public, so
+ * anyone can open an issue titled "Wave v0.13.0"; adopting it by title alone
+ * would let an outsider suppress the real tracker or have the workflow edit
+ * and close their issue (Sigma on #178). Pull requests are never waves.
+ */
+export function isWaveIssue(issue) {
+  return (
+    !issue?.pull_request &&
+    issue?.user?.type === "Bot" &&
+    issue?.user?.login === "github-actions[bot]" &&
+    waveVersion(issue?.title) !== null
+  );
+}
+
 /** The version a "Wave vX.Y.Z" title names, or null for any other title. */
 export function waveVersion(title) {
   const m = /^Wave v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/.exec(title ?? "");

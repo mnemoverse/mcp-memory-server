@@ -29,6 +29,7 @@ export function loadConsumers(json: unknown): Consumer[];
 export function probeVersion(consumer: Consumer, io: Io): Promise<{ version: string }>;
 export function waveTitle(version: string): string;
 export function waveVersion(title: string): string | null;
+export function isWaveIssue(issue: unknown): boolean;
 export function atLeast(a: string, b: string): boolean;
 export function resultsForWave(results: Record<string, ProbeResult>, waveVersion: string): Record<string, ProbeResult>;
 export function renderConsumerLine(consumer: Consumer, version: string, result?: ProbeResult): string;
