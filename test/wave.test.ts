@@ -142,6 +142,13 @@ describe("every open wave is maintained, not only the current version's (Copilot
     expect(atLeast("0.13.0-rc.1", "0.13.0")).toBe(false);
     expect(atLeast("0.13.0", "0.13.0-rc.1")).toBe(true);
     expect(atLeast("v0.12.1", "0.12.1")).toBe(true);
+    // semver pre-release order and build metadata (Copilot on #178)
+    expect(atLeast("0.13.0-rc.10", "0.13.0-rc.2")).toBe(true);
+    expect(atLeast("0.13.0-rc.2", "0.13.0-rc.10")).toBe(false);
+    expect(atLeast("0.13.0-rc.1", "0.13.0-rc")).toBe(true);
+    expect(atLeast("0.13.0-alpha", "0.13.0-1")).toBe(true);
+    expect(atLeast("0.13.0+build.2", "0.13.0")).toBe(true);
+    expect(atLeast("0.13.0", "0.13.0+build.2")).toBe(true);
   });
 
   it("a consumer serving a later version completes an older wave; an older one lags; unchecked stays unchecked", () => {

@@ -101,20 +101,37 @@ export function waveVersion(title) {
   return m ? m[1] : null;
 }
 
-/** a >= b on X.Y.Z (a pre-release suffix sorts below its release). */
+/**
+ * a >= b by semver precedence: build metadata (+...) is ignored, a pre-release
+ * sorts below its release, and pre-release identifiers compare one by one,
+ * numeric ones numerically (rc.10 > rc.2), numeric below alphanumeric
+ * (Copilot on #178).
+ */
 export function atLeast(a, b) {
   const parse = (v) => {
-    const [core, pre] = norm(v).split(/[-+]/, 2);
-    return { n: core.split(".").map((x) => Number.parseInt(x, 10) || 0), pre: pre ?? null };
+    const noBuild = norm(v).split("+", 1)[0];
+    const dash = noBuild.indexOf("-");
+    const core = dash === -1 ? noBuild : noBuild.slice(0, dash);
+    const pre = dash === -1 ? null : noBuild.slice(dash + 1).split(".");
+    return { n: core.split(".").map((x) => Number.parseInt(x, 10) || 0), pre };
   };
   const x = parse(a), y = parse(b);
   for (let i = 0; i < 3; i++) {
-    if (x.n[i] !== y.n[i]) return x.n[i] > y.n[i];
+    if ((x.n[i] ?? 0) !== (y.n[i] ?? 0)) return (x.n[i] ?? 0) > (y.n[i] ?? 0);
   }
-  if (x.pre === y.pre) return true;
   if (x.pre === null) return true;
   if (y.pre === null) return false;
-  return x.pre >= y.pre;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const p = x.pre[i], q = y.pre[i];
+    if (p === undefined) return false;
+    if (q === undefined) return true;
+    if (p === q) continue;
+    const pn = /^\d+$/.test(p), qn = /^\d+$/.test(q);
+    if (pn && qn) return Number(p) > Number(q);
+    if (pn !== qn) return !pn;
+    return p > q;
+  }
+  return true;
 }
 
 /**
