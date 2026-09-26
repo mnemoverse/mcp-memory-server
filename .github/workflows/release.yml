@@ -643,6 +643,24 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/wave-issue.mjs open --version "${TAG#v}" --run-url "$RUN_URL"
+      # A tracker failure must reach a human (Sigma on #178). The workflow's
+      # notify-on-failure job watches only the release or the check, and its
+      # text says the release failed, so the tracker reports itself: one open
+      # issue from github-actions[bot] with this exact title, commented on
+      # again by every later failure instead of duplicated.
+      - name: A tracker failure must reach a human
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Wave tracker failed"
+          n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --author app/github-actions --limit 100 --json number,title --jq "map(select(.title == \"$title\"))[0].number // empty")
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The wave tracker job ($GITHUB_JOB) failed: $RUN_URL. Read the failing step. The release itself is not affected; open waves are not being ticked until this is fixed. Close this issue by hand once a run is green."
+          fi
 
   notify-on-failure:
     name: A failed release must reach a human
