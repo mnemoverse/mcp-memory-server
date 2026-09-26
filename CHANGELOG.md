@@ -105,10 +105,10 @@ git history and the GitHub releases are the record.
   workflow, which compares the committed file with the one the build
   regenerates (`verify:configs` only checks the other artifacts against it).
   `test/tools-manifest.test.ts` pins the committed file to a
-  live in-memory listing, pins `manifest.json` to it, and checks that the
-  count sentences the `memory_graph` entry above left at ten (README,
-  `llms-install.md`, `docs/shared.md`, the `src/tools.ts` headers) state
-  the count `tools.json` states; they say eleven as of this entry.
+  live in-memory listing, pins `manifest.json` to it, and checks that every
+  sentence stating the tool count (README, `llms-install.md`,
+  `docs/shared.md`, the `src/tools.ts` headers) states the count
+  `tools.json` states, eleven in this release.
 
 ## [0.12.1] — 2026-09-25
 
