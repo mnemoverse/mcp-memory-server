@@ -100,9 +100,11 @@ git history and the GitHub releases are the record.
   of typed by hand. The `.mcpb` `manifest.json` `tools[]` is now generated
   from this file (name and description, the MCPB shape) rather than from a
   hand list in `src/configs/source.json`, which had ten entries while the
-  server registered eleven; the hand list is gone. `npm run verify:configs`
-  now fails when `tools.json` is stale, before it checks the other
-  artifacts. `test/tools-manifest.test.ts` pins the committed file to a
+  server registered eleven; the hand list is gone. A stale `tools.json` is
+  caught by `test/tools-manifest.test.ts` on every PR and by the release
+  workflow, which compares the committed file with the one the build
+  regenerates (`verify:configs` only checks the other artifacts against it).
+  `test/tools-manifest.test.ts` pins the committed file to a
   live in-memory listing, pins `manifest.json` to it, and checks that the
   count sentences the `memory_graph` entry above left at ten (README,
   `llms-install.md`, `docs/shared.md`, the `src/tools.ts` headers) state

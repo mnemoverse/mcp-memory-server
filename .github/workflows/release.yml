@@ -212,13 +212,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # postbuild regenerates tools.json from the build, so keep the COMMITTED
+      # copy first: the gate below compares the two, and a check after the
+      # build alone would compare the generator with itself (Copilot on #179).
+      - name: Keep the committed tools.json
+        run: cp tools.json "$RUNNER_TEMP/tools.committed.json"
+
       - name: Build (runs generate:configs via prebuild)
         run: npm run build
+
+      - name: The committed tools.json equals what the built server registers
+        run: |
+          if ! diff -u "$RUNNER_TEMP/tools.committed.json" tools.json; then
+            echo "::error::tools.json on the tag is stale: it does not list what the built server registers. Run npm run build and commit tools.json."
+            exit 1
+          fi
 
       # Belt to the pre-build gate above: catches a generator that is itself
       # non-deterministic between two runs in the same job.
       - name: Verify no drift between source.json and generated artifacts
-        run: npm run verify:configs && npm run verify:tools
+        run: npm run verify:configs
 
       # The manifest.json fixes shipped in 0.8.x reached nobody: no workflow
       # ever packed the .mcpb bundle (#85). Pack BEFORE npm publish so a broken

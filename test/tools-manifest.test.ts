@@ -9,8 +9,11 @@
  * correct when written and wrong after `memory_graph` landed (#174), and
  * nothing failed. `scripts/generate-tools-manifest.mjs` now asks the BUILT
  * server what it registers and writes tools.json; the .mcpb manifest is
- * generated from that file; `npm run verify:configs` fails when the file is
- * stale. This test closes the remaining gaps:
+ * generated from that file. `verify:configs` only checks that manifest.json
+ * matches tools.json, so it passes when both are stale together; the drift
+ * between tools.json and the implementation is caught HERE (a) and by the
+ * release workflow's diff of the committed file against the rebuilt one.
+ * This test closes the remaining gaps:
  *
  *   (a) tools.json equals a live in-memory server's tools/list, so a committed
  *       artifact that drifted from src/ fails here even before anyone builds;
