@@ -361,8 +361,13 @@ saw and diff it against what the server serves today, by version.
   changes those three description strings and nothing else; tool names,
   input and output schemas and annotations never vary by configuration.
 
-The list above is the 0.12 surface: ten tools, each declaring all four hints.
-The hosted connector at `mcp.mnemoverse.com/mcp` serves the same ten.
+The list above is the current surface: eleven tools, each declaring all four hints.
+The hosted connector at `mcp.mnemoverse.com/mcp` serves the same surface, registered
+from this package at the version it pins. The list itself is published as
+[`tools.json`](./tools.json), generated from the built server (name, title,
+description and annotations per tool); the test suite and the release workflow
+fail when it does not list what the server registers, and the `.mcpb` manifest's
+tool list is derived from it.
 
 **If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in the Quick Start, reaches the same memory and does not depend on that session's sign-in.
 

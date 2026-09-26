@@ -152,13 +152,21 @@ describe("the shared entry point", () => {
     // was importable by path. An exports map without a dist/* passthrough would
     // turn `@mnemoverse/mcp-memory-server/dist/errors.js` into
     // ERR_PACKAGE_PATH_NOT_EXPORTED for anyone who used it: a breaking change
-    // hidden in a refactor (review finding on #144). The map is additive only.
+    // hidden in a refactor (review finding on #144). The map is additive only:
+    // `./tools.json` (the generated tool manifest, see
+    // test/tools-manifest.test.ts) was added to it, nothing was removed.
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
       exports: Record<string, unknown>;
       main: string;
       bin: Record<string, string>;
     };
-    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./dist/*", "./package.json", "./shared"]);
+    expect(Object.keys(pkg.exports).sort()).toEqual([
+      ".",
+      "./dist/*",
+      "./package.json",
+      "./shared",
+      "./tools.json",
+    ]);
     expect(pkg.exports["./dist/*"]).toBe("./dist/*");
     expect(pkg.main).toBe("./dist/index.js");
     expect(pkg.bin["mcp-memory-server"]).toBe("./dist/index.js");

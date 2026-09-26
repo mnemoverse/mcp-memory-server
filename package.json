@@ -18,13 +18,15 @@
       "default": "./dist/shared.js"
     },
     "./dist/*": "./dist/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./tools.json": "./tools.json"
   },
   "files": [
     "dist",
     "README.md",
     "LICENSE",
-    "package.json"
+    "package.json",
+    "tools.json"
   ],
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
@@ -35,11 +37,13 @@
     "typecheck:test": "tsc -p tsconfig.test.json",
     "generate:configs": "node scripts/generate-configs.mjs",
     "verify:configs": "node scripts/generate-configs.mjs --check",
+    "verify:tools": "node scripts/generate-tools-manifest.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",
     "limits:refresh": "node scripts/generate-limits.mjs",
     "limits:check": "node scripts/generate-limits.mjs --check",
     "install-hooks": "node scripts/install-hooks.mjs",
     "prebuild": "npm run generate:configs",
+    "postbuild": "node scripts/generate-tools-manifest.mjs && node scripts/generate-configs.mjs",
     "prepublishOnly": "npm run build",
     "mcpb:validate": "npx -y @anthropic-ai/mcpb@2 validate .",
     "mcpb:pack": "npm run build && npx -y @anthropic-ai/mcpb@2 pack . dist-mcpb/mnemoverse-memory.mcpb"

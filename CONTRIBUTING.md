@@ -167,7 +167,7 @@ That push fires [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 1. Verifies the tag matches `package.json#version` (belt and suspenders).
 2. Runs `npm ci && npm run build` (which also runs `generate:configs` via `prebuild`).
-3. Runs `npm run verify:configs` for drift.
+3. Runs `npm run verify:configs` for drift, and compares the committed `tools.json` (the tool list the `.mcpb` manifest and every count derive from, kept aside before the build) with the one the build regenerates: a difference fails the release. `verify:configs` needs no build. Locally, `npm run verify:tools` does the same comparison against an existing `dist/`; the test suite checks it from source, so CI catches a stale `tools.json` on every PR.
 4. `npm publish` using the `NPM_TOKEN` secret, skipped if npm already serves the same bytes,
    then a wait until npm serves it (npm accepts a publish minutes before it serves it,
    and the registry in step 7 checks npm at once).

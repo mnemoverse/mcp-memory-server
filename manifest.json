@@ -43,44 +43,48 @@
   },
   "tools": [
     {
-      "name": "memory_write",
-      "description": "Store a memory that should persist across sessions and tools — preferences, decisions, lessons, project facts."
-    },
-    {
-      "name": "memory_read",
-      "description": "Search your long-term memory by natural-language query before answering or starting a task."
-    },
-    {
-      "name": "memory_list_recent",
-      "description": "List the newest memories first — no search query; filter by domain and a since/until time window, page with a cursor."
+      "name": "memory_create_room",
+      "description": "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. To bring someone in, call memory_invite_to_room next."
     },
     {
       "name": "memory_feedback",
-      "description": "Report whether a recalled memory was helpful so good memories surface faster next time."
+      "description": "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories."
     },
     {
-      "name": "memory_stats",
-      "description": "Show how many memories are stored, which domains exist, and the average valence and importance scores."
-    },
-    {
-      "name": "memory_create_room",
-      "description": "Create a shared memory room — a space other people's assistants can read, and write too when invited with read_write scope, across Claude/ChatGPT/editors."
+      "name": "memory_graph",
+      "description": "Reads the association edges around given concepts: which concepts the memory has linked together, with each link's weight, outcome valence and co-activation count. Use to inspect what a memory store has learned or to explain why a read expanded to a concept. Read-only."
     },
     {
       "name": "memory_invite_to_room",
-      "description": "Mint an invite for a room you own and get a ready-to-forward message for the person you want to add; single-use unless max_uses allows more."
+      "description": "Mint an invite for a room you own and get a ready-to-forward message. An invite is single-use by default; pass max_uses to let several people join with the same one. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use after memory_create_room, or whenever the user says 'invite <someone>' to an existing room."
     },
     {
       "name": "memory_join_room",
-      "description": "Join a shared memory room with an invite code; then pass the returned address as the domain on memory_write/memory_read."
+      "description": "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result tells you what you may do with it: memory_write to that address is only allowed when your membership scope is read_write; a read-only membership has that write refused; and when the server does not report a scope, whether memory_write would succeed is stated as unknown rather than promised either way."
+    },
+    {
+      "name": "memory_list_recent",
+      "description": "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them."
     },
     {
       "name": "memory_list_rooms",
-      "description": "List the shared rooms you own or have joined, with the address to use as the domain — re-find a room in a new session."
+      "description": "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it."
+    },
+    {
+      "name": "memory_read",
+      "description": "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it."
+    },
+    {
+      "name": "memory_stats",
+      "description": "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before writing to it, or when the user asks what you remember. Read-only — changes nothing."
+    },
+    {
+      "name": "memory_write",
+      "description": "Store a long-term memory that persists across sessions AND across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code) — write once, recall everywhere. Call this PROACTIVELY the moment the user states a preference, makes a decision, or you learn a durable fact (people, roles, project setup, a lesson). Don't wait to be asked. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records; skip transient chatter that only matters this turn. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context."
     },
     {
       "name": "vault_list",
-      "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the value is never returned, by this tool or any other on this server."
+      "description": "List the secrets stored in your Mnemoverse Vault — by ALIAS and purpose only; the secret VALUE is never returned or shown to you, and no tool on this server returns it. Use this to check WHICH secrets the user has stored and under what alias (e.g. the user says 'do I have a GitHub token saved?'). Only YOUR account's secrets are listed."
     }
   ],
   "user_config": {

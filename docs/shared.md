@@ -2,7 +2,7 @@
 
 This is the consumer guide for `/shared`, the entry point ADR-025
 (mnemoverse-core) designates as the single source of the Mnemoverse MCP
-surface. A server that wants to expose the same ten memory tools does not
+surface. A server that wants to expose the same eleven tools does not
 keep its own copy: it imports this entry point, supplies its own credential
 and wording, and registers.
 
