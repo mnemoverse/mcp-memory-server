@@ -18,13 +18,14 @@
  *                             (+ the hosted `remotes` endpoint must be present)
  *   - GitHub release          api.github.com → releases/latest tag
  *
- * Follow-up surfaces (a human merges a small bump PR in ANOTHER repository
- * after each release; an old version there is FOLLOW-UP LAG, never drift):
- *   - docs (llms-full.txt)    mnemoverse.com/docs/llms-full.txt → the
- *                             `Current release: **vX.Y.Z**` line, rendered by
- *                             mnemoverse-docs from its data/facts.json
- *   - marketing (server-card) mnemoverse.com/.well-known/mcp/server-card.json
- *                             → `serverInfo.version`, set by mnemoverse-marketing
+ * Follow-up surfaces (a human merges or deploys in ANOTHER repository after
+ * each release; an old version there is FOLLOW-UP LAG, never drift): every
+ * probed consumer in scripts/consumers.json, the single list. Today:
+ *   - docs (llms-full.txt)    the `Current release: **vX.Y.Z**` line
+ *   - marketing card          the server card's `package.version`
+ *   - connector               mcp.mnemoverse.com/health → `package.version`
+ * Add or change one there, not here; manual consumers in that file have no
+ * probe and appear only on the wave issue.
  *
  * Downstream surfaces (PulseMCP / Glama / VS Code gallery) AUTO-INGEST from the
  * registry on their own schedule, so they're reported FOR INFO ONLY — never gated

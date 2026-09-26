@@ -25,6 +25,7 @@ import {
   type Consumer,
   waveVersion,
   isWaveIssue,
+  waveConsumers,
   atLeast,
   resultsForWave,
 } from "../scripts/lib/wave.mjs";
@@ -180,5 +181,23 @@ describe("only the workflow's own issue is a wave (Sigma on #178)", () => {
     expect(isWaveIssue({ title: "Wave v0.13.0", user: { type: "Bot", login: "other-bot[bot]" } })).toBe(false);
     expect(isWaveIssue({ title: "Wave v0.13.0", user: bot, pull_request: {} })).toBe(false);
     expect(isWaveIssue({ title: "Wave 0.13.0", user: bot })).toBe(false);
+  });
+});
+
+describe("a wave keeps the consumers it was opened with (Copilot and Sigma on #178)", () => {
+  it("tracks only the lines its body carries, so a consumer added later cannot block its closing", () => {
+    const body = renderWaveBody({ version: "0.13.0", consumers: FIXTURE.slice(0, 2) });
+    const grown = [...FIXTURE, { id: "newcomer", name: "newcomer", kind: "track", repo: "o/n", fix: "x", probe: { type: "json-field", url: "https://x/n", field: "v" } }] as Consumer[];
+    const own = waveConsumers(body, grown);
+    expect(own.map((c) => c.id)).toEqual(["docs", "card"]);
+    const green = applyResults(body, own, { docs: { status: "ok", version: "0.13.0" }, card: { status: "ok", version: "0.13.0" } });
+    expect(allProbedGreen(own, { docs: { status: "ok" }, card: { status: "ok" } })).toBe(true);
+    expect(allTicked(green, own)).toBe(true);
+    expect(allTicked(green, grown)).toBe(false);
+  });
+
+  it("a result without a version stays unchecked instead of reading as 0.0.0 (CodeRabbit on #178)", () => {
+    const r = resultsForWave({ docs: { status: "ok" as const } }, "0.0.0");
+    expect(r.docs.status).toBe("unchecked");
   });
 });

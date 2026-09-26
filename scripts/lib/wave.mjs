@@ -159,6 +159,9 @@ export function resultsForWave(results, waveVer) {
   const out = {};
   for (const [id, r] of Object.entries(results)) {
     if (r.status === "unchecked") out[id] = r;
+    // A result with no readable version proves nothing: it stays unchecked
+    // instead of parsing as 0.0.0 (CodeRabbit on #178).
+    else if (norm(r.version) === "") out[id] = { ...r, status: "unchecked", error: r.error ?? "no version in the result" };
     else out[id] = { ...r, status: atLeast(r.version, waveVer) ? "ok" : "lag" };
   }
   return out;
@@ -234,6 +237,17 @@ function escapeRe(s) {
 /** Every probed consumer answered with the expected version. */
 export function allProbedGreen(consumers, results) {
   return consumers.filter((c) => c.kind !== "manual").every((c) => results[c.id]?.status === "ok");
+}
+
+/**
+ * The consumers a wave issue tracks: those whose line the issue carries. A
+ * wave is rendered from the registry of its release; a consumer added to the
+ * registry later joins the next wave. Without this an open wave could never
+ * close once the registry grew, since its body has no line for the newcomer
+ * (Copilot and Sigma on #178).
+ */
+export function waveConsumers(body, consumers) {
+  return consumers.filter((c) => (body ?? "").includes(`<!-- wave:${c.id} -->`));
 }
 
 /** Every line, probed and manual, is ticked in the body. */

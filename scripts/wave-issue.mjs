@@ -33,6 +33,7 @@ import {
   waveTitle,
   waveVersion,
   isWaveIssue,
+  waveConsumers,
   resultsForWave,
   norm,
 } from "./lib/wave.mjs";
@@ -139,7 +140,18 @@ function tick() {
     console.log(`no open wave issue; nothing to tick`);
     return;
   }
-  for (const issue of waves) tickWave(issue, waveVersion(issue.title), results, result.checkedAt);
+  // One wave failing (an issue closed mid-run, a transient 5xx) must not skip
+  // the others; the run still fails at the end (CodeRabbit on #178).
+  let failed = 0;
+  for (const issue of waves) {
+    try {
+      tickWave(issue, waveVersion(issue.title), results, result.checkedAt);
+    } catch (err) {
+      failed++;
+      console.error(`wave #${issue.number} tick failed: ${err?.message ?? err}`);
+    }
+  }
+  if (failed) throw new Error(`${failed} of ${waves.length} wave(s) failed to tick`);
 }
 
 function tickWave(issue, waveVer, results, checkedAtRaw) {
@@ -150,15 +162,21 @@ function tickWave(issue, waveVer, results, checkedAtRaw) {
   // writer is a person; the remaining window is one API round trip.
   const fresh = ghJson(["api", `repos/${REPO}/issues/${issue.number}`]);
   const before = fresh.body ?? "";
-  const after = applyResults(before, consumers, waveResults);
-  const green = allProbedGreen(consumers, waveResults);
-  const done = green && allTicked(after, consumers);
+  // The consumers this wave was opened with, not the registry of today.
+  const own = waveConsumers(before, consumers);
+  if (own.length === 0) {
+    console.log(`wave #${issue.number} has no consumer line; left alone`);
+    return;
+  }
+  const after = applyResults(before, own, waveResults);
+  const green = allProbedGreen(own, waveResults);
+  const done = green && allTicked(after, own);
   const changed = after !== before;
   const checkedAt = checkedAtRaw ?? new Date().toISOString();
   if (changed) {
     gh(["api", "-X", "PATCH", `repos/${REPO}/issues/${issue.number}`, "--input", "-"], JSON.stringify({ body: after }));
   }
-  const summary = consumers
+  const summary = own
     .filter((c) => c.kind !== "manual")
     .map((c) => `${waveResults[c.id]?.status === "ok" ? "✓" : "✗"} ${c.name}`)
     .join("; ");
