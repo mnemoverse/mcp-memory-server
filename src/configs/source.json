@@ -53,7 +53,7 @@
     ]
   },
   "mcpb": {
-    "$comment": "Fields specific to the Claude Desktop Extension (MCPB) manifest.json. version + identity fields are derived from package.json + the source above; only MCPB-specific extras live here.",
+    "$comment": "Fields specific to the Claude Desktop Extension (MCPB) manifest.json. version + identity fields are derived from package.json + the source above; tools[] is derived from tools.json (generated from the built server); only MCPB-specific extras live here.",
     "name": "mnemoverse-memory",
     "author": {
       "name": "Mnemoverse",
@@ -81,48 +81,6 @@
         "sensitive": true,
         "required": false
       }
-    },
-    "tools": [
-      {
-        "name": "memory_write",
-        "description": "Store a memory that should persist across sessions and tools — preferences, decisions, lessons, project facts."
-      },
-      {
-        "name": "memory_read",
-        "description": "Search your long-term memory by natural-language query before answering or starting a task."
-      },
-      {
-        "name": "memory_list_recent",
-        "description": "List the newest memories first — no search query; filter by domain and a since/until time window, page with a cursor."
-      },
-      {
-        "name": "memory_feedback",
-        "description": "Report whether a recalled memory was helpful so good memories surface faster next time."
-      },
-      {
-        "name": "memory_stats",
-        "description": "Show how many memories are stored, which domains exist, and the average valence and importance scores."
-      },
-      {
-        "name": "memory_create_room",
-        "description": "Create a shared memory room — a space other people's assistants can read, and write too when invited with read_write scope, across Claude/ChatGPT/editors."
-      },
-      {
-        "name": "memory_invite_to_room",
-        "description": "Mint an invite for a room you own and get a ready-to-forward message for the person you want to add; single-use unless max_uses allows more."
-      },
-      {
-        "name": "memory_join_room",
-        "description": "Join a shared memory room with an invite code; then pass the returned address as the domain on memory_write/memory_read."
-      },
-      {
-        "name": "memory_list_rooms",
-        "description": "List the shared rooms you own or have joined, with the address to use as the domain — re-find a room in a new session."
-      },
-      {
-        "name": "vault_list",
-        "description": "List the secrets in your Mnemoverse Vault by alias and purpose only — the value is never returned, by this tool or any other on this server."
-      }
-    ]
+    }
   }
 }

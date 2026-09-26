@@ -27,7 +27,7 @@ export interface DirectServer {
 }
 
 /**
- * Connects a fresh client/server pair with the ten memory tools registered
+ * Connects a fresh client/server pair with the memory tools registered
  * via the given `deps`, nothing else (no prompts, no resources): the tests
  * this helper serves read tools/list and call tools, not either of those.
  */

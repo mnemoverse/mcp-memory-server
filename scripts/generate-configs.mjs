@@ -4,7 +4,10 @@
  *
  * Single source of truth → all distribution channel configs.
  *
- * Reads: src/configs/source.json
+ * Reads: src/configs/source.json (every channel's identity, command, env)
+ *        tools.json (the tool list, generated from the built server by
+ *        scripts/generate-tools-manifest.mjs; the .mcpb manifest's tools[]
+ *        is derived from it, never typed by hand)
  * Writes: docs/configs/*, docs/snippets/*, server.json, manifest.json,
  *         README.md install block
  *
@@ -33,6 +36,27 @@ const source = JSON.parse(readFileSync(SOURCE_PATH, "utf8"));
 const PACKAGE_VERSION = JSON.parse(
   readFileSync(resolve(ROOT, "package.json"), "utf8"),
 ).version;
+
+// The tool list is NOT in source.json. It is tools.json, produced by
+// scripts/generate-tools-manifest.mjs from the built server (dist/shared.js),
+// so the .mcpb manifest below declares exactly what the server registers.
+// A missing file never becomes an empty list (a manifest with no tools would
+// pass every drift check and ship a Desktop Extension that declares nothing).
+// It is only possible on the FIRST build of a fresh checkout without the
+// committed file: `prebuild` runs this generator before tsc, and `postbuild`
+// writes tools.json and runs this generator again. So in generate mode a
+// missing file leaves manifest.json untouched with a notice, and postbuild
+// completes it; in --check mode it is a failure (Copilot on #179).
+const TOOLS_PATH = resolve(ROOT, "tools.json");
+const TOOLS_MANIFEST = existsSync(TOOLS_PATH) ? JSON.parse(readFileSync(TOOLS_PATH, "utf8")) : null;
+if (!TOOLS_MANIFEST) {
+  const how = "it is generated from the built server by `npm run build` (postbuild), or by `node scripts/generate-tools-manifest.mjs` on an existing dist/";
+  if (process.argv.includes("--check")) {
+    console.error(`✗ tools.json not found at ${TOOLS_PATH}: ${how}.`);
+    process.exit(1);
+  }
+  console.warn(`! tools.json not found: manifest.json is left as it is this run; ${how}.`);
+}
 
 // Helper: extract { KEY: "value" } from source.env (which has nested {value, description, ...})
 function envValues(envObj) {
@@ -683,11 +707,17 @@ function genServerJson() {
  * injected into the server env as ${user_config.api_key} at runtime — never
  * hardcoded into the bundle. `version` is taken from package.json so the .mcpb
  * always matches the npm release; identity fields reuse source.metadata; the
- * MCPB-specific extras (privacy policy, user_config, tools, icon, compatibility)
- * live under source.mcpb.
+ * MCPB-specific extras (privacy policy, user_config, icon, compatibility) live
+ * under source.mcpb. `tools` comes from tools.json (see TOOLS_MANIFEST above):
+ * the MCPB shape is `{name, description}` per tool, so the other fields the
+ * artifact carries (title, annotations) are dropped here, not restated.
  */
 function genMcpbManifest() {
   const m = source.mcpb;
+  const tools = TOOLS_MANIFEST.tools.map(({ name, description }) => ({
+    name,
+    description,
+  }));
   return {
     manifest_version: "0.3",
     name: m.name,
@@ -723,7 +753,7 @@ function genMcpbManifest() {
         },
       },
     },
-    tools: m.tools,
+    tools,
     user_config: m.userConfig,
     compatibility: {
       claude_desktop: m.compatibility.claudeDesktop,
@@ -773,7 +803,9 @@ const OUTPUTS = [
   {
     // Claude Desktop Extension manifest — see genMcpbManifest() above.
     path: "manifest.json",
-    content: JSON.stringify(genMcpbManifest(), null, 2) + "\n",
+    // null only on a first build without tools.json (see TOOLS_MANIFEST above):
+    // the file is then left as it is and postbuild regenerates it.
+    content: TOOLS_MANIFEST ? JSON.stringify(genMcpbManifest(), null, 2) + "\n" : null,
   },
   // ─── Markdown partials (consumed by README + mnemoverse-docs) ──────────────
   {
@@ -829,6 +861,7 @@ let written = 0;
 let unchanged = 0;
 
 for (const { path, content } of OUTPUTS) {
+  if (content === null) continue;
   const fullPath = resolve(ROOT, path);
   mkdirSync(dirname(fullPath), { recursive: true });
 

@@ -1,5 +1,5 @@
 /**
- * The ten memory tools, as one function any MCP server can register.
+ * The eleven tools (ten memory tools and vault_list), as one function any MCP server can register.
  *
  * ADR-025 (mnemoverse-core): this package defines the MCP surface, and every
  * server that exposes Mnemoverse memory over MCP registers the SAME tools from
@@ -429,7 +429,7 @@ const MEMORY_ITEM_OUTPUT = {
 };
 
 /**
- * Register the ten memory tools on `server`. Call once per server instance.
+ * Register the eleven tools on `server`. Call once per server instance.
  * `deps.apiFetch` is the only way the tools reach the API.
  */
 export function registerMemoryTools(
@@ -461,10 +461,10 @@ export function registerMemoryTools(
   // ANNOTATIONS, decided once for every server that registers these tools
   // (owner, 2026-09-21; the stdio server and the hosted connector had answered
   // both opposite ways):
-  //  - openWorldHint is false on all ten. Every tool works on the user's own
+  //  - openWorldHint is false on all eleven. Every tool works on the user's own
   //    memory store and reaches nothing else; that the store sits behind an API
   //    does not make it an open world.
-  //  - destructiveHint is true only for a tool that deletes. None of these ten
+  //  - destructiveHint is true only for a tool that deletes. None of these eleven
   //    does. Rating a memory moves its ranking signals and never alters or
   //    erases what was saved (see memory_feedback).
 

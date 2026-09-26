@@ -39,7 +39,7 @@ Keep the key out of files that are committed to a repository. Prefer a user-leve
 
 ## Step 2: restart the client
 
-MCP servers are picked up on client startup. After editing the config, restart the client fully, then check that a server named `mnemoverse` shows ten tools.
+MCP servers are picked up on client startup. After editing the config, restart the client fully, then check that a server named `mnemoverse` shows eleven tools.
 
 ## Step 3: verify
 
@@ -56,7 +56,7 @@ MCP servers are picked up on client startup. After editing the config, restart t
 
 ## Tools
 
-Ten tools. The same set is served by the hosted endpoint, so memories written here are readable from every other client the user connects to the same account.
+Eleven tools. The same set is served by the hosted endpoint, so memories written here are readable from every other client the user connects to the same account.
 
 | Tool | What it does |
 |---|---|
@@ -69,6 +69,7 @@ Ten tools. The same set is served by the hosted endpoint, so memories written he
 | `memory_invite_to_room` | Mint an invite (code and link) for a room the user owns; single-use unless `max_uses` allows more |
 | `memory_join_room` | Join a shared room with an invite code (`mnvr_...`) |
 | `memory_list_rooms` | List rooms the user owns or joined, with each room's address |
+| `memory_graph` | Read the association edges around given concepts: weight, outcome valence, co-activation count |
 | `vault_list` | List Vault secrets by alias and purpose; the secret value is never returned |
 
 Deletion is not exposed through this server. To correct a wrong or stale memory, write a fresh one with `memory_write`.
