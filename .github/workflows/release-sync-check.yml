@@ -76,6 +76,11 @@ jobs:
     name: Tick the wave tracker
     needs: [check]
     if: always()
+    # One tick at a time (a scheduled run and a manual one must not interleave
+    # their read-modify-write of the issue body).
+    concurrency:
+      group: tick-wave
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -150,8 +155,9 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       ISSUE_BODY: |
         `release-sync check` is red. At least one first-party surface (npm, the Official
-        MCP Registry, the GitHub release) or follow-up surface (the docs site's
-        `llms-full.txt`, the marketing site's `server-card.json`) either did **not match**
+        MCP Registry, the GitHub release) or follow-up surface (every probed consumer in
+        `scripts/consumers.json`: today the docs site's `llms-full.txt`, the marketing
+        site's server card and the hosted connector's `/health`) either did **not match**
         `package.json#version`, or could **not be checked at all**. Those are three
         different events and the run log reports them separately, surface by surface.
         [Open the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
@@ -163,18 +169,15 @@ jobs:
           then the Official MCP Registry, then the GitHub release, and each is skipped once
           an earlier one fails, so the **first** drifted surface in the list is where to
           look.
-        * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (docs or marketing)
-          answered with an older version. This is **not** drift and does **not** mean a
-          release half-landed: the release pipeline already succeeded. It means a small
-          bump PR in a *different* repository has not merged yet: for docs, merge the PR
-          that `mcp-version-watch.yml` (in `mnemoverse-docs`) opens from branch
-          `bot/mcp-version-X.Y.Z`, or open one by hand from that branch if the bot could
-          not; for marketing, merge a `chore(mcp): version stamps` PR (in
-          `mnemoverse-marketing`) that sets `serverInfo.version` in
-          `public/.well-known/mcp/server-card.json`. Do not touch `release.yml` for this
-          outcome: it did its job.
+        * `✗ FOLLOW-UP LAG (have vX.Y.Z)` means a **follow-up** surface (a consumer from
+          `scripts/consumers.json`) answered with an older version. This is **not** drift
+          and does **not** mean a release half-landed: the release pipeline already
+          succeeded. It means a bump in a *different* repository has not merged or deployed
+          yet. The run log prints the fix for each lagging consumer, taken from its
+          `fix` in `scripts/consumers.json`, and the open `Wave vX.Y.Z` issue carries the
+          same fix on its line. Do not touch `release.yml` for this outcome: it did its job.
         * `? could not be checked` means the surface did not answer at all (a timeout, a
-          5xx, a rate limit), or, for docs/marketing, that its body could not be parsed for
+          5xx, a rate limit), or, for a follow-up surface, that its body could not be parsed for
           a version at all. The version it serves is unknown, so this is **not** evidence
           of a failed release or a pending PR, and it is not counted as drift or lag. Re-run
           this check, or let tomorrow's cron settle it, before acting on it.

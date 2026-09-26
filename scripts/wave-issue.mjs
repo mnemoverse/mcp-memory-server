@@ -112,7 +112,12 @@ function tick() {
     console.log(`no open wave issue for v${version}; nothing to tick`);
     return;
   }
-  const before = issue.body ?? "";
+  // Re-read the body right before rewriting it, so a person's edit made while
+  // this run was probing is the base of the rewrite, not lost to it. The jobs
+  // that tick are serialized (concurrency group tick-wave), so the only other
+  // writer is a person; the remaining window is one API round trip.
+  const fresh = ghJson(["api", `repos/${REPO}/issues/${issue.number}`]);
+  const before = fresh.body ?? "";
   const after = applyResults(before, consumers, results);
   const green = allProbedGreen(consumers, results);
   const done = green && allTicked(after, consumers);

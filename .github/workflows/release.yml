@@ -602,6 +602,12 @@ jobs:
   open-wave-tracker:
     name: Open the wave tracker issue for this release
     needs: [release]
+    # Two runs for the same tag (a re-run, a manual dispatch) must not both see
+    # "no wave yet" and create two issues: one open-wave job per tag at a time,
+    # and the second one then finds the first one's issue and comments.
+    concurrency:
+      group: open-wave-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
