@@ -90,13 +90,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      # The probes are pure fetch (no dependencies) and read-only; their exit
-      # code is the check job's business, this step only wants the result.
+      # The probes are pure fetch (no dependencies) and read-only; a red check
+      # is the check job's business, this step only wants the result. A red
+      # exit is tolerated only when a non-empty result was written: a crash
+      # before that fails the job instead of passing as 'nothing to tick'
+      # (Copilot on #178).
       - name: Probe the consumers (trusted code, no write token)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_SYNC_RESULT: ${{ runner.temp }}/release-sync-result.json
-        run: node scripts/check-release-sync.mjs || true
+        run: node scripts/check-release-sync.mjs || test -s "$RELEASE_SYNC_RESULT"
       - name: Tick the open wave issue from the probes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

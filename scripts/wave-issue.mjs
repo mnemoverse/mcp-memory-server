@@ -110,7 +110,10 @@ function tick() {
   const path = arg("--result");
   if (!path) throw new Error("--result is required");
   if (!existsSync(path)) {
-    console.log(`no result file at ${path} (the check did not get as far as writing one); nothing to tick`);
+    // A missing result means the probe step broke before writing one, not
+    // that there is nothing to report: fail, so open waves do not silently
+    // stop being ticked (Copilot on #178).
+    throw new Error(`no result file at ${path}: the probe step failed before writing one`);
     return;
   }
   const result = JSON.parse(readFileSync(path, "utf8"));

@@ -210,6 +210,10 @@ export function renderWaveBody({ version, consumers, results = {}, runUrl = "" }
     ...manual.map((c) => renderConsumerLine(c, v, results[c.id])),
     "",
     "_Protocol: mnemoverse-agent-pack, protocols/surface-contour.md. Registry: skills/release-wave/references/surfaces.yaml._",
+    "",
+    // The consumer set this wave was opened with, kept apart from the
+    // checklist: deleting a line from the list does not drop the obligation.
+    `<!-- wave-consumers:${consumers.map((c) => c.id).join(",")} -->`,
   ];
   return lines.join("\n") + "\n";
 }
@@ -251,8 +255,15 @@ export function waveConsumers(body, consumers) {
   // knows about each. A line whose consumer has since been removed or renamed
   // in the registry stays tracked, as a manual line a person ticks, so the
   // wave cannot close with that line unchecked (Copilot on #178).
+  // The set recorded when the wave opened wins over the checklist, so a line
+  // deleted from the list is still required: allTicked finds no ticked line
+  // for it and the wave stays open (Copilot and CodeRabbit on #178). A wave
+  // opened before the record existed falls back to its checklist markers.
   const byId = new Map(consumers.map((c) => [c.id, c]));
-  const ids = [...(body ?? "").matchAll(/<!-- wave:([a-z0-9-]+) -->/g)].map((m) => m[1]);
+  const recorded = /<!-- wave-consumers:([a-z0-9,-]*) -->/.exec(body ?? "");
+  const ids = recorded
+    ? recorded[1].split(",").filter(Boolean)
+    : [...(body ?? "").matchAll(/<!-- wave:([a-z0-9-]+) -->/g)].map((m) => m[1]);
   return [...new Set(ids)].map(
     (id) => byId.get(id) ?? { id, name: id, kind: "manual", repo: "", fix: "no longer in scripts/consumers.json: tick by hand" },
   );

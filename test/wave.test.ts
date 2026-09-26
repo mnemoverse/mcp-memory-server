@@ -208,6 +208,16 @@ describe("a wave keeps the consumers it was opened with (Copilot and Sigma on #1
     expect(allTicked(ticked.replace("- [ ] <!-- wave:card -->", "- [x] <!-- wave:card -->"), own)).toBe(true);
   });
 
+  it("a line deleted from the checklist is still required: the set recorded at opening wins (Copilot and CodeRabbit on #178)", () => {
+    const body = renderWaveBody({ version: "0.13.0", consumers: FIXTURE });
+    expect(body).toContain("<!-- wave-consumers:docs,card,forms -->");
+    const edited = body.split("\n").filter((l) => !l.includes("<!-- wave:forms -->")).join("\n");
+    const own = waveConsumers(edited, FIXTURE);
+    expect(own.map((c) => c.id)).toEqual(["docs", "card", "forms"]);
+    const ticked = applyResults(edited, own, { docs: { status: "ok", version: "0.13.0" }, card: { status: "ok", version: "0.13.0" } });
+    expect(allTicked(ticked, own)).toBe(false);
+  });
+
   it("a result without a version stays unchecked instead of reading as 0.0.0 (CodeRabbit on #178)", () => {
     const r = resultsForWave({ docs: { status: "ok" as const } }, "0.0.0");
     expect(r.docs.status).toBe("unchecked");
