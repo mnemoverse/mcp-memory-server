@@ -105,8 +105,22 @@ function tick() {
     return;
   }
   const result = JSON.parse(readFileSync(path, "utf8"));
+  // Validate before any write (Copilot on #178): the version must be this
+  // checkout's package.json version (the trusted job checks out the default
+  // branch), every consumer id must be in the registry, every status one of
+  // the three the check writes. Anything else is refused, not applied.
   const version = norm(result.expected);
-  const results = result.consumers ?? {};
+  const trusted = norm(JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")).version);
+  if (version !== trusted) throw new Error(`result is for v${version}, but this checkout is v${trusted}; refusing to tick`);
+  const known = new Set(consumers.map((c) => c.id));
+  const results = {};
+  for (const [id, r] of Object.entries(result.consumers ?? {})) {
+    if (!known.has(id)) throw new Error(`result names an unknown consumer ${JSON.stringify(id)}; refusing to tick`);
+    if (!r || !["ok", "lag", "unchecked"].includes(r.status)) throw new Error(`result for ${id} has status ${JSON.stringify(r?.status)}; refusing to tick`);
+    if (r.status !== "unchecked" && norm(r.version) === "") throw new Error(`result for ${id} carries no version; refusing to tick`);
+    if (r.status === "ok" && norm(r.version) !== trusted) throw new Error(`result marks ${id} ok at v${norm(r.version)}, not v${trusted}; refusing to tick`);
+    results[id] = { status: r.status, version: r.version == null ? undefined : String(r.version).slice(0, 40), error: r.error == null ? undefined : String(r.error).slice(0, 200) };
+  }
   const issue = findOpenWave(version);
   if (!issue) {
     console.log(`no open wave issue for v${version}; nothing to tick`);
