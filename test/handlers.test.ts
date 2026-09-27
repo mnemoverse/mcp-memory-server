@@ -792,7 +792,7 @@ describe("the load-bearing sentences, as returned", () => {
     mcp.on(FEEDBACK, { updated_count: 3 });
 
     const text = await mcp.callText("memory_feedback", {
-      atom_ids: ["a", "b", "c"],
+      memory_ids: ["a", "b", "c"],
       outcome: 1,
     });
 
@@ -828,7 +828,7 @@ describe("the load-bearing sentences, as returned", () => {
     mcp.on(FEEDBACK, { updated_count: 0 });
 
     const text = await mcp.callText("memory_feedback", {
-      atom_ids: ["atom_from_a_room"],
+      memory_ids: ["atom_from_a_room"],
       outcome: 1,
     });
 
@@ -856,13 +856,13 @@ describe("the load-bearing sentences, as returned", () => {
     // shape whose answer now carries an extra clause. The impossible fixture
     // is exercised on purpose in its own test below.
     expect(
-      await mcp.callText("memory_feedback", { atom_ids: ["a", "b"], outcome: 1 }),
+      await mcp.callText("memory_feedback", { memory_ids: ["a", "b"], outcome: 1 }),
     ).toBe(
       "Rating sent: +1 (helpful). The service reports 2 memories updated — they should surface sooner next time.",
     );
 
     mcp.reset().on(FEEDBACK, { updated_count: 1 });
-    const neutral = await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: 0 });
+    const neutral = await mcp.callText("memory_feedback", { memory_ids: ["a"], outcome: 0 });
     // 0.8.3 (#68): the count is attributed, not asserted — the zero branch
     // had been left behind when the ±1 branches were corrected, and this pin
     // was freezing the defect.
@@ -912,7 +912,7 @@ describe("the load-bearing sentences, as returned", () => {
     ] as Array<[string, Route]>) {
       mcp.reset().on(FEEDBACK, reply);
       const result = await mcp.call("memory_feedback", {
-        atom_ids: ["a"],
+        memory_ids: ["a"],
         outcome: 1,
       });
       const text = result.text;
@@ -942,7 +942,7 @@ describe("the load-bearing sentences, as returned", () => {
     mcp.on(FEEDBACK, { updated_count: 2 });
 
     const text = await mcp.callText("memory_feedback", {
-      atom_ids: ["a", "b", "c", "d", "e"],
+      memory_ids: ["a", "b", "c", "d", "e"],
       outcome: 1,
     });
 
@@ -957,7 +957,7 @@ describe("the load-bearing sentences, as returned", () => {
     mcp.on(FEEDBACK, { updated_count: 9, avg_valence: -0.4 });
 
     const text = await mcp.callText("memory_feedback", {
-      atom_ids: ["a"],
+      memory_ids: ["a"],
       outcome: -1,
     });
 
@@ -974,7 +974,7 @@ describe("the load-bearing sentences, as returned", () => {
     mcp.on(FEEDBACK, { updated_count: 1 });
 
     const text = await mcp.callText("memory_feedback", {
-      atom_ids: ["a"],
+      memory_ids: ["a"],
       outcome: -1,
     });
 

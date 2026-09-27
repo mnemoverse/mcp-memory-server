@@ -110,6 +110,20 @@ git history and the GitHub releases are the record.
   `docs/shared.md`, the `src/tools.ts` headers) states the count
   `tools.json` states, eleven in this release.
 
+### Removed
+
+- **`memory_feedback`'s `atom_ids` parameter, as announced.** It was renamed
+  to `memory_ids` in 0.11, kept as a deprecated alias for one full MINOR, and
+  its removal moved from 0.12 to 0.13 (see 0.12.0). `atom_ids` is no longer
+  a parameter: a call that passes it instead of `memory_ids` is refused as
+  invalid arguments naming `memory_ids`, and nothing is sent; passed next to
+  `memory_ids`, it is ignored like any unknown field on every tool here, and
+  the ids come from `memory_ids` alone. With one name left, `memory_ids` is
+  schema-required, and the handler's two refusals for "both names" and "no
+  ids" are gone with it.
+  The request to the engine is unchanged: it still carries the list as
+  `atom_ids`, the engine's own field name.
+
 ## [0.12.1] — 2026-09-25
 
 ### Fixed

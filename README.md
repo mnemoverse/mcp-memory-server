@@ -347,9 +347,9 @@ saw and diff it against what the server serves today, by version.
   tool (or parameter) stays, its description says
   `deprecated since x.y, removed in x.z`, and the change lands only in the
   announced version, with its CHANGELOG line. A renamed parameter is accepted
-  under both names until then (0.11: `memory_feedback`'s `atom_ids` became
-  `memory_ids`; its removal, first announced for 0.12, lands in 0.13, since
-  0.12 shipped sooner than that announcement assumed). A rename is announced by naming
+  under both names until then (0.11 renamed `memory_feedback`'s `atom_ids` to
+  `memory_ids`; the old name was removed in 0.13, as announced after 0.12
+  shipped sooner than the first announcement assumed). A rename is announced by naming
   both the old and the new name; the version pair alone does not say what a
   client should look for. Because a MINOR may add a field but not remove one, a
   renamed annotation field is declared under both names until the announced
