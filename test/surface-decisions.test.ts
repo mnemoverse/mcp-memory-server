@@ -55,21 +55,10 @@ describe("memory_feedback takes memory_ids", () => {
     expect(text).toContain("The service reports 2 memories updated");
   });
 
-  it("still accepts atom_ids, the pre-0.11 name, on its own", async () => {
-    mcp.on(FEEDBACK, { updated_count: 1 });
-    await mcp.callText("memory_feedback", { atom_ids: ["a"], outcome: -1 });
-    expect(mcp.requestTo(FEEDBACK).body).toEqual({ atom_ids: ["a"], outcome: -1 });
-  });
-
-  it("refuses both names at once and sends nothing", async () => {
-    const res = await mcp.call("memory_feedback", {
-      memory_ids: ["a"],
-      atom_ids: ["b"],
-      outcome: 1,
-    });
+  it("no longer accepts atom_ids, removed in 0.13 as announced: the call is refused and nothing is sent", async () => {
+    const res = await mcp.call("memory_feedback", { atom_ids: ["a"], outcome: -1 });
     expect(res.isError).toBe(true);
     expect(res.text).toContain("memory_ids");
-    expect(res.text).toContain("Nothing was rated");
     expect(mcp.calls).toHaveLength(0);
   });
 
@@ -80,17 +69,15 @@ describe("memory_feedback takes memory_ids", () => {
     expect(mcp.calls).toHaveLength(0);
   });
 
-  it("advertises memory_ids, and marks atom_ids as the deprecated name", async () => {
+  it("advertises memory_ids as required, and no atom_ids", async () => {
     const { tools } = await mcp.client.listTools();
     const schema = tools.find((t) => t.name === "memory_feedback")?.inputSchema as {
       properties: Record<string, { description?: string }>;
       required?: string[];
     };
     expect(schema.properties).toHaveProperty("memory_ids");
-    // Neither id field can be schema-required while either name is accepted
-    // (the SDK takes a flat shape, no one-of), so the description carries it.
-    expect(schema.properties.memory_ids?.description).toMatch(/^Required/);
-    expect(schema.properties.atom_ids?.description).toMatch(/deprecated/i);
+    expect(schema.properties).not.toHaveProperty("atom_ids");
+    expect(schema.required ?? []).toContain("memory_ids");
     expect(schema.required ?? []).toContain("outcome");
   });
 });

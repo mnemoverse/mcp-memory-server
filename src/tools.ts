@@ -1641,26 +1641,18 @@ export function registerMemoryTools(
         "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       // `memory_ids` is the name (2026-09-21): the tool rates memories, which
       // is what every result is (an atom is the engine's word for its smallest
-      // unit), and the hosted connector already names the parameter so. Both
-      // fields are optional in the schema only so the handler can refuse the
-      // two ways a call can get this wrong with a sentence instead of a
-      // validation dump. Neither carries a format or a count cap: the engine
+      // unit), and the hosted connector already names the parameter so. The old
+      // name, atom_ids, was accepted alongside it from 0.11 and removed in
+      // 0.13 as announced; with one name left, memory_ids is schema-required.
+      // It carries no format or count cap: the engine
       // validates the ids and sets no maximum, and ADR-025 keeps such checks
       // with the engine rather than copying them here.
       inputSchema: {
         memory_ids: z
           .array(z.string())
           .min(1)
-          .optional()
           .describe(
-            "Required: IDs of the memories to rate, the `id:` line of each memory_read result. (Optional in this schema only while the deprecated atom_ids is still accepted in its place.)",
-          ),
-        atom_ids: z
-          .array(z.string())
-          .min(1)
-          .optional()
-          .describe(
-            "Deprecated since 0.11, removed in 0.13: atom_ids is the old name of memory_ids, still accepted on its own until then. Pass memory_ids instead.",
+            "IDs of the memories to rate, the `id:` line of each memory_read result.",
           ),
         outcome: z
           .number()
@@ -1737,36 +1729,8 @@ export function registerMemoryTools(
         openWorldHint: false,
       },
     },
-    async ({ memory_ids, atom_ids: legacyIds, outcome, domain }) => {
-      // Both names at once is ambiguous (which list did the caller mean?), so
-      // it is refused rather than resolved by a silent preference.
-      if (memory_ids !== undefined && legacyIds !== undefined) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "Pass the ids as memory_ids only. atom_ids is its old name, still " +
-                "accepted on its own, but both at once is ambiguous. Nothing was rated.",
-            },
-          ],
-        };
-      }
-      const atom_ids = memory_ids ?? legacyIds;
-      if (atom_ids === undefined) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text:
-                "memory_feedback needs memory_ids: the ids from the memory_read results " +
-                "you are rating. Nothing was rated.",
-            },
-          ],
-        };
-      }
+    async ({ memory_ids, outcome, domain }) => {
+      const atom_ids = memory_ids;
       // `atom_ids` below is the ENGINE's field name for the same list; the
       // wire contract is unchanged. `domain` goes through `searchedScope`, as
       // on memory_read and memory_list_recent: an empty string counts as no

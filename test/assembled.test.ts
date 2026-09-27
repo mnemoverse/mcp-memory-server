@@ -907,7 +907,7 @@ const SITUATIONS: readonly Situation[] = [
     id: "m",
     what: "memory_feedback matching zero ids",
     tool: "memory_feedback",
-    args: { atom_ids: ["atom_from_a_room"], outcome: 1 },
+    args: { memory_ids: ["atom_from_a_room"], outcome: 1 },
     routes: { [FEEDBACK]: { updated_count: 0 } },
     bounds: { surface: "other", boundedBy: /in your own domains/ },
     meaning(text) {
