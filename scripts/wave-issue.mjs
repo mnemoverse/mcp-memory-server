@@ -68,16 +68,24 @@ function ensureLabel(name, color, description) {
 // Every open wave, found by its exact title over every page of open issues:
 // not by label (a label that failed to apply would hide a wave and a re-run
 // would open a duplicate) and not from the first page only (Copilot on #178).
-function listOpenWaves() {
-  const pages = gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues?state=open&per_page=100`]);
+function listWaves(state) {
+  const pages = gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues?state=${state}&per_page=100`]);
   return JSON.parse(pages)
     .flat()
     .filter(isWaveIssue);
 }
 
-function findOpenWave(version) {
+function listOpenWaves() {
+  return listWaves("open");
+}
+
+// The wave for a version, open or closed: a re-run of the release after its
+// wave was closed must not open a second issue with the same title (Copilot
+// on #178). An open one is preferred if both somehow exist.
+function findWave(version) {
   const title = waveTitle(version);
-  return listOpenWaves().find((i) => i.title === title) ?? null;
+  const all = listWaves("all").filter((i) => i.title === title);
+  return all.find((i) => i.state === "open") ?? all[0] ?? null;
 }
 
 function arg(name) {
@@ -91,11 +99,14 @@ function open() {
   const runUrl = arg("--run-url") ?? "";
   ensureLabel(LABEL, "0e8a16", "A release wave: every consumer of the MCP surface that must move");
   ensureLabel(STALE_LABEL, "d93f0b", "A release wave still open three days after the release");
-  const existing = findOpenWave(version);
+  const existing = findWave(version);
   if (existing) {
+    const still = existing.state === "open"
+      ? "this wave is still open and its lines are unchanged."
+      : "this wave was already closed and is not reopened; open a new one by hand only if a consumer regressed.";
     gh(["api", "-X", "POST", `repos/${REPO}/issues/${existing.number}/comments`, "-f",
-      `body=The release workflow ran again for v${version}${runUrl ? ` ([run](${runUrl}))` : ""}; this wave is still open and its lines are unchanged.`]);
-    console.log(`wave issue #${existing.number} exists, commented`);
+      `body=The release workflow ran again for v${version}${runUrl ? ` ([run](${runUrl}))` : ""}; ${still}`]);
+    console.log(`wave issue #${existing.number} exists (${existing.state}), commented`);
     return;
   }
   const body = renderWaveBody({ version, consumers, runUrl });
