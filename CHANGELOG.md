@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-27
+
 ### Added
 
 - **`memory_graph`, an eleventh tool: reads the association edges around given
@@ -82,12 +84,10 @@ git history and the GitHub releases are the record.
   `openWorldHint: false`. The server instructions in `src/teaching.ts` now
   name it too (`memory_graph shows links`); fitting that mention under the
   800-char cap shortened two existing sentences there — see the comment
-  above `SERVER_INSTRUCTIONS`. **Not done in this slice, deliberately:**
-  the "ten tools" count on the README's stability-contract line, the
-  `llms-install.md` copy, `docs/shared.md`, and this package's own
-  `src/tools.ts` header comments all still say ten — those are a
-  release-wave surface, not a per-tool addition, and are tracked
-  separately.
+  above `SERVER_INSTRUCTIONS`. Every sentence that states the tool count
+  (the README's stability-contract line, `llms-install.md`,
+  `docs/shared.md`, the `src/tools.ts` headers) says eleven in this
+  release; the `tools.json` entry below says how they are held to it.
 - **`tools.json`, the tool list as a generated, published artifact.**
   `scripts/generate-tools-manifest.mjs` registers the tools from the built
   server (`dist/shared.js`) on an in-memory `McpServer`, reads `tools/list`
