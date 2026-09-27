@@ -56,7 +56,7 @@ jobs:
         run: npm run check:release-sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # The wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md):
+  # The wave tracker:
   # release.yml opens a "Wave vX.Y.Z" issue with one line per consumer of the
   # MCP surface; this job probes the consumers itself and re-ticks those
   # lines, closes the wave when every line is green, and labels it stale-wave

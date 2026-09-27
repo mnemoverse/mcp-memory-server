@@ -10,8 +10,7 @@
  * Why a wave issue at all: a release reaches the docs as a bot PR and every
  * other consumer by a person's memory. The issue is the list of everything
  * that must move, ticked by the daily check from live probes, so a consumer
- * that nobody remembered stays visibly unticked (mnemoverse-agent-pack,
- * protocols/surface-contour.md).
+ * that nobody remembered stays visibly unticked.
  */
 
 export const norm = (v) => (v ?? "").toString().replace(/^v/, "").trim();
@@ -205,12 +204,9 @@ export function renderWaveBody({ version, consumers, results = {}, runUrl = "" }
     "",
     ...probed.map((c) => renderConsumerLine(c, v, results[c.id])),
     "",
-    "## Manual items",
-    "",
-    ...manual.map((c) => renderConsumerLine(c, v, results[c.id])),
-    "",
-    "_Protocol: mnemoverse-agent-pack, protocols/surface-contour.md. Registry: skills/release-wave/references/surfaces.yaml._",
-    "",
+    // Manual lines only when the registry has any: the public registry has
+    // none, so the issue shows no empty section.
+    ...(manual.length ? ["## Manual items", "", ...manual.map((c) => renderConsumerLine(c, v, results[c.id])), ""] : []),
     // The consumer set this wave was opened with, kept apart from the
     // checklist: deleting a line from the list does not drop the obligation.
     `<!-- wave-consumers:${consumers.map((c) => c.id).join(",")} -->`,

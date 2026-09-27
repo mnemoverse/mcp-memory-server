@@ -605,7 +605,7 @@ jobs:
   # the markdown can carry real backticks with no escaping.
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
-  # Step 13: the wave tracker (mnemoverse-agent-pack, protocols/surface-contour.md).
+  # Step 13: the wave tracker.
   # One issue per release, "Wave vX.Y.Z", with a checklist line per consumer of
   # the MCP surface (scripts/consumers.json). The daily release-sync check ticks
   # the probed lines from live probes and closes the wave when every line is

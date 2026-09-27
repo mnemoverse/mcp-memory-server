@@ -203,22 +203,21 @@ same as "nothing partial gets published": whatever already succeeded stays publi
 
 ### The wave tracker: what happens after the release
 
-A release is not finished when npm serves the version. Every consumer of the
-MCP surface has to move: the docs site, the hosted connector's pin, the
-marketing card, the ai-sdk pin, the READMEs that list tools, the catalogs that
-took a form. `scripts/consumers.json` is that list, with a live probe for each
-consumer that can be probed and a fix for each. Two things read it:
+A release is not finished when npm serves the version: our own public
+endpoints have to serve it too, the docs site, the marketing server card and
+the hosted connector. `scripts/consumers.json` is that list, with a live probe
+and a fix for each. This repository is public, so the list names only
+endpoints anyone can already see; the other surfaces a release touches are
+tracked privately and are never named here (`test/wave.test.ts` enforces it).
+Two things read it:
 
 - `release.yml` (job `open-wave-tracker`) opens an issue `Wave vX.Y.Z` with one
   checklist line per consumer.
 - `release-sync-check.yml` (daily) probes every probed consumer, ticks its line,
-  closes the wave when every line is green (a person ticks the manual lines),
-  and labels it `stale-wave` if it is still open three days after the release.
+  closes the wave when every line is green, and labels it `stale-wave` if it is still open three days after the release.
 
-Adding a consumer: one entry in `scripts/consumers.json` (and the matching row
-in the surface registry, `mnemoverse-agent-pack/skills/release-wave/references/surfaces.yaml`);
-`test/wave.test.ts` validates the shape. The protocol behind this is
-`mnemoverse-agent-pack/protocols/surface-contour.md`.
+Adding a consumer: one entry in `scripts/consumers.json`, only for a public
+endpoint of ours with a live probe; `test/wave.test.ts` validates the shape.
 
 ### One-time setup for the workflow
 

@@ -223,3 +223,13 @@ describe("a wave keeps the consumers it was opened with (Copilot and Sigma on #1
     expect(r.docs.status).toBe("unchecked");
   });
 });
+
+describe("the public registry names only our own public endpoints (owner's decision 2026-09-27)", () => {
+  it("has no manual entry, and names no private repository, internal document or catalog", () => {
+    const list = loadConsumers(registry);
+    expect(list.filter((c) => c.kind === "manual")).toEqual([]);
+    for (const c of list) expect(c.probe?.url).toMatch(/^https:\/\/(mnemoverse\.com|mcp\.mnemoverse\.com)\//);
+    const text = JSON.stringify(registry);
+    expect(text).not.toMatch(/agent-pack|mnemoverse-workspace|mnemoverse-distribution|STATUS\.md|surfaces\.yaml|ai-sdk|marketplace|smithery|chatgpt|glama|pulsemcp|docker/i);
+  });
+});
