@@ -60,11 +60,10 @@ jobs:
   # release.yml opens a "Wave vX.Y.Z" issue with one line per consumer of the
   # MCP surface; this job probes the consumers itself and re-ticks those
   # lines, closes the wave when every line is green, and labels it stale-wave
-  # three days after the release. It runs only the default branch's code and
-  # takes nothing from the check job: an artifact from a job that ran a
-  # dispatched ref could be forged to tick or close a wave (Copilot on #178),
-  # so the probes run here, in the trusted job, and the version comes from
-  # the default branch's package.json.
+  # three days after the release. It runs the default branch's scripts and
+  # takes nothing from the check job, so a result produced by another ref's
+  # scripts is never applied (Copilot on #178); the probes run here and the
+  # version comes from the default branch's package.json.
   tick-wave:
     name: Tick the wave tracker
     needs: [check]
@@ -80,9 +79,13 @@ jobs:
       contents: read
       issues: write
     steps:
-      # Only the default branch's code runs with the issues: write token: the
-      # tag or dispatch ref could carry any code, main carries only code that
-      # passed its required checks (Copilot on #178).
+      # The scripts this job runs come from the default branch, whose code
+      # passed its required checks. This pins the scripts, not the workflow
+      # file: a run from another ref executes that ref's YAML. It is not a
+      # boundary against an attacker, because dispatching a workflow or pushing
+      # a tag already needs write access to this repository, and write access
+      # can use this token from any branch; it keeps an unreviewed script on a
+      # branch from writing to the wave by accident (Copilot on #178).
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.repository.default_branch }}

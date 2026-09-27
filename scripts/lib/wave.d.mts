@@ -30,6 +30,7 @@ export function probeVersion(consumer: Consumer, io: Io): Promise<{ version: str
 export function waveTitle(version: string): string;
 export function waveVersion(title: string): string | null;
 export function isWaveIssue(issue: unknown): boolean;
+export function escapeBody(text: string): string;
 export function waveConsumers(body: string, consumers: Consumer[]): Consumer[];
 export function atLeast(a: string, b: string): boolean;
 export function resultsForWave(results: Record<string, ProbeResult>, waveVersion: string): Record<string, ProbeResult>;

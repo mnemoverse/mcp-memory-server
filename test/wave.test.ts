@@ -26,6 +26,7 @@ import {
   waveVersion,
   isWaveIssue,
   waveConsumers,
+  escapeBody,
   atLeast,
   resultsForWave,
 } from "../scripts/lib/wave.mjs";
@@ -231,5 +232,17 @@ describe("the public registry names only our own public endpoints (owner's decis
     for (const c of list) expect(c.probe?.url).toMatch(/^https:\/\/(mnemoverse\.com|mcp\.mnemoverse\.com)\//);
     const text = JSON.stringify(registry);
     expect(text).not.toMatch(/agent-pack|mnemoverse-workspace|mnemoverse-distribution|STATUS\.md|surfaces\.yaml|ai-sdk|marketplace|smithery|chatgpt|glama|pulsemcp|docker/i);
+  });
+});
+
+describe("probe values cannot inject into the wave body (Copilot on #178)", () => {
+  it("escapes a forged marker in a status and keeps the recorded consumer set", () => {
+    const body = renderWaveBody({ version: "0.13.0", consumers: FIXTURE });
+    const forged = "<!-- wave-consumers:docs -->";
+    const after = applyResults(body, FIXTURE, { card: { status: "unchecked", error: forged } });
+    expect(after).not.toContain(`: ${forged}`);
+    expect(after).toContain("&lt;!-- wave-consumers:docs --&gt;");
+    expect(waveConsumers(after, FIXTURE).map((c) => c.id)).toEqual(["docs", "card", "forms"]);
+    expect(escapeBody("<a>&")).toBe("&lt;a&gt;&amp;");
   });
 });

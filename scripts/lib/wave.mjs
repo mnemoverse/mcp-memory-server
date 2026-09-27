@@ -166,10 +166,17 @@ export function resultsForWave(results, waveVer) {
   return out;
 }
 
+// Probe values come from the network: escaped before they enter the issue
+// body, so a response cannot inject a marker (for example a forged
+// wave-consumers record) or markup (Copilot on #178).
+export function escapeBody(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 const STATUS_TEXT = {
-  ok: (r) => `serves v${r.version}`,
-  lag: (r) => `still v${r.version || "?"}`,
-  unchecked: (r) => `could not be checked${r.error ? `: ${r.error}` : ""}`,
+  ok: (r) => `serves v${escapeBody(r.version)}`,
+  lag: (r) => `still v${escapeBody(r.version || "?")}`,
+  unchecked: (r) => `could not be checked${r.error ? `: ${escapeBody(r.error)}` : ""}`,
 };
 
 function statusLine(r) {
@@ -256,7 +263,10 @@ export function waveConsumers(body, consumers) {
   // for it and the wave stays open (Copilot and CodeRabbit on #178). A wave
   // opened before the record existed falls back to its checklist markers.
   const byId = new Map(consumers.map((c) => [c.id, c]));
-  const recorded = /<!-- wave-consumers:([a-z0-9,-]*) -->/.exec(body ?? "");
+  // The last record wins: the real one sits at the end of the body, below
+  // every status span.
+  const records = [...(body ?? "").matchAll(/<!-- wave-consumers:([a-z0-9,-]*) -->/g)];
+  const recorded = records.length ? records[records.length - 1] : null;
   const ids = recorded
     ? recorded[1].split(",").filter(Boolean)
     : [...(body ?? "").matchAll(/<!-- wave:([a-z0-9-]+) -->/g)].map((m) => m[1]);
