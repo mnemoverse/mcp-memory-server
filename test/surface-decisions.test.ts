@@ -9,9 +9,10 @@
  *  2. No tool reaches an open world. Every tool works on the user's own
  *     memory and nothing else.
  *  3. The ids a rating takes are `memory_ids`, the name every result already
- *     uses for them. `atom_ids`, the old name, is accepted on its own for one
- *     minor version so a saved prompt or client that still sends it keeps
- *     working; both at once is refused rather than guessed at.
+ *     uses for them, and it is required. `atom_ids`, the old name, was
+ *     accepted for one minor version (0.11, 0.12) and removed in 0.13: sent
+ *     instead of `memory_ids` the call is refused, sent next to it it is
+ *     ignored like any unknown field.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
