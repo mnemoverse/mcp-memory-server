@@ -33,5 +33,7 @@ glama.json
 # 2026-08-13) is not indexed, so the manifest also lives here. Not for the bundle.
 gemini-extension.json
 GEMINI.md
+# Instructions for coding agents working in this repository (2026-09-27). Not for the bundle.
+AGENTS.md
 tsconfig.test.json
 *.mcpb
