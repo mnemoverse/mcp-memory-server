@@ -659,7 +659,7 @@ jobs:
           if [ -n "$n" ]; then
             gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The wave tracker job ($GITHUB_JOB) failed: $RUN_URL. Read the failing step. The release itself is not affected; open waves are not being ticked until this is fixed. Close this issue by hand once a run is green."
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The wave tracker job ($GITHUB_JOB) failed: $RUN_URL. Read the failing step. The release itself is not affected, but the wave issue for this release may not have been opened. Read the failing step, then re-run this job, or open the wave by hand with node scripts/wave-issue.mjs open --version <X.Y.Z>. Close this issue by hand once the wave exists."
           fi
 
   notify-on-failure:
