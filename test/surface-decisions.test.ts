@@ -69,6 +69,12 @@ describe("memory_feedback takes memory_ids", () => {
     expect(mcp.calls).toHaveLength(0);
   });
 
+  it("next to memory_ids, atom_ids is ignored like any unknown field: the ids come from memory_ids alone (CodeRabbit on #183)", async () => {
+    mcp.on(FEEDBACK, { updated_count: 1 });
+    await mcp.callText("memory_feedback", { memory_ids: ["a"], atom_ids: ["b"], outcome: 1 });
+    expect(mcp.requestTo(FEEDBACK).body).toEqual({ atom_ids: ["a"], outcome: 1 });
+  });
+
   it("advertises memory_ids as required, and no atom_ids", async () => {
     const { tools } = await mcp.client.listTools();
     const schema = tools.find((t) => t.name === "memory_feedback")?.inputSchema as {
