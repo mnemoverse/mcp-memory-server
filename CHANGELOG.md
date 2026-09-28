@@ -56,6 +56,23 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-09-28
+
+No change to the tools, their text or their behaviour. This release changes
+how the package reaches npm, and what the npm page links to.
+
+### Changed
+
+- **Published with provenance, through npm trusted publishing.** The release
+  workflow publishes on npm 11 and Node 22 with `--provenance`, signed by
+  GitHub Actions for this repository's `release.yml` at the release tag, and
+  authenticates to npm by OIDC instead of a long-lived token. `npm audit
+  signatures` verifies it; 0.13.0 and earlier carry no provenance. A new
+  version is published only from a run on its own tag, so the provenance
+  always names the commit that was built (#186).
+- **The README links the VS Code extension** on the Visual Studio
+  Marketplace and on Open VSX (#181).
+
 ## [0.13.0] — 2026-09-27
 
 ### Added
