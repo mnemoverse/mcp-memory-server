@@ -119,28 +119,16 @@ async function checkNpm() {
 }
 
 async function checkRegistry() {
-  // limit=100 keeps every version snapshot of our (single) server on one page —
-  // we have <20 versions, so this sidesteps cursor pagination for any realistic
-  // count without a follow-the-cursor loop.
+  // One server's latest entry, not a search. The search endpoint began taking
+  // 25 to 35 s per call in late September 2026, past this check's timeout, so
+  // every run reported the registry as "could not be checked" and the job went
+  // red while the registry itself was fine. This endpoint answers in under a
+  // second and names the entry the registry itself marks as latest.
   const j = await getJson(
-    "https://registry.modelcontextprotocol.io/v0/servers?search=mnemoverse&limit=100",
+    `https://registry.modelcontextprotocol.io/v0.1/servers/${encodeURIComponent(REGISTRY_NAME)}/versions/latest`,
   );
-  // The API returns every version snapshot as a separate entry; each carries a
-  // server doc + a _meta with the registry's isLatest flag.
-  const isLatest = (entry) =>
-    entry?._meta?.["io.modelcontextprotocol.registry/official"]?.isLatest ??
-    entry?._meta?.isLatest ??
-    false;
-  const mine = (j.servers ?? j).filter((e) => (e.server ?? e).name === REGISTRY_NAME);
-  if (mine.length === 0) throw new Error(`server ${REGISTRY_NAME} not found in registry`);
-  const chosen =
-    mine.find(isLatest) ??
-    [...mine].sort((a, b) =>
-      norm((b.server ?? b).version).localeCompare(norm((a.server ?? a).version), undefined, {
-        numeric: true,
-      }),
-    )[0];
-  const srv = chosen.server ?? chosen;
+  const srv = j.server ?? j;
+  if (srv?.name !== REGISTRY_NAME) throw new Error(`server ${REGISTRY_NAME} not found in registry`);
   const hasRemote = Array.isArray(srv.remotes) && srv.remotes.length > 0;
   return { version: norm(srv.version), extra: hasRemote ? "remote ✓" : "remote MISSING" };
 }
