@@ -346,6 +346,16 @@ jobs:
           done
           case "$CODE" in
             404)
+              # npm's provenance records the run's own GITHUB_REF and
+              # GITHUB_SHA. A workflow_dispatch started on a branch with a tag
+              # input checks out the tag but runs as that branch, so its
+              # provenance would name the wrong source (Copilot on #186). A NEW
+              # publish therefore runs only on the tag itself; a dispatch from
+              # a branch can still resume a version npm already serves (200).
+              if [ "${GITHUB_REF}" != "refs/tags/${TAG}" ]; then
+                echo "::error::$PKG@$VERSION is not on npm yet, and this run is on ${GITHUB_REF}, not refs/tags/${TAG}: its provenance would name the wrong source. Run it on the tag: gh workflow run release.yml --ref ${TAG} -f tag=${TAG}"
+                exit 1
+              fi
               # --provenance: a signed statement that this tarball was built by
               # this workflow from this tag, which `npm audit signatures` and
               # downstream contours (the ai-sdk surface bump) verify.
