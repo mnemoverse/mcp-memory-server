@@ -46,6 +46,12 @@ name: release
 # DOCS_DISPATCH_TOKEN both live:
 #   - NPM_TOKEN — npm automation token from npmjs.com/settings/{org}/tokens/granular-access-tokens/new
 #                 (select "Automation", grant publish access to @mnemoverse/mcp-memory-server).
+#                 TRANSITIONAL: the publish step prefers npm trusted publishing
+#                 (OIDC). Once npmjs.com lists this repository, release.yml and
+#                 the `release` environment as the package's trusted publisher,
+#                 npm tries OIDC first and never reads the token; after one
+#                 release proves it, remove this secret and set the package to
+#                 "require 2FA and disallow tokens".
 #   - DOCS_DISPATCH_TOKEN (optional) — fine-grained PAT, mnemoverse-docs only,
 #                 contents:write. Missing token degrades to a warning: the docs
 #                 site's daily cron catches up within a day.
@@ -300,8 +306,27 @@ jobs:
       # An answer that is neither 200 nor 404 means "could not tell", and the
       # step stops instead of guessing: guessing "absent" would run
       # `npm publish` into a version that exists.
+      # npm trusted publishing needs npm >= 11.5.1 on Node >= 22.14; the build
+      # above stays on Node 20. From here on only npm runs, on the tarball the
+      # steps above packed and checked.
+      - name: Node 22 and npm 11.20.0 for the publish (trusted publishing and provenance)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Pin npm for the publish
+        run: |
+          set -euo pipefail
+          node -e 'const [a,b]=process.versions.node.split(".").map(Number); if (a<22||(a===22&&b<14)) { console.error(`::error::Node ${process.version} is older than 22.14, the minimum for npm trusted publishing`); process.exit(1) }'
+          npm install --global --ignore-scripts --no-audit --no-fund npm@11.20.0
+          test "$(npm --version)" = "11.20.0"
+          echo "node $(node --version), npm $(npm --version)"
+
       - name: Publish to npm
         env:
+          # Transitional fallback: npm tries trusted publishing (OIDC, this
+          # job's id-token: write) first and uses the token only when no
+          # trusted publisher is configured. See the header.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
@@ -321,7 +346,10 @@ jobs:
           done
           case "$CODE" in
             404)
-              npm publish "$TARBALL" --access public
+              # --provenance: a signed statement that this tarball was built by
+              # this workflow from this tag, which `npm audit signatures` and
+              # downstream contours (the ai-sdk surface bump) verify.
+              npm publish "$TARBALL" --access public --provenance
               ;;
             200)
               PUBLISHED="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).dist.shasum" "$BODY")"
