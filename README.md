@@ -441,7 +441,7 @@ The same memory, packaged for hosts that prefer a plugin or an extension over an
   ```
 - [Cursor plugin](https://github.com/mnemoverse/cursor-plugin) — same remote endpoint, same sign-in
 - [Gemini CLI extension](https://github.com/mnemoverse/gemini-extension) — same remote endpoint. `gemini extensions install https://github.com/mnemoverse/gemini-extension`
-- [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode) — signs in through the browser, with pasting a key kept as a fallback command
+- VS Code extension ([VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode), [Open VSX](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode), [source](https://github.com/mnemoverse/mnemoverse-vscode)) — signs in through the browser, with pasting a key kept as a fallback command
 - Desktop extension: `manifest.json` in this repository is an MCPB manifest. This one is different from the four above: it runs the server as a local `node` process and reads `MNEMOVERSE_API_KEY` from the extension settings rather than calling the hosted endpoint. The packaged `.mcpb` ships with each release
 
 **Standing rules, separate from this server**
