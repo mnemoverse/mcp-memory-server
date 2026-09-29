@@ -154,7 +154,7 @@ describe("setup_memory: rules the user places in their own agent", () => {
 
   it.each([
     ["claude-code", "CLAUDE.md"],
-    ["claude-ai", "personal preferences"],
+    ["claude-ai", "Instructions for Claude"],
     ["cursor", ".cursor/rules/"],
     ["codex", "AGENTS.md"],
     ["  Cursor ", ".cursor/rules/"],

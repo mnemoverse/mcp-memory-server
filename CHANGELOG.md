@@ -60,7 +60,7 @@ git history and the GitHub releases are the record.
 
 - **`setup_memory` prompt.** It renders memory rules for the user to place
   in their own agent's instructions: CLAUDE.md, AGENTS.md, a Cursor rule, or
-  the personal preferences of Claude on the web. An optional `host`
+  Instructions for Claude in Claude's settings. An optional `host`
   (`claude-code`, `claude-ai`, `cursor`, `codex`) narrows it to one place.
   Like the other prompts, it calls nothing.
 

@@ -36,7 +36,7 @@ export const MEMORY_RULES = [
   "- Before answering something that may depend on an earlier session (my preferences, past decisions, project setup, people), search memory with memory_read.",
   "- When I state a lasting preference or make a decision, or you learn a durable fact about this project, save it with memory_write as one self-contained statement. You do not need to ask me first.",
   "- When a message also carries a durable fact (who now owns or does what, a lesson learned, a new convention), save that fact with memory_write before doing the rest of the task.",
-  "- After acting on recalled memories, rate them with memory_feedback: helpful or not.",
+  "- After acting on recalled memories, rate them with memory_feedback: helpful or not. For a shared room's memories, pass the room's address as domain; a read-only member cannot rate them.",
   "- Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.",
 ].join("\n");
 
@@ -45,7 +45,7 @@ export const RULES_PLACES: Record<string, string> = {
   "claude-code":
     "Claude Code: add them to CLAUDE.md in the project root, or to ~/.claude/CLAUDE.md to apply them in every project.",
   "claude-ai":
-    "Claude on the web, desktop or mobile: paste them into the personal preferences field in Settings, or into a project's instructions.",
+    "Claude on the web, desktop or mobile: paste them into Instructions for Claude in Settings, or into a project's instructions.",
   cursor:
     "Cursor: save them as a rule file in .cursor/rules/, for example mnemoverse-memory.mdc with alwaysApply: true.",
   codex:
