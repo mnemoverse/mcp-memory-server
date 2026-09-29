@@ -52,7 +52,7 @@ Parameters:
 Returns: How many memories the service updated and their average valence afterwards (-1 to 1).
 
 ### memory_stats
-Get memory statistics — total count, episodes vs prototypes, Hebbian concept-concept edges, the list of domains, and average valence/importance scores. Counts cover your own domains; shared rooms are separate stores and are not included.
+Get memory statistics — total count, episodes and prototypes (merged summaries; consolidation is not running on the hosted service), learned concept associations (`hebbian_edges`), the list of domains, and average valence/importance scores. Counts cover your own domains; shared rooms are separate stores and are not included.
 
 Parameters: none
 

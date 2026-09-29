@@ -89,6 +89,18 @@ git history and the GitHub releases are the record.
 - **`memory_stats`** no longer leads with "episodes vs consolidated
   prototypes": consolidation is not running on the hosted service. The output
   fields are unchanged.
+- **Output field descriptions say what is true and stable** (#191). The
+  `importance` score of `memory_write`, and its "NOT STORED" reply, call it an
+  approximate hint that can read lower for non-English text; the
+  language figures they quoted were measured on an embedder the service no
+  longer uses. `memory_stats` describes `episodes`, `prototypes` and
+  `hebbian_edges` as what a user can check today, and its reply says
+  "N learned concept links". `memory_feedback`'s `coactivation_edges` is
+  worded plainly. Field names are unchanged.
+- **The empty-store greeting states instead of instructing** (#191): it says
+  what the store is and how a memory gets into it, with no "save the first
+  memory now". Directory reviews treat instructions inside a tool result like
+  instructions in a description.
 
 ## [0.13.1] — 2026-09-28
 

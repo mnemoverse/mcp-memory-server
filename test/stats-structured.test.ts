@@ -96,7 +96,7 @@ describe("memory_stats: a full body carries all seven fields, text unchanged", (
     // The text is unchanged by this slice: still the sentence, not the plain
     // structuredContent values.
     expect(result.text).toContain("Memories: 3740 (3729 episodes, 0 prototypes)");
-    expect(result.text).toContain("Associations: 72049 Hebbian edges");
+    expect(result.text).toContain("Associations: 72049 learned concept links");
     expect(result.text).toContain('Domains: "a", "b"');
     expect(result.text).toContain("Avg quality: valence 0.12 (how well recalls turned out, -1..1), importance 0.40 (0..1)");
   });
@@ -211,7 +211,7 @@ describe("memory_stats: malformed optional numbers are absent from structuredCon
     // the text keeps printing them verbatim, the divergence this slice
     // discloses in the CHANGELOG.
     expect(result.text).toContain("1.5 episodes");
-    expect(result.text).toContain("Associations: 9007199254740992 Hebbian edges");
+    expect(result.text).toContain("Associations: 9007199254740992 learned concept links");
   });
 
   it('avg_importance: "0.4" (a string) is absent from structuredContent; the text says "importance unknown"', async () => {

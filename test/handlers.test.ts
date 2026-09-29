@@ -761,7 +761,7 @@ describe("the load-bearing sentences, as returned", () => {
     expect(text).not.toContain("Restatements are allowed in rooms");
   });
 
-  it("the novelty score is labelled as the immature metric it is", async () => {
+  it("the novelty score is labelled as the approximate hint it is", async () => {
     // The hosted connector says this (mnemoverse-mcp-remote#36, 2026-08-13);
     // this server said nothing, so the same number carried two different
     // degrees of honesty depending on which surface a model reached it
@@ -775,10 +775,13 @@ describe("the load-bearing sentences, as returned", () => {
     const text = await mcp.callText("memory_write", { content: "x" });
 
     expect(text).toContain("Novelty score 0.05");
-    expect(text).toMatch(/first-generation|under active development/);
-    expect(text).toContain("unreliable");
-    // The measurement that earns the warning, not an adjective on its own.
-    expect(text).toMatch(/0\.08.*Russian|Russian.*0\.08/);
+    expect(text).toMatch(/approximate/);
+    expect(text).toContain("rough hint about similarity");
+    expect(text).not.toMatch(/first-generation|under active development|~0\.08/);
+    // The 0.08-vs-0.55 figures were measured on an embedder the service no
+    // longer uses (core switched on 2026-09-05) and were never re-measured, so
+    // they left the text (#191); the direction of the caveat stays.
+    expect(text).toContain("non-English text");
   });
 
   it("attributes the rated count to the service instead of asserting it (#68)", async () => {
@@ -989,7 +992,7 @@ describe("the load-bearing sentences, as returned", () => {
     const text = await mcp.callText("memory_stats");
 
     expect(text).toContain("Memories: 3 (unknown episodes, unknown prototypes)");
-    expect(text).toContain("Associations: unknown Hebbian edges");
+    expect(text).toContain("Associations: unknown learned concept links");
     expect(text).toContain("valence unknown");
     expect(text).not.toContain("Associations: 0");
     expect(text).toContain("Domains: none reported");
@@ -1001,16 +1004,11 @@ describe("the load-bearing sentences, as returned", () => {
 
     const text = await mcp.callText("memory_stats");
 
-    // Core counts concept-concept edges (api/schemas.py), learned by walking
-    // pairs within ONE atom's concept list at write time and on feedback, and
-    // by linking query concepts to result concepts on use. The old gloss —
-    // "links the store learned between memories that get used together" —
-    // was wrong twice: wrong unit (memories) and wrong trigger (used
-    // together). Truth review F3, 2026-08-08.
-    expect(text).toContain(
-      "Associations: 12 Hebbian edges — concept-to-concept links learned " +
-        "from concepts that occur together as memories are stored and used",
-    );
+    // The count is of associations between CONCEPTS. The old gloss said
+    // "between memories that get used together": wrong unit (truth review F3,
+    // 2026-08-08). Since 2026-09-29 the line says what is counted and not how
+    // the associations form.
+    expect(text).toContain("Associations: 12 learned concept links");
     expect(text).not.toContain("between memories");
     expect(text).not.toContain("get used together");
   });

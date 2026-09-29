@@ -577,7 +577,7 @@ export function registerMemoryTools(
           .number()
           .optional()
           .describe(
-            "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. A first-generation metric UNDER ACTIVE DEVELOPMENT and known to be unreliable — the same content has measured ~0.08 in Russian against ~0.55 in English, so it under-reads non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
+            "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. Outside shared rooms, a write that scores below the service's importance threshold is not stored, and `reason` says so. The score is approximate and can read lower for non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
           ),
       },
       annotations: {
@@ -798,11 +798,10 @@ export function registerMemoryTools(
           (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
           (importance === "unknown"
             ? ``
-            : ` Novelty score ${importance}. That score is a first-generation` +
-              ` metric under active development and known to be unreliable —` +
-              ` identical content has measured ~0.08 in Russian against ~0.55 in` +
-              ` English — so read it as a rough hint about similarity, not as a` +
-              ` judgement of whether this memory was worth keeping.`) +
+            : ` Novelty score ${importance}. The score is approximate (it can` +
+              ` read lower for non-English text), so read it as a rough hint` +
+              ` about similarity, not as a judgement of whether this memory was` +
+              ` worth keeping.`) +
           (isRoomDomain(domain)
             ? // ROOM RULE (core#482, 2026-08-13). A room is a message bus:
               // the second agent's job is to receive a restatement of what
@@ -1707,7 +1706,7 @@ export function registerMemoryTools(
           .nonnegative()
           .optional()
           .describe(
-            `Number of feedback-driven query/result concept co-activation edges changed by the service. This is separate from ordinary Hebbian strengthening among a memory's own concepts. ${serverNounCap} does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.`,
+            `Number of links between query concepts and result concepts that this rating changed. ${serverNounCap} does not send query_concepts, so live calls through this tool report 0; asynchronous acknowledgements also report 0.`,
           ),
       },
       annotations: {
@@ -2019,20 +2018,20 @@ export function registerMemoryTools(
           .int()
           .nonnegative()
           .optional()
-          .describe("Number of episodic (not yet consolidated) memories."),
+          .describe("Number of individual memories (not merged into a summary)."),
         prototypes: z
           .number()
           .int()
           .nonnegative()
           .optional()
-          .describe("Number of consolidated prototype memories."),
+          .describe("Number of summary memories merged from several individual ones. Consolidation is not running on the hosted service, so this count does not currently grow."),
         hebbian_edges: z
           .number()
           .int()
           .nonnegative()
           .optional()
           .describe(
-            "Number of Hebbian concept-to-concept links, learned from concepts that occur together as memories are stored and used.",
+            "Number of learned concept-to-concept associations; memory_graph reads them.",
           ),
         avg_valence: z
           .number()
@@ -2131,16 +2130,10 @@ export function registerMemoryTools(
 
       const text = [
         `Memories: ${num(r?.total_atoms)} (${num(r?.episodes)} episodes, ${num(r?.prototypes)} prototypes)`,
-        // The gloss names the real mechanism. Core's `hebbian_edges` counts
-        // concept-concept edges (api/schemas.py: "Number of Hebbian
-        // concept-concept edges"), and every path that learns one links two
-        // CONCEPTS: `strengthen` walks pairs within one atom's concept list at
-        // write time and again on feedback, `co_activate` links query concepts
-        // to result concepts on use. An earlier gloss said "links between
-        // memories that get used together" — wrong unit (memories, not
-        // concepts) and wrong trigger (an edge records co-occurrence, not two
-        // memories being used together).
-        `Associations: ${num(r?.hebbian_edges)} Hebbian edges — concept-to-concept links learned from concepts that occur together as memories are stored and used`,
+        // The gloss says what is counted (associations between CONCEPTS, not
+        // between memories; an earlier gloss got the unit wrong) and nothing
+        // about how they form: that is the engine's business, not this line's.
+        `Associations: ${num(r?.hebbian_edges)} learned concept links`,
         `Domains: ${domains}`,
         `Avg quality: valence ${dec(r?.avg_valence)} (how well recalls turned out, -1..1), importance ${dec(r?.avg_importance)} (0..1)`,
         "",

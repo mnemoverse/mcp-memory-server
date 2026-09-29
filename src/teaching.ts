@@ -105,13 +105,15 @@ export const EMPTY_PERSONAL_STORE_ROOMS_UNCHECKED =
  * First-contact greeting: shown ONLY when a read comes back empty, the personal
  * store holds zero memories, AND the room probe answered that there are no rooms
  * — i.e. the very first read of this account's life, established rather than
- * assumed. Seeds the ANSWER, not the store: one functional paragraph that says
- * what this store is, how to save the first memory, and one next step.
+ * assumed. Seeds the ANSWER, not the store: it says what this store is and
+ * how a memory gets into it. It states and does not instruct (2026-09-29):
+ * directory reviews treat instructions inside a tool result like instructions
+ * in a description.
  */
 export const EMPTY_STORE_WELCOME =
   "Your long-term memory is empty — nothing has been saved yet, which is why this search returned nothing. " +
-  "This store is your own persistent memory: whatever you save survives across sessions and across every AI tool this user has connected. " +
-  'Save the first memory now with memory_write, e.g. content: "User prefers TypeScript strict mode" — future sessions will recall it with memory_read.';
+  "Memories saved with memory_write persist across sessions and across every AI tool this user has connected, " +
+  'and memory_read finds them later; a memory is a self-contained statement such as "User prefers TypeScript strict mode".';
 
 /**
  * Compile-time exhaustiveness. Adding a state to `RoomScope` / `NamedScope`
