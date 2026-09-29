@@ -889,8 +889,7 @@ export function registerMemoryTools(
               "in these results, so there is no value you can obtain through " +
               "this tool, and a guess like 'me' silently matches nothing and " +
               "filters nothing. Only pass it if your system knows the exact " +
-              "principal from elsewhere (e.g. the REST API). A self-exclusion " +
-              "shortcut is planned.",
+              "principal from elsewhere (e.g. the REST API).",
           ),
       },
       // Item shape is MEMORY_ITEM_OUTPUT (above), shared with
@@ -2276,7 +2275,7 @@ export function registerMemoryTools(
     "memory_create_room",
     {
       description:
-        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
+        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and my teammate'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
       inputSchema: {
         name: z
           .string()
@@ -2699,7 +2698,7 @@ export function registerMemoryTools(
     "memory_list_rooms",
     {
       description:
-        "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with Olya') instead of having to create or re-join it.",
+        "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with my teammate') instead of having to create or re-join it.",
       inputSchema: {},
       outputSchema: {
         rooms: z.array(
