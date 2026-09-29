@@ -426,3 +426,31 @@ describe("no proactivity push on any advertised surface", () => {
     }
   });
 });
+
+/**
+ * The measured "when" (2026-09-29). With the pushes removed, the plain
+ * "It fits right after acting on recalled memories" cut ratings in Claude Code
+ * from 17/30 to 6/30; naming the moment and the ids brought them to 22/30
+ * (pre-registered measurement, mnemoverse-workspace
+ * channels/2026-09-29-claude-chatgpt/eval-neutral-wording-plan.md). These
+ * sentences say when the tool applies, which the directory asks for; losing
+ * them loses the rating signal, so they are pinned.
+ */
+describe("the measured 'when' sentences stay", () => {
+  it("memory_feedback names the moment and the ids", () => {
+    expect(description("memory_feedback")).toContain(
+      "Use it after an answer that relied on memories from memory_read: pass the ids of the memories used as memory_ids",
+    );
+  });
+
+  it("memory_read ties its ids to memory_feedback after the answer", () => {
+    expect(description("memory_read")).toContain(
+      "after the answer, memory_feedback takes these ids to record which memories helped",
+    );
+  });
+
+  it("the instructions say what a rating records", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("memory_feedback records which recalled memories helped an answer");
+  });
+});
+

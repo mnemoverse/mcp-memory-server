@@ -173,6 +173,11 @@ describe("setup_memory: rules the user places in their own agent", () => {
     },
   );
 
+  it("keeps the measured rule for a fact that arrives together with a task (2026-09-29: W3+W5 saved 4/6 with it, 1/6 without)", () => {
+    expect(MEMORY_RULES).toContain("When a message also carries a durable fact");
+    expect(MEMORY_RULES).toContain("save that fact with memory_write before doing the rest of the task");
+  });
+
   it("points nowhere outside this server: no URL in the rules or the message", async () => {
     const text = await render("setup_memory", {});
     expect(text).not.toMatch(/https?:\/\//);

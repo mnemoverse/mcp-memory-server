@@ -19,7 +19,7 @@
     {
       "name": "memory_feedback",
       "title": "Rate Memory Helpfulness",
-      "description": "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. It fits right after acting on (or rejecting) recalled memories: pass the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
+      "description": "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Use it after an answer that relied on memories from memory_read: pass the ids of the memories used as memory_ids, with outcome 1 when they helped and -1 when they were wrong or stale. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       "annotations": {
         "title": "Rate Memory Helpfulness",
         "readOnlyHint": false,
@@ -91,7 +91,7 @@
     {
       "name": "memory_read",
       "title": "Search Memories",
-      "description": "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
+      "description": "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
       "annotations": {
         "title": "Search Memories",
         "readOnlyHint": true,

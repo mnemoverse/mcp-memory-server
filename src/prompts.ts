@@ -35,6 +35,7 @@ export const MEMORY_RULES = [
   "## Memory (Mnemoverse)",
   "- Before answering something that may depend on an earlier session (my preferences, past decisions, project setup, people), search memory with memory_read.",
   "- When I state a lasting preference or make a decision, or you learn a durable fact about this project, save it with memory_write as one self-contained statement. You do not need to ask me first.",
+  "- When a message also carries a durable fact (who now owns or does what, a lesson learned, a new convention), save that fact with memory_write before doing the rest of the task.",
   "- After acting on recalled memories, rate them with memory_feedback: helpful or not.",
   "- Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.",
 ].join("\n");

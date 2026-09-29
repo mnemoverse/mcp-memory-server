@@ -36,7 +36,7 @@ import type { ReadScope, RoomScope } from "./scope.js";
  *   administrative REST-only operation, so the instructions point a model at
  *   writing a corrected memory instead of asking to delete one.
  *
- * 2026-09-29 rewrite (770 chars): the ownership and habit framing and "don't
+ * 2026-09-29 rewrite (793 chars): the ownership and habit framing and "don't
  * wait to be asked" are gone (see the product frame above); the text says what
  * each tool family is for, and ends on the setup_memory prompt. To fit it under
  * the cap, the room-tool sentence ("Rooms: memory_create_room,
@@ -46,7 +46,7 @@ import type { ReadScope, RoomScope } from "./scope.js";
  * a tool stays stated in memory_read's description and in the README.
  */
 export const SERVER_INSTRUCTIONS =
-  "Long-term memory kept across sessions and the AI tools on this account. memory_read searches earlier preferences, decisions and project context when an answer may depend on them. memory_write saves a durable fact, preference or decision. memory_list_recent is newest-first; memory_stats shows counts and domains; memory_feedback rates recalls, which reorders later reads; memory_graph shows concept links. Shared rooms are SEPARATE stores: to read one, pass its address as domain; unscoped reads never cover rooms. To correct a memory, write a fresh one. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. The setup_memory prompt explains memory rules for CLAUDE.md or AGENTS.md.";
+  "Long-term memory kept across sessions and AI tools on this account. memory_read searches earlier preferences, decisions and project context when an answer may depend on them. memory_write saves a durable fact, preference or decision. memory_list_recent is newest-first; memory_stats shows counts and domains; memory_feedback records which recalled memories helped an answer, which reorders later reads; memory_graph shows links. Shared rooms are SEPARATE stores: to read one, pass its address as domain; unscoped reads never cover rooms. To correct a memory, write a fresh one. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. The setup_memory prompt explains memory rules for CLAUDE.md or AGENTS.md.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";

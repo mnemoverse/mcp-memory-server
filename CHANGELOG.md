@@ -77,6 +77,11 @@ git history and the GitHub releases are the record.
   The rules that used to live here now come from `setup_memory` and the host
   plugins, where the user places them. A test bans the removed words on every
   surface the server advertises.
+- **`memory_feedback` and `memory_read` name the moment a rating applies**:
+  after an answer that relied on recalled memories, with the ids `memory_read`
+  returned. Measured in Claude Code before release: with the pushes removed and
+  no such sentence, ratings fell from 17 of 30 answers to 6; with it, 22. Tests
+  pin both sentences.
 - **`memory_graph`** states in its description what its parameters already
   said: `domain` has an effect only for a room's address, and at depth 2 or 3
   edges below weight 0.05 are dropped unless `min_weight` is set.
