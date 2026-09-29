@@ -277,6 +277,10 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     // on three surfaces a model reads, this one included. The whole word is
     // banned because no true sentence about this engine needs it.
     [/\bfades?\b/i, "the 'lets it fade' time-decay claim"],
+    // "A self-exclusion shortcut is planned" (exclude_author, until 0.14.1):
+    // Anthropic's directory policy 2.B rejects promises of features that are
+    // not built. A surface says what exists; plans live in the CHANGELOG.
+    [/\bis planned\b|coming soon/i, "a promise of an unbuilt feature"],
   ];
 
   it("no tool or parameter description carries one", () => {

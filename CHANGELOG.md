@@ -56,6 +56,17 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **No promise of an unbuilt feature.** `memory_read`'s `exclude_author`
+  description no longer says "A self-exclusion shortcut is planned": a tool
+  surface says what exists, and Anthropic's directory policy rejects promises
+  of features that are not built. A test now bans such promises on every
+  advertised surface.
+- **No personal name in tool examples.** `memory_create_room` and
+  `memory_list_rooms` gave a real person's name as the example; they now say
+  "my teammate".
+
 ## [0.14.0] — 2026-09-29
 
 The server now says what each tool does and when it applies, and no longer
