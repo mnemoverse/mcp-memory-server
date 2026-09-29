@@ -56,6 +56,34 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`setup_memory` prompt.** It renders memory rules for the user to place
+  in their own agent's instructions: CLAUDE.md, AGENTS.md, a Cursor rule, or
+  the personal preferences of Claude on the web. An optional `host`
+  (`claude-code`, `claude-ai`, `cursor`, `codex`) narrows it to one place.
+  Like the other prompts, it calls nothing.
+
+### Changed
+
+- **The server says what each tool does, not how the model should behave.**
+  The server instructions and eight tool descriptions no longer tell the model
+  to act "proactively", to check "ALWAYS", "as a habit", or "don't wait to be
+  asked", and no description tells it which tool to call next. Anthropic's
+  connector directory rejects descriptions that "tell Claude how to behave",
+  and its submission form asks the publisher to confirm that tool descriptions
+  "contain no instructions about model behavior, other tools, or external
+  instruction sources". The descriptions still say when each tool applies.
+  The rules that used to live here now come from `setup_memory` and the host
+  plugins, where the user places them. A test bans the removed words on every
+  surface the server advertises.
+- **`memory_graph`** states in its description what its parameters already
+  said: `domain` has an effect only for a room's address, and at depth 2 or 3
+  edges below weight 0.05 are dropped unless `min_weight` is set.
+- **`memory_stats`** no longer leads with "episodes vs consolidated
+  prototypes": consolidation is not running on the hosted service. The output
+  fields are unchanged.
+
 ## [0.13.1] — 2026-09-28
 
 No change to the tools, their text or their behaviour. This release changes

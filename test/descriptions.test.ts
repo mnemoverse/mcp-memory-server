@@ -326,6 +326,7 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     const SAMPLE: Record<string, Record<string, string>> = {
       recall: { topic: "x" },
       save_insight: { insight: "x", domain: "d" },
+      setup_memory: {},
       what_do_you_know: { subject: "x" },
     };
     const { prompts } = await mcp.client.listPrompts();
@@ -349,6 +350,79 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     const llms = readFileSync(new URL("../llms.txt", import.meta.url), "utf8");
     for (const [banned, why] of WITHDRAWN) {
       expect(llms, `llms.txt restores ${why}`).not.toMatch(banned);
+    }
+  });
+});
+
+/**
+ * No push on any advertised surface (2026-09-29).
+ *
+ * The Claude connector directory's criteria: "Describe what the tool does, and
+ * don't tell Claude how to behave." Its submission form asks the publisher to
+ * confirm: "Tool descriptions contain no instructions about model behavior,
+ * other tools, or external instruction sources". OpenAI's plugin guidelines
+ * say the same of "overly broad triggering". Saying WHEN a tool applies is
+ * allowed and kept ("It applies when an answer may depend on..."); pushing the
+ * model to call it is not. Proactivity moved to rules the user adds to their
+ * own agent (the setup_memory prompt), so these words have no place on a
+ * surface the server itself advertises. The same lists read the prompts,
+ * including the rules setup_memory renders: those are written without them.
+ */
+describe("no proactivity push on any advertised surface", () => {
+  const PUSHES: Array<[RegExp, string]> = [
+    [/proactiv/i, "a 'proactively' push"],
+    [/\bALWAYS\b/, "an ALWAYS push"],
+    [/don.t wait/i, "a 'don't wait to be asked' push"],
+    [/as a habit/i, "a habit push"],
+    [/\byou own this\b/i, "the ownership framing"],
+    [/\bcall [a-z_]+ next\b/i, "an instruction to call another tool next"],
+  ];
+
+  it("no tool or parameter description carries one", () => {
+    for (const t of tools) {
+      const surfaces: Array<[string, string]> = [[`${t.name} description`, t.description ?? ""]];
+      const props = (t.inputSchema?.properties ?? {}) as Record<string, { description?: unknown } | undefined>;
+      for (const [p, v] of Object.entries(props)) {
+        if (typeof v?.description === "string") surfaces.push([`${t.name}.${p}`, v.description]);
+      }
+      for (const [label, text] of surfaces) {
+        for (const [banned, why] of PUSHES) {
+          expect(text, `${label} carries ${why} (${banned})`).not.toMatch(banned);
+        }
+      }
+    }
+  });
+
+  it("the server instructions carry none, on the wire and at the source", () => {
+    for (const [banned, why] of PUSHES) {
+      expect(mcp.client.getInstructions() ?? "", `the wire instructions carry ${why}`).not.toMatch(banned);
+      expect(SERVER_INSTRUCTIONS, `SERVER_INSTRUCTIONS carries ${why}`).not.toMatch(banned);
+    }
+  });
+
+  it("no prompt carries one, in its description, arguments or message", async () => {
+    const { prompts } = await mcp.client.listPrompts();
+    for (const p of prompts) {
+      const args = Object.fromEntries((p.arguments ?? []).filter((a) => a.required).map((a) => [a.name, "x"]));
+      const rendered = await mcp.client.getPrompt({ name: p.name, arguments: args });
+      const surfaces = [
+        p.description ?? "",
+        ...(p.arguments ?? []).map((a) => a.description ?? ""),
+        ...rendered.messages.map((m) => (m.content as { text?: string }).text ?? ""),
+      ];
+      for (const text of surfaces) {
+        for (const [banned, why] of PUSHES) {
+          expect(text, `prompt ${p.name} carries ${why} (${banned})`).not.toMatch(banned);
+        }
+      }
+    }
+  });
+
+  it("the list fires on the text it replaced (control)", () => {
+    const old =
+      "You own this long-term memory. Use it as a habit: memory_write the moment you learn a durable fact — don't wait to be asked. ALWAYS check here first. Call this PROACTIVELY. To bring someone in, call memory_invite_to_room next.";
+    for (const [banned, why] of PUSHES) {
+      expect(old, `control misses ${why}`).toMatch(banned);
     }
   });
 });

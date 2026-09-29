@@ -117,6 +117,7 @@ Named shortcuts that ask the model to use the tools above; they call nothing the
 - recall (topic): search memory for the topic with memory_read and summarize only what is returned.
 - save_insight (insight, optional domain): store the insight with memory_write and confirm what was stored.
 - what_do_you_know (subject): a briefing from memory_read that flags where nothing is stored.
+- setup_memory (optional host: claude-code, claude-ai, cursor, codex): memory rules for the user's own agent instructions (CLAUDE.md, AGENTS.md, Cursor rules, chat preferences) and where they go.
 
 ## Resources
 - memory://item/{memory_id}: one saved memory by its id, as JSON {memory_id, content, domain}. Your own store only; a memory from a shared room cannot be opened by id.

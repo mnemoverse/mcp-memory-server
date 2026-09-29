@@ -300,8 +300,10 @@ and does not need the same defensive truncation a raw text blob does.
 
 ## Prompts and resources
 
-`registerMemoryPrompts(server)` registers three named shortcuts (`recall`,
-`save_insight`, `what_do_you_know`) that call nothing themselves; each
+`registerMemoryPrompts(server)` registers four prompts that call nothing
+themselves: `setup_memory`, which renders memory rules for the user's own
+agent instructions, and three named shortcuts (`recall`, `save_insight`,
+`what_do_you_know`); each shortcut
 renders one message asking the model to use `memory_read` or
 `memory_write`. It takes no dependencies.
 

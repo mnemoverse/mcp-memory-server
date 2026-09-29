@@ -511,7 +511,7 @@ export function registerMemoryTools(
     "memory_write",
     {
       description:
-        "Store a long-term memory that persists across sessions AND across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code) — write once, recall everywhere. Call this PROACTIVELY the moment the user states a preference, makes a decision, or you learn a durable fact (people, roles, project setup, a lesson). Don't wait to be asked. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records; skip transient chatter that only matters this turn. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code). Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
       inputSchema: {
         content: z
           .string()
@@ -835,7 +835,7 @@ export function registerMemoryTools(
     "memory_read",
     {
       description:
-        "Search your long-term memory before answering anything that may have come up before — user preferences, past decisions, project setup, people, or earlier context. This memory is shared: it persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). ALWAYS check here first when you're unsure whether you already know something; no need to call it for general world knowledge you already hold. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
+        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id you can pass to memory_feedback. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
       inputSchema: {
         query: z
           .string()
@@ -1638,7 +1638,7 @@ export function registerMemoryTools(
         // reads. Nothing time-decays and nothing is auto-deleted: a downvoted
         // memory is OUT-RANKED, and deletion has been administrative-only since
         // 0.9.0. The replacement is the wording that release put on the README.
-        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Call it right after you act on (or reject) recalled memories, passing the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
+        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. It fits right after acting on (or rejecting) recalled memories: pass the ids from the memory_read results as memory_ids. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       // `memory_ids` is the name (2026-09-21): the tool rates memories, which
       // is what every result is (an atom is the engine's word for its smallest
       // unit), and the hosted connector already names the parameter so. The old
@@ -1994,7 +1994,7 @@ export function registerMemoryTools(
     "memory_stats",
     {
       description:
-        "Get an overview of the stored memory: total count, episodes vs consolidated prototypes, number of learned associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before writing to it, or when the user asks what you remember. Read-only — changes nothing.",
+        "Get an overview of the stored memory: total count, the number of learned concept associations, the list of domains, and average quality scores. This memory is shared across all AI tools the user has connected to Mnemoverse. Use it to orient yourself, to confirm the exact domain name before writing to it, or when the user asks what you remember. Read-only — changes nothing.",
       inputSchema: {},
       // `memory_count` and `domains` are copied from the connector's
       // `memoryStatsOutput` (mnemoverse-mcp-remote, src/tools/index.ts), field
@@ -2283,7 +2283,7 @@ export function registerMemoryTools(
     "memory_create_room",
     {
       description:
-        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. To bring someone in, call memory_invite_to_room next.",
+        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and Olya'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
       inputSchema: {
         name: z
           .string()
@@ -2389,7 +2389,7 @@ export function registerMemoryTools(
     "memory_invite_to_room",
     {
       description:
-        "Mint an invite for a room you own and get a ready-to-forward message. An invite is single-use by default; pass max_uses to let several people join with the same one. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use after memory_create_room, or whenever the user says 'invite <someone>' to an existing room.",
+        "Mint an invite for a room you own and get a ready-to-forward message. An invite is single-use by default; pass max_uses to let several people join with the same one. The user sends that message to the person they want to add (any messenger); the recipient opens the link or tells THEIR assistant the code to join. Use when the user asks to invite someone to a room they own, including one just created with memory_create_room.",
       inputSchema: {
         room_id: z
           .string()
@@ -2548,7 +2548,7 @@ export function registerMemoryTools(
     "memory_join_room",
     {
       description:
-        "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. After joining, use the returned address as the `domain` on memory_read to read the shared room — the result tells you what you may do with it: memory_write to that address is only allowed when your membership scope is read_write; a read-only membership has that write refused; and when the server does not report a scope, whether memory_write would succeed is stated as unknown rather than promised either way.",
+        "Join a shared memory room using an invite code (starts with 'mnvr_'). Use when the user pastes an invite code or says something like 'join room with code ...'. The result gives the room's address, which is the `domain` for reading the shared room with memory_read, and tells you what you may do with it: memory_write to that address is only allowed when your membership scope is read_write; a read-only membership has that write refused; and when the server does not report a scope, whether memory_write would succeed is stated as unknown rather than promised either way.",
       inputSchema: {
         code: z
           .string()
@@ -3064,7 +3064,7 @@ export function registerMemoryTools(
     "memory_graph",
     {
       description:
-        "Reads the association edges around given concepts: which concepts the memory has linked together, with each link's weight, outcome valence and co-activation count. Use to inspect what a memory store has learned or to explain why a read expanded to a concept. Read-only.",
+        "Reads the association edges around given concepts: which concepts the memory has linked together, with each link's weight, outcome valence and co-activation count. Use to inspect what a memory store has learned or to explain why a read expanded to a concept. Reads your own graph, or a shared room's when its address is passed as domain; any other domain value has no effect. At depth 2 or 3 the engine drops edges below weight 0.05 unless min_weight is set. Read-only.",
       inputSchema: {
         // Bounds come from CORE_LIMITS (src/limits.ts, ADR-025) EXCEPT the
         // per-seed 200-character cap: GraphRequestSchema.seeds.items carries

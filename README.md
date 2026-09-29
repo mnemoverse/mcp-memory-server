@@ -297,13 +297,14 @@ If it doesn't remember: check that the client was fully restarted and the config
 
 ### Prompts
 
-Three named shortcuts for clients that show MCP prompts as commands (Claude Code as `/mcp__mnemoverse__<name>`). Each one only asks the model to use the tools above; none of them calls the API itself.
+Four named prompts for clients that show MCP prompts as commands (Claude Code as `/mcp__mnemoverse__<name>`). None of them calls the API itself: three ask the model to use the tools above, and `setup_memory` hands you rules for your own agent.
 
 | Prompt | Arguments | What it asks for |
 |------|------|-------------|
 | `recall` | `topic` | Search memory for a topic with `memory_read` and summarize only what comes back |
 | `save_insight` | `insight`, optional `domain` | Store an insight with `memory_write` and confirm what was stored |
 | `what_do_you_know` | `subject` | A briefing from `memory_read` that flags what is not stored |
+| `setup_memory` | optional `host`: `claude-code`, `claude-ai`, `cursor` or `codex` | Memory rules for CLAUDE.md, AGENTS.md, Cursor rules or your chat preferences, and where they go, so your assistant checks and saves memory without being reminded |
 
 ### Resources
 

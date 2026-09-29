@@ -1,5 +1,6 @@
 /**
- * MCP prompts (0.11, step 3c): recall, save_insight, what_do_you_know.
+ * MCP prompts (0.11, step 3c): recall, save_insight, what_do_you_know; and
+ * setup_memory (2026-09-29), which only this package has so far.
  *
  * Moved from the hosted connector. The first four tests are its own
  * (mnemoverse-mcp-remote test/mcp-protocol.test.ts, "MCP prompts (memory
@@ -12,6 +13,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DOMAIN_ESCAPE_LEGEND, exactLiteral } from "../src/names.js";
 import { NAMES } from "./name-cases.js";
+import { MEMORY_RULES, RULES_PLACES } from "../src/prompts.js";
 import { startMemoryServer, type Harness } from "./harness.js";
 
 let mcp: Harness;
@@ -33,9 +35,16 @@ async function render(name: string, args: Record<string, string>): Promise<strin
 }
 
 describe("the connector's prompt tests, unchanged", () => {
-  it("lists exactly the three memory prompts, each with a description", async () => {
+  // The connector's copy lists three; the package adds setup_memory, so a
+  // connector registering these prompts lists four.
+  it("lists exactly the four memory prompts, each with a description", async () => {
     const { prompts } = await mcp.client.listPrompts();
-    expect(prompts.map((p) => p.name).sort()).toEqual(["recall", "save_insight", "what_do_you_know"]);
+    expect(prompts.map((p) => p.name).sort()).toEqual([
+      "recall",
+      "save_insight",
+      "setup_memory",
+      "what_do_you_know",
+    ]);
     for (const p of prompts) {
       expect(p.description, `${p.name} needs a description`).toBeTruthy();
     }
@@ -116,10 +125,56 @@ describe("what this package adds", () => {
     await render("recall", { topic: "x" });
     await render("save_insight", { insight: "x", domain: "d" });
     await render("what_do_you_know", { subject: "x" });
+    await render("setup_memory", {});
+    await render("setup_memory", { host: "cursor" });
     expect(mcp.calls).toHaveLength(0);
   });
 
   it("the server advertises the prompts capability", () => {
     expect(mcp.client.getServerCapabilities()?.prompts).toBeDefined();
+  });
+});
+
+describe("setup_memory: rules the user places in their own agent", () => {
+  it("hands out the rules verbatim, secrets line included", async () => {
+    const text = await render("setup_memory", {});
+    expect(text).toContain(MEMORY_RULES);
+    expect(text).toContain("Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.");
+    expect(text).toContain("memory_read");
+    expect(text).toContain("memory_write");
+    expect(text).toContain("memory_feedback");
+  });
+
+  it("without a host, lists every place the rules can go", async () => {
+    const text = await render("setup_memory", {});
+    for (const line of Object.values(RULES_PLACES)) {
+      expect(text).toContain(line);
+    }
+  });
+
+  it.each([
+    ["claude-code", "CLAUDE.md"],
+    ["claude-ai", "personal preferences"],
+    ["cursor", ".cursor/rules/"],
+    ["codex", "AGENTS.md"],
+    ["  Cursor ", ".cursor/rules/"],
+  ])("host %j names only its own place (%s)", async (host, needle) => {
+    const text = await render("setup_memory", { host });
+    expect(text).toContain(needle);
+    expect(text).not.toContain("Where they go:");
+  });
+
+  it.each(["vim", "constructor", "__proto__", "toString"])(
+    "an unknown host %j falls back to every place, never to an inherited property",
+    async (host) => {
+      const text = await render("setup_memory", { host });
+      expect(text).toContain("Where they go:");
+      expect(text).not.toMatch(/function|\[native code\]|\[object Object\]/);
+    },
+  );
+
+  it("points nowhere outside this server: no URL in the rules or the message", async () => {
+    const text = await render("setup_memory", {});
+    expect(text).not.toMatch(/https?:\/\//);
   });
 });

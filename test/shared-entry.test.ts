@@ -64,7 +64,7 @@ describe("the shared entry point", () => {
     await server.close();
   });
 
-  it("registers the three prompts on a server it did not create (0.11)", async () => {
+  it("registers the memory prompts on a server it did not create (0.11; setup_memory 2026-09-29)", async () => {
     const server = new McpServer({ name: "shared-entry-prompts", version: "0.0.0" });
     registerMemoryPrompts(server);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -72,7 +72,12 @@ describe("the shared entry point", () => {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
     const { prompts } = await client.listPrompts();
-    expect(prompts.map((p) => p.name).sort()).toEqual(["recall", "save_insight", "what_do_you_know"]);
+    expect(prompts.map((p) => p.name).sort()).toEqual([
+      "recall",
+      "save_insight",
+      "setup_memory",
+      "what_do_you_know",
+    ]);
     await server.close();
   });
 

@@ -3,11 +3,18 @@
  * how to USE this memory, kept in their own module so tests can import them
  * without booting the stdio server (src/index.ts starts a transport on import).
  *
- * Product frame (Eduard, 2026-08-01): the memory store belongs to THE AGENT,
- * not the user — so the guidance is active ("need it — go get it; learned
- * something — save it"), never gated on the user explicitly asking. Honesty
- * constraints stay: no over-claiming, and the never-store-secrets safety line
- * is kept on write surfaces.
+ * Product frame, first set 2026-08-01 and revised 2026-09-29: the guidance is
+ * never gated on the user explicitly asking, but it is also never a push. The
+ * Claude connector directory rejects descriptions that "tell Claude how to
+ * behave" or "direct Claude to pull behavioral instructions from external
+ * sources", and its submission form asks the publisher to confirm that "tool
+ * descriptions contain no instructions about model behavior, other tools, or
+ * external instruction sources". So this surface says what each tool does and
+ * when it applies, and proactivity lives in rules the user adds to their own
+ * agent: the setup_memory prompt (src/prompts.ts) renders them for CLAUDE.md,
+ * AGENTS.md, Cursor rules or a chat's preferences, and the host plugins carry
+ * the same skill. Honesty constraints stay: no over-claiming, and the
+ * never-store-secrets safety line is kept on write surfaces.
  */
 
 import type { ReadScope, RoomScope } from "./scope.js";
@@ -19,28 +26,27 @@ import type { ReadScope, RoomScope } from "./scope.js";
  * Constraints (tested in test/teaching-surface.test.ts):
  * - 500–800 chars; some clients (ChatGPT) weight the FIRST ~512 chars, so the
  *   core habit (read before answering, write on learning) is front-loaded.
- * - Active polarity: no "only when the user explicitly asks" gating.
+ * - No brakes ("only when the user explicitly asks") and no pushes
+ *   ("proactively", "always", "don't wait to be asked", "as a habit"):
+ *   test/descriptions.test.ts bans both on every advertised surface.
+ * - Names the setup_memory prompt, the only pointer to guidance, and it points
+ *   inside this server, never to a URL (2026-09-29).
  * - Mentions every tool family: read/write/stats/feedback, rooms, vault.
  * - No delete tool on this surface (2026-08-20): deletion was withdrawn to an
  *   administrative REST-only operation, so the instructions point a model at
  *   writing a corrected memory instead of asking to delete one.
  *
- * memory_graph (0.13): mentioning the eleventh tool here pushed the string
- * past 800 at 833 chars. Two sentences were shortened to make room, both
- * with margin under the cap left afterward (793 total) rather than trimmed to
- * the wire:
- *  - the room sentence dropped its "(memory_list_rooms)" parenthetical —
- *    that tool name is not one of the ones this file's own tests require
- *    present (`test/descriptions.test.ts` pins
- *    "...pass its address as domain" and "unscoped reads never cover rooms"
- *    as two independent substrings, not the text between them, so removing
- *    only the aside between those two anchors keeps both intact);
- *  - "deletion is administrative, not a tool" lost its last three words —
- *    the sentence still states the fact ("write a fresh one" and
- *    "administrative" both survive, and both are separately asserted).
+ * 2026-09-29 rewrite (770 chars): the ownership and habit framing and "don't
+ * wait to be asked" are gone (see the product frame above); the text says what
+ * each tool family is for, and ends on the setup_memory prompt. To fit it under
+ * the cap, the room-tool sentence ("Rooms: memory_create_room,
+ * memory_invite_to_room, memory_join_room") and "deletion is administrative"
+ * were dropped: the room rule itself
+ * and "write a fresh one" are kept verbatim, and the fact that deletion is not
+ * a tool stays stated in memory_read's description and in the README.
  */
 export const SERVER_INSTRUCTIONS =
-  "You own this long-term memory. It persists across sessions and every AI tool this user connects. Use it as a habit: memory_read before answering anything that may have come up; memory_write the moment you learn a durable fact, preference or decision — don't wait to be asked. Shared rooms are SEPARATE stores: to read one, pass its address as domain; unscoped reads never cover rooms. Rate recalls with memory_feedback; memory_stats shows counts; memory_list_recent is newest-first; memory_graph shows links. To correct a wrong memory, write a fresh one — deletion is administrative. Rooms: memory_create_room, memory_invite_to_room, memory_join_room. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.";
+  "Long-term memory kept across sessions and the AI tools on this account. memory_read searches earlier preferences, decisions and project context when an answer may depend on them. memory_write saves a durable fact, preference or decision. memory_list_recent is newest-first; memory_stats shows counts and domains; memory_feedback rates recalls, which reorders later reads; memory_graph shows concept links. Shared rooms are SEPARATE stores: to read one, pass its address as domain; unscoped reads never cover rooms. To correct a memory, write a fresh one. vault_list names secrets by alias, never values. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. The setup_memory prompt explains memory rules for CLAUDE.md or AGENTS.md.";
 
 /** The pre-existing zero-result message — kept as the fail-open fallback. */
 export const NO_MATCH_MESSAGE = "No memories found for this query.";

@@ -1,5 +1,6 @@
 /**
- * MCP prompts: three named entry points to the memory tools.
+ * MCP prompts: three named entry points to the memory tools, and
+ * setup_memory, which hands the user rules for their own agent (2026-09-29).
  *
  * Clients that support the prompts capability show them as commands (Claude
  * Code as `/mcp__mnemoverse__<name>`, Claude.ai connectors in the slash menu).
@@ -24,8 +25,37 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { exactLiteral, withDomainEscapeLegend } from "./names.js";
 
 /**
- * Register the three memory prompts on `server`. They call nothing: each
- * renders a message that asks the model to use memory_read or memory_write.
+ * The rules setup_memory hands out. They carry what the server text no longer
+ * says (src/teaching.ts, product frame): when to read, when to write, when to
+ * rate. They are written for the user to place in their own agent's
+ * instructions, where a host loads them as the user's own rules at the start
+ * of every session. Exported so the docs and tests read one copy.
+ */
+export const MEMORY_RULES = [
+  "## Memory (Mnemoverse)",
+  "- Before answering something that may depend on an earlier session (my preferences, past decisions, project setup, people), search memory with memory_read.",
+  "- When I state a lasting preference or make a decision, or you learn a durable fact about this project, save it with memory_write as one self-contained statement. You do not need to ask me first.",
+  "- After acting on recalled memories, rate them with memory_feedback: helpful or not.",
+  "- Never store passwords, API keys, payment data, MFA codes, government IDs, or health records.",
+].join("\n");
+
+/** Where the rules go, per host. `host` is matched after trimming and lowercasing. */
+export const RULES_PLACES: Record<string, string> = {
+  "claude-code":
+    "Claude Code: add them to CLAUDE.md in the project root, or to ~/.claude/CLAUDE.md to apply them in every project.",
+  "claude-ai":
+    "Claude on the web, desktop or mobile: paste them into the personal preferences field in Settings, or into a project's instructions.",
+  cursor:
+    "Cursor: save them as a rule file in .cursor/rules/, for example mnemoverse-memory.mdc with alwaysApply: true.",
+  codex:
+    "Codex and other agents that read AGENTS.md: add them to AGENTS.md in the project root.",
+};
+
+/**
+ * Register the memory prompts on `server`. They call nothing: recall,
+ * save_insight and what_do_you_know render a message that asks the model to
+ * use memory_read or memory_write; setup_memory renders the rules above with
+ * where they go.
  */
 export function registerMemoryPrompts(server: McpServer): void {
   server.registerPrompt(
@@ -125,5 +155,45 @@ export function registerMemoryPrompts(server: McpServer): void {
         },
       ],
     }),
+  );
+
+  server.registerPrompt(
+    "setup_memory",
+    {
+      title: "Set up memory rules",
+      description:
+        "Get memory rules to add to CLAUDE.md, AGENTS.md, Cursor rules or your chat preferences, so your assistant checks and saves memory without being reminded.",
+      argsSchema: {
+        host: z
+          .string()
+          .optional()
+          .describe(
+            "Where the rules will live: claude-code, claude-ai, cursor or codex. Leave empty to see every option.",
+          ),
+      },
+    },
+    ({ host }) => {
+      const key = (host ?? "").trim().toLowerCase();
+      // Own keys only: a host of "constructor" or "__proto__" must not reach
+      // Object.prototype and print a function where a sentence belongs.
+      const place = Object.hasOwn(RULES_PLACES, key) ? RULES_PLACES[key] : undefined;
+      const where = place
+        ? place
+        : `Where they go:\n${Object.values(RULES_PLACES)
+            .map((line) => `- ${line}`)
+            .join("\n")}`;
+      const text =
+        "Help me set up memory rules so you use my Mnemoverse memory on your own. " +
+        `These are the rules:\n\n${MEMORY_RULES}\n\n${where}\n\n` +
+        "Show me where they go, explain in two sentences why rules like these work better than asking in every chat, and offer to add them for me.";
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: { type: "text" as const, text },
+          },
+        ],
+      };
+    },
   );
 }

@@ -78,11 +78,11 @@ const promptsSource = readFileSync(
 // — is asserted by calling getInstructions() on a real client in
 // test/handlers.test.ts. What is left here is the content of the string itself.
 describe("server instructions", () => {
-  it("carry active polarity — no user-gating brakes", () => {
+  it("carry no user-gating brakes", () => {
     for (const brake of [
       "only when the user explicitly asks",
       "only when the user asks",
-      "wait to be asked to", // "don't wait to be asked" is the flip, not a brake
+      "wait to be asked to",
     ]) {
       expect(SERVER_INSTRUCTIONS.toLowerCase()).not.toContain(brake);
     }
@@ -116,6 +116,14 @@ describe("server instructions", () => {
     expect(head).toContain("memory_write");
     expect(SERVER_INSTRUCTIONS.length).toBeGreaterThanOrEqual(500);
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(800);
+  });
+
+  it("name the setup_memory prompt as the one pointer to guidance, and no URL (2026-09-29)", () => {
+    // The directory rejects descriptions that "direct Claude to pull behavioral
+    // instructions from external sources". The pointer names a prompt this
+    // server itself serves; a link out would be exactly the rejected pattern.
+    expect(SERVER_INSTRUCTIONS).toContain("setup_memory");
+    expect(SERVER_INSTRUCTIONS).not.toMatch(/https?:\/\/|www\./i);
   });
 
   it("keep the never-store-secrets safety line (honesty constraint)", () => {
