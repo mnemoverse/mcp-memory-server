@@ -437,9 +437,11 @@ describe("no proactivity push on any advertised surface", () => {
  * them loses the rating signal, so they are pinned.
  */
 describe("the measured 'when' sentences stay", () => {
-  it("memory_feedback names the moment and the ids", () => {
+  // "or rejected" (CodeRabbit on #190): a memory the answer set aside as
+  // wrong or stale is exactly the one a -1 is for.
+  it("memory_feedback names the moment and the ids, rejected memories included", () => {
     expect(description("memory_feedback")).toContain(
-      "Use it after an answer that relied on memories from memory_read: pass the ids of the memories used as memory_ids",
+      "Use it after an answer that relied on or rejected memories from memory_read: pass the ids of those memories as memory_ids",
     );
   });
 

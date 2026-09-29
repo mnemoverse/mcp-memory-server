@@ -19,7 +19,7 @@
     {
       "name": "memory_feedback",
       "title": "Rate Memory Helpfulness",
-      "description": "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Use it after an answer that relied on memories from memory_read: pass the ids of the memories used as memory_ids, with outcome 1 when they helped and -1 when they were wrong or stale. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
+      "description": "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Use it after an answer that relied on or rejected memories from memory_read: pass the ids of those memories as memory_ids, with outcome 1 when they helped and -1 when they were wrong or stale. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       "annotations": {
         "title": "Rate Memory Helpfulness",
         "readOnlyHint": false,
