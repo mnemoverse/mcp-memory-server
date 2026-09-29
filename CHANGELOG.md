@@ -56,6 +56,10 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-09-29
+
+Text only: two sentences a directory reviewer would count against us.
+
 ### Fixed
 
 - **No promise of an unbuilt feature.** `memory_read`'s `exclude_author`
