@@ -577,7 +577,7 @@ export function registerMemoryTools(
           .number()
           .optional()
           .describe(
-            "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. Outside shared rooms, a write that scores below the service's importance threshold is not stored, and `reason` says so. The score is approximate and can read lower for non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
+            "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. Outside shared rooms, a write that scores below the service's importance threshold is not stored, and `reason` says why when the service sends one. The score is approximate and can read lower for non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
           ),
       },
       annotations: {

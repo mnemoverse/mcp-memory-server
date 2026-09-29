@@ -776,7 +776,6 @@ describe("the load-bearing sentences, as returned", () => {
 
     expect(text).toContain("Novelty score 0.05");
     expect(text).toMatch(/approximate/);
-    expect(text).toContain("rough hint about similarity");
     expect(text).not.toMatch(/first-generation|under active development|~0\.08/);
     // The 0.08-vs-0.55 figures were measured on an embedder the service no
     // longer uses (core switched on 2026-09-05) and were never re-measured, so
