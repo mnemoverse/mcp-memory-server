@@ -56,6 +56,13 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-09-29
+
+The server now says what each tool does and when it applies, and no longer
+tells the model how to behave: the form Anthropic's connector directory asks
+for. The rules that used to live in the tool text come from a new prompt,
+`setup_memory`, into the user's own agent instructions.
+
 ### Added
 
 - **`setup_memory` prompt.** It renders memory rules for the user to place
