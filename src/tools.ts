@@ -2282,7 +2282,7 @@ export function registerMemoryTools(
           .min(CORE_LIMITS.roomName.minLength)
           .max(CORE_LIMITS.roomName.maxLength)
           .describe(
-            "Room name, unique within your account (e.g. 'me-and-olya').",
+            "Room name, unique within your account (e.g. 'launch-team').",
           ),
         description: z
           .string()

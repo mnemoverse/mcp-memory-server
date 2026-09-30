@@ -392,7 +392,7 @@ registerMemoryResources(server, { apiFetch });
  * lists all twelve tools, and writes nothing to stderr — the 401 only appears
  * mid-conversation, on the first real tool call. A user who mistyped the key
  * sees a green connection and later reads the silent failure as "the product
- * does not work" (Olya's assistant, 2026-08-16).
+ * does not work" (a user's assistant, 2026-08-16).
  *
  * So: if a key IS configured, verify it once at startup with the cheapest
  * authenticated call and put the verdict on stderr, which MCP clients surface

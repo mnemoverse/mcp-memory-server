@@ -281,6 +281,9 @@ describe("withdrawn claims stay withdrawn on every advertised surface", () => {
     // Anthropic's directory policy 2.B rejects promises of features that are
     // not built. A surface says what exists; plans live in the CHANGELOG.
     [/\bis planned\b|coming soon/i, "a promise of an unbuilt feature"],
+    // A real person's name was the example in three tool texts; 0.14.1 fixed two
+    // and missed the lowercase one in a parameter description. Any case.
+    [/olya/i, "a personal name as an example"],
   ];
 
   it("no tool or parameter description carries one", () => {

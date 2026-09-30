@@ -56,6 +56,13 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The last personal name in tool text.** 0.14.1 replaced it in two tool
+  descriptions and missed the example in `memory_create_room`'s `name`
+  parameter; it now reads `'launch-team'`. A test bans the name on every
+  advertised surface, in any letter case.
+
 ## [0.14.1] — 2026-09-29
 
 Text only: two sentences a directory reviewer would count against us.
