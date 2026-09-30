@@ -56,6 +56,10 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.14.2] — 2026-09-30
+
+Text only: one example 0.14.1 missed.
+
 ### Fixed
 
 - **The last personal name in tool text.** 0.14.1 replaced it in two tool
