@@ -17,7 +17,9 @@
  * Two limits, both the engine's. The point read looks only in the caller's
  * own store (GET /memory/atoms/{id} takes no domain), so a memory read from a
  * shared room cannot be opened here; the description says so. And a Vault
- * secret is safe to open: its value lives in a column no read returns.
+ * secret cannot be opened at all: the point read answers a secret's id with
+ * 404, exactly as it answers an id that names nothing, so this resource
+ * returns resource-not-found (-32002) for it, as for any missing memory.
  */
 
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

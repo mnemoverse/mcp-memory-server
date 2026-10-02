@@ -56,6 +56,17 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The comment on the `memory://item/{memory_id}` resource no longer says a
+  Vault secret is safe to open.** The engine's point read
+  (`GET /api/v1/memory/atoms/{atom_id}`) now answers a Vault secret's id with
+  404, exactly as it answers an id that names nothing, so the resource returns
+  resource-not-found (-32002) for it, as for any missing memory. The comment in
+  `src/resources.ts` now says that. Comments are not stripped from `dist/`, so
+  the old sentence shipped in the package. Comment only: nothing the resource
+  does, returns or advertises changed.
+
 ## [0.14.2] — 2026-09-30
 
 Text only: one example 0.14.1 missed.
