@@ -58,6 +58,14 @@ git history and the GitHub releases are the record.
 
 ### Documentation
 
+- **The write tool's description names the gate for what it does.** It said
+  "an importance gate may filter low-value writes", the frame the docs
+  dropped on 2026-10-02 (mnemoverse-docs#671): the gate scores novelty against
+  the nearest memory in the same domain and refuses only a write the embedder
+  cannot tell apart from one already stored; it judges neither importance nor
+  truth, and it does not apply in shared rooms. The sentence now says so, in
+  the words `/api/getting-started` uses. Description text only: nothing the
+  tool accepts, does or returns changed.
 - **The comment on the `memory://item/{memory_id}` resource no longer says a
   Vault secret is safe to open.** The engine's point read
   (`GET /api/v1/memory/atoms/{atom_id}`) now answers a Vault secret's id with

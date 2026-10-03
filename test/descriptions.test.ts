@@ -6,7 +6,7 @@
  * connected model's system prompt, so every sentence in them is shipped
  * behaviour — and nine of this release's own fixes ARE description sentences:
  * the top_k not-a-hard-cap warning, the exclude_author not-usable-yet warning,
- * the room boundary on feedback, the importance-gate sentence on memory_write,
+ * the room boundary on feedback, the novelty-gate sentence on memory_write,
  * the unscoped-reads-never-cover-rooms rule. (The room boundaries this file
  * once also pinned on memory_delete/memory_delete_domain went with those
  * tools on 2026-08-20 — deletion is administrative-only now.) Until
@@ -73,10 +73,11 @@ function paramDescription(toolName: string, param: string): string {
 // ---------------------------------------------------------------------------
 
 describe("the advertised descriptions carry this release's truth claims", () => {
-  it("memory_write keeps the importance-gate sentence — a write can be refused, and the result says which", () => {
+  it("memory_write names the gate for what it does — a near-identical write is refused, and the result says which", () => {
     const d = description("memory_write");
-    expect(d).toContain("an importance gate may filter low-value writes");
-    expect(d).toContain("whether the memory was stored or filtered");
+    expect(d).toContain("a novelty gate refuses a write the embedder cannot tell apart");
+    expect(d).toContain("whether the memory was stored or refused");
+    expect(d).not.toContain("importance gate");
   });
 
   it("memory_read.top_k warns it is NOT a hard cap — more possible, fewer possible", () => {
