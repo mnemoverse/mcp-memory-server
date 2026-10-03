@@ -511,7 +511,7 @@ export function registerMemoryTools(
     "memory_write",
     {
       description:
-        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code). Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: an importance gate may filter low-value writes, so the result tells you whether the memory was stored or filtered. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code). Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
       inputSchema: {
         content: z
           .string()
