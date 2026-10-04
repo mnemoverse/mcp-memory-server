@@ -58,6 +58,14 @@ git history and the GitHub releases are the record.
 
 ### Documentation
 
+- **Windsurf is Devin Desktop: the install snippet names the Devin file.**
+  Windsurf was renamed Devin Desktop on 2026-06-02, and since version 3.9.19
+  (2026-09-08) its only agent is Devin Local, which reads
+  `~/.config/devin/mcp_config.json`. The README block and
+  `docs/snippets/windsurf.md` (mirrored into mnemoverse.com/docs) now say
+  "Devin Desktop (formerly Windsurf)" and that path. The file names stay, so
+  every include keeps working; an entry in the old Windsurf file still loads,
+  because Devin imports it by default.
 - **The write tool's description names the gate for what it does.** It said
   "an importance gate may filter low-value writes", the frame the docs
   dropped on 2026-10-02 (mnemoverse-docs#671): the gate scores novelty against

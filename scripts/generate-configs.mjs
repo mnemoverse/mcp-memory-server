@@ -373,7 +373,7 @@ function snippetClaudeCodeCli() {
 }
 
 function snippetMcpServersJson(label, configPath) {
-  // Cursor / Claude Desktop / Windsurf — shared mcpServers shape
+  // Cursor / Claude Desktop / Devin Desktop (ex-Windsurf) — shared mcpServers shape
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   return (
     `**${label}** — add to \`${configPath}\`:\n\n` +
@@ -505,7 +505,7 @@ function readmeFeaturedBlock() {
 function readmeMoreClientsBlock() {
   return [
     snippetVscode(),
-    snippetMcpServersJson("Windsurf", "~/.codeium/windsurf/mcp_config.json"),
+    snippetMcpServersJson("Devin Desktop (formerly Windsurf)", "~/.config/devin/mcp_config.json"),
     "**More MCP clients** — same server, different config file:\n",
     snippetZed(),
     snippetJetBrains(),
@@ -831,8 +831,8 @@ const OUTPUTS = [
     content:
       PARTIAL_HEADER +
       snippetMcpServersJson(
-        "Windsurf",
-        "~/.codeium/windsurf/mcp_config.json",
+        "Devin Desktop (formerly Windsurf)",
+        "~/.config/devin/mcp_config.json",
       ),
   },
   {

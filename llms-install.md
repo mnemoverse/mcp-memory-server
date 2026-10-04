@@ -33,7 +33,7 @@ For Cline, open MCP Servers, then Configure, or edit `cline_mcp_settings.json` d
 }
 ```
 
-Other clients use the same command and the same two environment variables in their own config file. The exact blocks for Claude Code, Cursor, VS Code, Windsurf, Zed, JetBrains and Continue are in `README.md` under "Connect to your AI tool". VS Code uses the key `servers` instead of `mcpServers`.
+Other clients use the same command and the same two environment variables in their own config file. The exact blocks for Claude Code, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains and Continue are in `README.md` under "Connect to your AI tool". VS Code uses the key `servers` instead of `mcpServers`.
 
 Keep the key out of files that are committed to a repository. Prefer a user-level config over a project-level one.
 

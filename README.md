@@ -42,7 +42,7 @@ Cursor, in `.cursor/mcp.json`:
 { "mcpServers": { "mnemoverse": { "url": "https://mcp.mnemoverse.com/mcp" } } }
 ```
 
-Claude Desktop, Windsurf, VS Code and ChatGPT: [Remote MCP setup](https://mnemoverse.com/docs/api/remote-mcp-server). The local server below is the other path: it runs on your machine and reads an API key.
+Claude Desktop, Devin Desktop (formerly Windsurf), VS Code and ChatGPT: [Remote MCP setup](https://mnemoverse.com/docs/api/remote-mcp-server). The local server below is the other path: it runs on your machine and reads an API key.
 
 ### 1. Get a free API key
 
@@ -123,7 +123,7 @@ The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so
 <!-- INSTALL_SNIPPETS_END -->
 
 <details>
-<summary><b>All other clients</b> — VS Code, Windsurf, Zed, JetBrains, Cline, Continue</summary>
+<summary><b>All other clients</b> — VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline, Continue</summary>
 
 <!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -156,7 +156,7 @@ The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so
 }
 ```
 
-**Windsurf** — add to `~/.codeium/windsurf/mcp_config.json`:
+**Devin Desktop (formerly Windsurf)** — add to `~/.config/devin/mcp_config.json`:
 
 ```json
 {

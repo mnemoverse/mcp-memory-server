@@ -16,7 +16,7 @@ Files that are **generated** (never edit by hand):
 | ---- | -------------- |
 | `docs/configs/cursor.json` | Cursor `.cursor/mcp.json` snippet |
 | `docs/configs/claude-desktop.json` | Claude Desktop `claude_desktop_config.json` snippet |
-| `docs/configs/windsurf.json` | Windsurf `mcp_config.json` snippet |
+| `docs/configs/windsurf.json` | Devin Desktop (ex-Windsurf) `mcp_config.json` snippet |
 | `docs/configs/vscode.json` | VS Code `.vscode/mcp.json` snippet (uses `servers`, not `mcpServers`) |
 | `docs/configs/cursor-deep-link.txt` | Base64-encoded `cursor://...` install URL |
 | `docs/configs/vscode-deep-link.txt` | URL-encoded `vscode:mcp/install?...` URL |
@@ -27,7 +27,7 @@ Files that are **generated** (never edit by hand):
 | `docs/snippets/cursor.md` | Markdown partial — Cursor install |
 | `docs/snippets/claude-desktop.md` | Markdown partial — Claude Desktop install |
 | `docs/snippets/vscode.md` | Markdown partial — VS Code install |
-| `docs/snippets/windsurf.md` | Markdown partial — Windsurf install |
+| `docs/snippets/windsurf.md` | Markdown partial — Devin Desktop (ex-Windsurf) install |
 | `docs/snippets/zed.md` | Markdown partial — Zed install |
 | `docs/snippets/jetbrains.md` | Markdown partial — JetBrains install |
 | `docs/snippets/cline.md` | Markdown partial — Cline install |
