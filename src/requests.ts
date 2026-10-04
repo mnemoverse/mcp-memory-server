@@ -45,6 +45,7 @@ export interface ReadArgs {
   since?: string;
   until?: string;
   exclude_author?: string;
+  diversity?: number;
 }
 
 export interface RecentArgs {
@@ -118,6 +119,10 @@ export function readRequestBody(a: ReadArgs): Record<string, unknown> {
     ...(a.since ? { since: a.since } : {}),
     ...(a.until ? { until: a.until } : {}),
     ...(a.exclude_author ? { exclude_author: a.exclude_author } : {}),
+    // Sent only when it can change anything: 0 is the engine's own default
+    // (core#656), and leaving the field out keeps the body byte-identical to
+    // what a deployment that predates it accepts.
+    ...(a.diversity ? { diversity: a.diversity } : {}),
   };
 }
 

@@ -88,6 +88,14 @@ describe("the advertised descriptions carry this release's truth claims", () => 
     expect(d).toContain("the relevance floor can return fewer");
   });
 
+  it("memory_read.diversity says what it changes, and when it does not apply", () => {
+    const d = paramDescription("memory_read", "diversity");
+    expect(d).toContain("0 (default) returns the matches as ranked");
+    expect(d).toContain("near-copy");
+    expect(d).toContain("not their scores");
+    expect(d).toContain("top_k is below 200");
+  });
+
   it("memory_read.domain: omitting searches your OWN domains and never rooms", () => {
     const d = paramDescription("memory_read", "domain");
     expect(d).toContain("Omitting it searches your OWN domains");

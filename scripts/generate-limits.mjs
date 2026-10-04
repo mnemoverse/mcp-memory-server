@@ -38,6 +38,7 @@ const WANTED = [
   ["domain", "WriteRequestSchema", "domain", ["maxLength"]],
   ["readQuery", "ReadRequestSchema", "query", ["minLength", "maxLength"]],
   ["readTopK", "ReadRequestSchema", "top_k", ["minimum", "maximum", "default"]],
+  ["readDiversity", "ReadRequestSchema", "diversity", ["minimum", "maximum", "default"]],
   ["recentLimit", "RecentRequestSchema", "limit", ["minimum", "maximum", "default"]],
   ["recentCursor", "RecentRequestSchema", "cursor", ["maxLength"]],
   ["feedbackOutcome", "FeedbackRequestSchema", "outcome", ["minimum", "maximum"]],

@@ -59,6 +59,7 @@ const SENTINEL: Record<string, unknown> = {
   since: "2026-08-01T00:00:00Z",
   until: "2026-08-02T00:00:00Z",
   exclude_author: "sentinel-author",
+  diversity: 0.37,
   top_k: 7,
   limit: 11,
   cursor: "sentinel-cursor",

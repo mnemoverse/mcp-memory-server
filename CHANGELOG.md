@@ -56,6 +56,17 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`diversity` on `memory_read`** (0 to 1, default 0), passed to core's
+  `POST /memory/read` (core#656, live since 2026-10-04). Above 0, a match that
+  is a near-copy of one already picked gives its slot to the next distinct
+  memory (maximal marginal relevance); it changes which memories come back, not
+  their scores, and applies only when there are more matches than `top_k` and
+  `top_k` is below 200. The bounds come from core's OpenAPI contract through
+  `src/limits.ts`. At 0 the request body is byte-identical to before, so an
+  older core sees no difference.
+
 ### Documentation
 
 - **Windsurf is Devin Desktop: the install snippet names the Devin file.**

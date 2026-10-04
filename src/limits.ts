@@ -32,6 +32,11 @@ export const CORE_LIMITS = {
     maximum: 500,
     default: 10,
   },
+  readDiversity: {
+    minimum: 0,
+    maximum: 1,
+    default: 0,
+  },
   recentLimit: {
     minimum: 1,
     maximum: 100,

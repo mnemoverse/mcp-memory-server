@@ -117,6 +117,17 @@ describe("readRequestBody matches 0.8.0 for every domain shape", () => {
     expect(readRequestBody({ query: "q", top_k: 50 }).top_k).toBe(50);
     expect(readRequestBody({ query: "q", top_k: 1 }).top_k).toBe(1);
   });
+
+  it("sends diversity only when it can change anything (core#656)", () => {
+    // 0 is the engine's own default: leaving it out keeps the body
+    // byte-identical to what a core that predates the field accepts.
+    expect(wire(readRequestBody({ query: "q", diversity: 0 }))).toBe(
+      '{"query":"q","top_k":5,"include_associations":true}',
+    );
+    expect(wire(readRequestBody({ query: "q", diversity: 0.4 }))).toBe(
+      '{"query":"q","top_k":5,"include_associations":true,"diversity":0.4}',
+    );
+  });
 });
 
 describe("recentRequestBody matches 0.8.0 for every domain shape", () => {

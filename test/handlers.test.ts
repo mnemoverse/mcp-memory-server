@@ -161,6 +161,20 @@ describe("what a connecting client is actually told", () => {
  * right probe was consulted, or whether the sentence around it contradicts it —
  * and all three were real findings.
  */
+describe("memory_read passes diversity to core", () => {
+  it("sends the value when given, and nothing when omitted", async () => {
+    mcp.on(READ, { items: [] }).on(ROOMS, []).on(STATS, { total_atoms: 1 });
+    await mcp.callText("memory_read", { query: "deploy", diversity: 0.5 });
+    const sent = mcp.calls.find((c) => c.key === READ)?.body as Record<string, unknown>;
+    expect(sent.diversity).toBe(0.5);
+
+    mcp.reset().on(READ, { items: [] }).on(ROOMS, []).on(STATS, { total_atoms: 1 });
+    await mcp.callText("memory_read", { query: "deploy" });
+    const plain = mcp.calls.find((c) => c.key === READ)?.body as Record<string, unknown>;
+    expect("diversity" in plain).toBe(false);
+  });
+});
+
 describe("an empty answer describes the scope it searched", () => {
   it("memory_read, unscoped: names the rooms it never looked in", async () => {
     mcp.on(READ, { items: [] }).on(ROOMS, [ROOM]).on(STATS, { total_atoms: 42 });

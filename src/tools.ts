@@ -891,6 +891,19 @@ export function registerMemoryTools(
               "filters nothing. Only pass it if your system knows the exact " +
               "principal from elsewhere (e.g. the REST API).",
           ),
+        diversity: z
+          .number()
+          .min(CORE_LIMITS.readDiversity.minimum)
+          .max(CORE_LIMITS.readDiversity.maximum)
+          .optional()
+          .describe(
+            "0 (default) returns the matches as ranked. Above 0, a match that " +
+              "is a near-copy of one already picked gives its slot to the next " +
+              "distinct memory (maximal marginal relevance); 1 lets similarity " +
+              "alone decide after the first pick. It changes which memories come " +
+              "back, not their scores, and applies only when there are more " +
+              "matches than top_k and top_k is below 200.",
+          ),
       },
       // Item shape is MEMORY_ITEM_OUTPUT (above), shared with
       // memory_list_recent's outputSchema as of S5; see that constant's
@@ -916,6 +929,7 @@ export function registerMemoryTools(
       since,
       until,
       exclude_author,
+      diversity,
     }) => {
       // ONE value, used for the request AND for every decision about it.
       //
@@ -949,6 +963,7 @@ export function registerMemoryTools(
             since,
             until,
             exclude_author,
+            diversity,
           }),
         ),
       });

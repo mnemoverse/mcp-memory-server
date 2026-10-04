@@ -24,6 +24,7 @@ Parameters:
 - order_by (string, optional): "relevance" (default) or "recency" — matched set newest-first.
 - since / until (ISO-8601 strings, optional): inclusive created_at bounds; naive = UTC.
 - exclude_author (string, optional): drop memories written by this author principal. Results never show a principal, so only pass one known from elsewhere (e.g. the REST API); a guess like "me" silently filters nothing.
+- diversity (number, optional, default 0): 0 to 1. Above 0, a match that is a near-copy of one already picked gives its slot to the next distinct memory (maximal marginal relevance). Changes which memories come back, not their scores; applies only when there are more matches than top_k and top_k is below 200.
 
 Returns: List of memories ranked best-match-first (no numeric score is shown) with content, concepts, domain, author tag, created_at, and id (pass ids to memory_feedback). To correct a wrong or stale memory, write a fresh one with memory_write — deletion is an administrative operation, not available through this server.
 
