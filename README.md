@@ -279,6 +279,10 @@ If it doesn't remember: check that the client was fully restarted and the config
 
 > ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
+### 4. Make it a habit
+
+The test above works because you asked the agent to call the tool. In normal work it will not, unless it has a standing instruction that says when to read memory and when to save. The `setup_memory` prompt writes those rules for Claude Code, Claude, Cursor or Codex, and [Make Your Agent Use Memory](https://mnemoverse.com/docs/api/agent-memory) explains where they go and how to confirm the tools work first.
+
 ## Tools
 
 | Tool | What it does |

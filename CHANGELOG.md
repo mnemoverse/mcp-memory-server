@@ -54,7 +54,7 @@ This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
 git history and the GitHub releases are the record.
 
-## [Unreleased]
+## [0.15.0] — 2026-10-06
 
 ### Added
 
@@ -69,6 +69,10 @@ git history and the GitHub releases are the record.
 
 ### Documentation
 
+- **The README quick start ends with a standing instruction.** A new step
+  "4. Make it a habit" after "3. Try it" says the agent calls memory tools in
+  normal work only when its instructions tell it to, and points to the
+  `setup_memory` prompt and mnemoverse.com/docs/api/agent-memory.
 - **Windsurf is Devin Desktop: the install snippet names the Devin file.**
   Windsurf was renamed Devin Desktop on 2026-06-02, and since version 3.9.19
   (2026-09-08) its only agent is Devin Local, which reads
