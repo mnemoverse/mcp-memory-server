@@ -1,0 +1,33 @@
+name: Forms in sync
+
+# Packaging plan step 2.2: every packaged form (scripts/forms.json) carries one
+# version across its manifests, has released it, points at the hosted endpoint,
+# and ships the canonical copy of the shared skill. Red names each gap.
+
+on:
+  schedule:
+    - cron: "15 7 * * *" # daily, after release-sync-check
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/forms.json"
+      - "scripts/check-forms.mjs"
+      - ".github/workflows/forms-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  forms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+      - name: Check every form
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-forms.mjs

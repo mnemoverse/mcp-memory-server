@@ -1,0 +1,42 @@
+{
+  "$comment": "Every packaged form of Mnemoverse memory that lives in its own public repository, for scripts/check-forms.mjs (packaging plan step 2.2). One entry per repository: the files that must all carry the same version, the file whose version is the release, the MCP endpoint each form must point at, and copies of a shared skill that must equal the canonical source. Add a form here, not in the script.",
+  "endpoint": "https://mcp.mnemoverse.com/mcp",
+  "skill": {
+    "name": "agent-memory-discipline",
+    "canonical": { "repo": "mnemoverse/agent-memory-discipline", "path": "skills/agent-memory-discipline/SKILL.md" }
+  },
+  "forms": [
+    {
+      "repo": "mnemoverse/claude-plugin",
+      "versions": [
+        { "path": "plugin.json", "field": "version" },
+        { "path": ".claude-plugin/plugin.json", "field": "version" },
+        { "path": ".codex-plugin/plugin.json", "field": "version" },
+        { "path": "kimi.plugin.json", "field": "version" },
+        { "path": ".claude-plugin/marketplace.json", "field": "plugins.0.version" }
+      ],
+      "endpoints": [
+        { "path": "mcp.json", "field": "mcpServers.mnemoverse.url" }
+      ],
+      "skillCopies": ["skills/agent-memory-discipline/SKILL.md"]
+    },
+    {
+      "repo": "mnemoverse/cursor-plugin",
+      "versions": [{ "path": ".cursor-plugin/plugin.json", "field": "version" }],
+      "endpoints": [{ "path": "mcp.json", "field": "mcpServers.mnemoverse.url" }],
+      "skillCopies": ["skills/agent-memory-discipline/SKILL.md"]
+    },
+    {
+      "repo": "mnemoverse/gemini-extension",
+      "versions": [{ "path": "gemini-extension.json", "field": "version" }],
+      "endpoints": [{ "path": "gemini-extension.json", "field": "mcpServers.mnemoverse.httpUrl" }],
+      "skillCopies": []
+    },
+    {
+      "repo": "mnemoverse/mnemoverse-vscode",
+      "versions": [{ "path": "package.json", "field": "version" }],
+      "endpoints": [],
+      "skillCopies": []
+    }
+  ]
+}

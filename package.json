@@ -39,6 +39,7 @@
     "verify:configs": "node scripts/generate-configs.mjs --check",
     "verify:tools": "node scripts/generate-tools-manifest.mjs --check",
     "check:release-sync": "node scripts/check-release-sync.mjs",
+    "check:forms": "node scripts/check-forms.mjs",
     "limits:refresh": "node scripts/generate-limits.mjs",
     "limits:check": "node scripts/generate-limits.mjs --check",
     "install-hooks": "node scripts/install-hooks.mjs",
