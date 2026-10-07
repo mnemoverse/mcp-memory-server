@@ -31,7 +31,6 @@ Files that are **generated** (never edit by hand):
 | `docs/snippets/zed.md` | Markdown partial — Zed install |
 | `docs/snippets/jetbrains.md` | Markdown partial — JetBrains install |
 | `docs/snippets/cline.md` | Markdown partial — Cline install |
-| `docs/snippets/continue.md` | Markdown partial — Continue install |
 | `README.md` (only the section between `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->`) | Top-level install section, in-place rewritten by the generator |
 
 This table is checked mechanically by `test/generated-inventory.test.ts`, against
@@ -84,10 +83,10 @@ We deliberately avoid `husky` and `pre-commit` — those would add a dependency 
 
 ## How `npm run generate:configs` works
 
-`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 19 artifacts:
+`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 18 artifacts:
 
 1. **9 machine-readable configs** — 7 in `docs/configs/` (Cursor, Claude Desktop, Windsurf, VS Code JSON + 2 deep-link strings + Claude Code CLI shell script), plus two at the repo root: `server.json` for the Official MCP Registry and `manifest.json` for the Claude Desktop Extension bundle. (Smithery's current publish model requires a framework rewrite or a hosted HTTPS endpoint — see the note in `scripts/generate-configs.mjs` where `genSmitheryYaml` used to live.)
-2. **9 Markdown partials** in `docs/snippets/` (Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline, Continue) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
+2. **8 Markdown partials** in `docs/snippets/` (Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
 3. **1 in-place rewrite** of the install section in `README.md`, between the `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->` HTML comment markers. The rest of the README is human-prose and is left untouched.
 
 Every count on this page is asserted against `OUTPUTS` by

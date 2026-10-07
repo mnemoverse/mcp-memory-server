@@ -192,28 +192,6 @@ function genZedFormat() {
 }
 
 /**
- * Continue format — YAML, an `mcpServers` list. stdio is inferred from the
- * presence of `command` (only sse/http need an explicit transport). The legacy
- * config.json `experimental.modelContextProtocolServers` shape is deprecated.
- */
-function genContinueYaml() {
-  const argsLines = source.args.map((a) => `      - "${a}"`).join("\n");
-  const envLines = Object.entries(ENV_VALUES)
-    .map(([k, v]) => `      ${k}: "${v}"`)
-    .join("\n");
-  return (
-    "mcpServers:\n" +
-    `  - name: ${source.name}\n` +
-    `    command: ${source.command}\n` +
-    "    args:\n" +
-    argsLines +
-    "\n    env:\n" +
-    envLines +
-    "\n"
-  );
-}
-
-/**
  * Cursor deep link.
  *
  * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
@@ -472,15 +450,6 @@ function snippetCline() {
   );
 }
 
-function snippetContinue() {
-  return (
-    "**Continue** — add `~/.continue/mcpServers/mnemoverse.yaml` (Continue uses YAML):\n\n" +
-    "```yaml\n" +
-    genContinueYaml() +
-    "```\n"
-  );
-}
-
 const WHY_LATEST_NOTE =
   "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
 
@@ -510,7 +479,6 @@ function readmeMoreClientsBlock() {
     snippetZed(),
     snippetJetBrains(),
     snippetCline(),
-    snippetContinue(),
     WHY_LATEST_NOTE,
   ].join("\n");
 }
@@ -846,10 +814,6 @@ const OUTPUTS = [
   {
     path: "docs/snippets/cline.md",
     content: PARTIAL_HEADER + snippetCline(),
-  },
-  {
-    path: "docs/snippets/continue.md",
-    content: PARTIAL_HEADER + snippetContinue(),
   },
 ];
 

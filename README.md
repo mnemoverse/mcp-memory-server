@@ -123,7 +123,7 @@ The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so
 <!-- INSTALL_SNIPPETS_END -->
 
 <details>
-<summary><b>All other clients</b> — VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline, Continue</summary>
+<summary><b>All other clients</b> — VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline</summary>
 
 <!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -237,20 +237,6 @@ The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so
     }
   }
 }
-```
-
-**Continue** — add `~/.continue/mcpServers/mnemoverse.yaml` (Continue uses YAML):
-
-```yaml
-mcpServers:
-  - name: mnemoverse
-    command: npx
-    args:
-      - "-y"
-      - "@mnemoverse/mcp-memory-server@latest"
-    env:
-      MNEMOVERSE_API_KEY: "mk_live_YOUR_KEY"
-      MNEMOVERSE_API_URL: "https://core.mnemoverse.com/api/v1"
 ```
 
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.

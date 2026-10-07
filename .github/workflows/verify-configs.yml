@@ -58,5 +58,5 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Verify all 19 distribution artifacts are in sync with source.json
+      - name: Verify all 18 distribution artifacts are in sync with source.json
         run: node scripts/generate-configs.mjs --check
