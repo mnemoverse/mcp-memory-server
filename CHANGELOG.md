@@ -54,6 +54,15 @@ This file starts at 0.8.1. Entries for earlier versions are reconstructed from
 the release commits and are deliberately terse — for anything before 0.8.1 the
 git history and the GitHub releases are the record.
 
+## [Unreleased]
+
+### Documentation
+
+- **Continue is gone from the install instructions.** Continue was acquired by
+  Cursor and closed (continue.dev, read 2026-10-07). The README block, the
+  `docs/snippets/continue.md` partial and its generator are removed; the other
+  clients' snippets are unchanged.
+
 ## [0.15.0] — 2026-10-06
 
 ### Added
