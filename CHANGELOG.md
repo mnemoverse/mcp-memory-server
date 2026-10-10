@@ -56,6 +56,17 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Changed
+
+- **The privacy policy URL is the documentation's policy itself.**
+  `privacy_policies` in the extension manifest, `mcpb.privacyPolicies` in
+  `src/configs/source.json` and the Privacy Policy row of the README now give
+  `https://mnemoverse.com/docs/legal/privacy-policy`. Mnemoverse keeps one
+  privacy policy there, and `mnemoverse.com/privacy` is becoming a 301 to it;
+  a directory reviewer should not have to follow a redirect, for the same
+  reason as in 0.8.3 (#78). The manifest change reaches users with the next
+  `.mcpb` release.
+
 ### Documentation
 
 - **Continue is gone from the install instructions.** Continue was acquired by

@@ -469,7 +469,7 @@ One thing goes out that you did not explicitly request: since 0.8.1, when a sear
 
 | | |
 |---|---|
-| **Privacy Policy** | <https://mnemoverse.com/privacy> |
+| **Privacy Policy** | <https://mnemoverse.com/docs/legal/privacy-policy> |
 | **Retention & deletion** | correct a wrong or stale memory by writing a fresh one; deletion is an administrative operation on the REST API, not exposed through this MCP server |
 | **Contact** | hello@mnemoverse.com |
 
