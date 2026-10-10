@@ -26,7 +26,7 @@
     "oauth"
   ],
   "privacy_policies": [
-    "https://mnemoverse.com/privacy"
+    "https://mnemoverse.com/docs/legal/privacy-policy"
   ],
   "server": {
     "type": "node",
