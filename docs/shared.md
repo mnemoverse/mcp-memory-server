@@ -90,7 +90,9 @@ What this asks of a consumer:
   intercepts only the `tools/list` installation, passes every other
   handler to whatever `setRequestHandler` was before it (the hosted
   connector's `tools/call` wrap in `src/host-surface.ts`, for example), and
-  puts that back once `tools/list` is installed.
+  puts that back once `tools/list` is installed. A shadow you install after
+  calling it, still before your first registration, stays in place too: the
+  wrapper then remains underneath it and passes every handler through.
 - **A server that does not call `registerMemoryTools`** (the hosted
   connector's own fallback copy of the tools, for one) can call
   `serveToolSchemasIn2020_12(server)` itself, before its first

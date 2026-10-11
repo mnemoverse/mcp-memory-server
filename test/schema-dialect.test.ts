@@ -18,7 +18,8 @@
  *     and src/schema-dialect.ts can go.
  *  4. The calling order the wrapper needs, and its composition with a
  *     consumer that shadows `setRequestHandler` the way the hosted connector
- *     does (mnemoverse-mcp-remote, src/host-surface.ts).
+ *     does (mnemoverse-mcp-remote, src/host-surface.ts), whether that shadow
+ *     goes on before the wrapper or after it.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -237,6 +238,43 @@ describe("serveToolSchemasIn2020_12: calling order and composition", () => {
     expect(result.isError).toBe(true);
     expect(result.content).toEqual([{ type: "text", text: "refused by the consumer" }]);
     const { tools } = await client.listTools();
+    expect(schemasOf(tools).filter(([, s]) => "$schema" in s)).toEqual([]);
+    await server.close();
+  });
+
+  it("a consumer shadow put on AFTER the wrapper, before the first registration, also stays in place and still gets tools/call", async () => {
+    const server = new McpServer({ name: "shadowed-after", version: "0.0.0" });
+    serveToolSchemasIn2020_12(server);
+    const lowLevel = server.server as unknown as {
+      setRequestHandler: (schema: unknown, handler: (req: unknown, extra: unknown) => unknown) => void;
+    };
+    const underneath = lowLevel.setRequestHandler.bind(lowLevel);
+    const seen: string[] = [];
+    const shadow = (schema: unknown, handler: (req: unknown, extra: unknown) => unknown): void => {
+      const method = getMethodLiteral(schema as Parameters<typeof getMethodLiteral>[0]);
+      seen.push(method);
+      if (method !== "tools/call") {
+        underneath(schema, handler);
+        return;
+      }
+      underneath(schema, (req, extra) =>
+        (req as { params?: { name?: unknown } }).params?.name === "memory_stats"
+          ? ({ content: [{ type: "text", text: "refused by the consumer" }], isError: true } satisfies CallToolResult)
+          : handler(req, extra),
+      );
+    };
+    lowLevel.setRequestHandler = shadow;
+
+    registerMemoryTools(server, NEVER_CALLED);
+    expect(lowLevel.setRequestHandler).toBe(shadow);
+    expect(seen).toEqual(["tools/list", "tools/call"]);
+
+    const client = await connect(server);
+    const result = (await client.callTool({ name: "memory_stats", arguments: {} })) as CallToolResult;
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: "text", text: "refused by the consumer" }]);
+    const { tools } = await client.listTools();
+    expect(tools).toHaveLength(11);
     expect(schemasOf(tools).filter(([, s]) => "$schema" in s)).toEqual([]);
     await server.close();
   });

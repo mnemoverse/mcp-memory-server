@@ -115,10 +115,14 @@ export function serveToolSchemasIn2020_12(server: McpServer): void {
   // Whatever `setRequestHandler` resolves to right now: the Server method, or
   // a consumer's own shadow on this instance (the hosted connector wraps
   // tools/call this way, src/host-surface.ts). It is put back as it was once
-  // the tools/list handler has gone through.
+  // the tools/list handler has gone through, unless a consumer has put its
+  // own shadow over this one in the meantime: that shadow stays where it is,
+  // and this one, still under it, passes every later handler straight on.
   const hadOwn = Object.prototype.hasOwnProperty.call(lowLevel, "setRequestHandler");
   const previous = lowLevel.setRequestHandler as unknown as SetRequestHandler;
+  const current = (): unknown => (lowLevel as unknown as { setRequestHandler: unknown }).setRequestHandler;
   const restore = (): void => {
+    if (current() !== shadow) return;
     if (hadOwn) {
       (lowLevel as unknown as { setRequestHandler: SetRequestHandler }).setRequestHandler = previous;
     } else {
@@ -126,11 +130,13 @@ export function serveToolSchemasIn2020_12(server: McpServer): void {
     }
   };
 
+  let listInstalled = false;
   const shadow: SetRequestHandler = (schema, handler) => {
-    if (methodOf(schema) !== LIST_METHOD) {
+    if (listInstalled || methodOf(schema) !== LIST_METHOD) {
       previous.call(lowLevel, schema, handler);
       return;
     }
+    listInstalled = true;
     restore();
     previous.call(lowLevel, schema, async (request: unknown, extra: unknown) =>
       in2020_12((await handler(request, extra)) as ListToolsResult, registeredTools(server)),
