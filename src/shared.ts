@@ -43,6 +43,12 @@
  * the end user behind a write (core: `_get_provenance`, honoured only for a
  * SERVICE/supplier caller). Both are optional, and absent, reproduce this
  * package's existing behaviour exactly. Full contract: docs/shared.md.
+ *
+ * `serveToolSchemasIn2020_12` (#189) makes the server's `tools/list` describe
+ * every tool schema in JSON Schema 2020-12 instead of the SDK's draft-07.
+ * `registerMemoryTools` calls it first, so it must run before any other tool
+ * is registered on the server; a server that registers its own copy of the
+ * tools can call it directly. See src/schema-dialect.ts.
  */
 
 export {
@@ -53,6 +59,7 @@ export {
   type MemoryToolDeps,
 } from "./tools.js";
 export { registerMemoryPrompts } from "./prompts.js";
+export { serveToolSchemasIn2020_12 } from "./schema-dialect.js";
 export { registerMemoryResources } from "./resources.js";
 export { SERVER_INSTRUCTIONS } from "./teaching.js";
 export {

@@ -352,6 +352,9 @@ saw and diff it against what the server serves today, by version.
   changes those three description strings and nothing else; tool names,
   input and output schemas and annotations never vary by configuration.
 
+Every `inputSchema` and `outputSchema` is JSON Schema 2020-12, the dialect MCP
+assumes when a schema names none, and names none (#189).
+
 The list above is the current surface: eleven tools, each declaring all four hints.
 The hosted connector at `mcp.mnemoverse.com/mcp` serves the same surface, registered
 from this package at the version it pins. The list itself is published as

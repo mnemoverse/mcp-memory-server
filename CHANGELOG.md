@@ -56,6 +56,31 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Claude Desktop accepts the tools: every tool schema is JSON Schema
+  2020-12 (#189).** Up to 0.15.0, every `inputSchema` and `outputSchema` on
+  `tools/list` said `"$schema": "http://json-schema.org/draft-07/schema#"`,
+  because `@modelcontextprotocol/sdk` 1.x converts zod schemas without a
+  target and its converter then falls back to draft-07
+  (modelcontextprotocol/typescript-sdk#2084, open on 2026-10-11; checked on SDK
+  1.30.0 and 1.32.1). MCP 2025-11-25 makes 2020-12 the default dialect, and
+  Claude Desktop's validator accepts only 2020-12, so it refused every tool of
+  this server with "JSON Schema declares an unsupported dialect (draft-07)".
+  `registerMemoryTools` now wraps the SDK's `tools/list` handler: each tool's
+  schemas are converted again with the SDK's own converter and
+  `target: "draft-2020-12"`, and the `$schema` key is left out, which under the
+  spec means 2020-12. Without the key, a client that validates with a draft-07
+  Ajv instance still compiles the schemas; with the 2020-12 URI, a default
+  `new Ajv()` cannot. The schema bodies are byte-identical to 0.15.0's (same
+  fields, types, required lists and limits), so nothing a caller sends or
+  receives changes; only the dialect declaration goes. The fix covers every
+  tool on the server, so the hosted connector, which registers these tools
+  from this package, gets it when it updates its pin. `/shared` also exports
+  the wrapper as `serveToolSchemasIn2020_12(server)`; it has to run before the
+  first tool is registered, and `registerMemoryTools` throws if a tool was
+  registered before it (docs/shared.md).
+
 ### Changed
 
 - **The privacy policy URL is the documentation's policy itself.**

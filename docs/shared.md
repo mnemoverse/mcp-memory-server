@@ -56,6 +56,46 @@ own process without inheriting that behaviour.
 - `Wording` and `WriteAuthor`: the two dependency types described in this
   file.
 - The types `ApiFetch` and `MemoryToolDeps`.
+- `serveToolSchemasIn2020_12(server)`: makes the server's `tools/list`
+  describe every tool schema in JSON Schema 2020-12. `registerMemoryTools`
+  calls it; see "Tool schemas: JSON Schema 2020-12" below.
+
+## Tool schemas: JSON Schema 2020-12
+
+`@modelcontextprotocol/sdk` 1.x writes every tool schema it lists as
+draft-07 (`"$schema": "http://json-schema.org/draft-07/schema#"`): it
+converts zod schemas without a target, and its converter falls back to
+draft-07 (modelcontextprotocol/typescript-sdk#2084). MCP 2025-11-25 makes
+2020-12 the default dialect, and a client that validates only 2020-12
+refuses such a tool; Claude Desktop does (#189).
+
+`registerMemoryTools` therefore starts by calling
+`serveToolSchemasIn2020_12(server)`, which wraps the SDK's `tools/list`
+handler: every listed tool's `inputSchema` and `outputSchema` is converted
+again with the SDK's own converter and `target: "draft-2020-12"`, and the
+`$schema` key is left out (under the spec, no key means 2020-12; a client
+that validates with a draft-07 Ajv instance still compiles such a schema,
+which it cannot do when the key names 2020-12). This applies to every tool
+on the server, so a consumer's own tools get 2020-12 too. A zod 3 schema,
+which the SDK cannot convert to 2020-12, is left exactly as the SDK built it.
+
+What this asks of a consumer:
+
+- **Call `registerMemoryTools` before registering any tool of your own.**
+  The SDK installs its `tools/list` handler at the first registration and
+  never again, so the wrapper has to be in place before that.
+  `registerMemoryTools` throws when a tool is already registered, rather
+  than serve draft-07 silently.
+- **A `setRequestHandler` shadow of your own keeps working.** The wrapper
+  intercepts only the `tools/list` installation, passes every other
+  handler to whatever `setRequestHandler` was before it (the hosted
+  connector's `tools/call` wrap in `src/host-surface.ts`, for example), and
+  puts that back once `tools/list` is installed.
+- **A server that does not call `registerMemoryTools`** (the hosted
+  connector's own fallback copy of the tools, for one) can call
+  `serveToolSchemasIn2020_12(server)` itself, before its first
+  registration, to serve the same dialect. Calling it again on the same
+  server does nothing.
 
 ## The `apiFetch` contract
 

@@ -57,6 +57,7 @@ import {
   withEscapeLegendAt,
 } from "./names.js";
 import { ApiError, rewordFailure, type Wording } from "./errors.js";
+import { serveToolSchemasIn2020_12 } from "./schema-dialect.js";
 // Field limits, generated from core's contract (src/limits.ts, ADR-025).
 import { CORE_LIMITS } from "./limits.js";
 // For the invite's `expires_at` (S8, structured-output plan): the same
@@ -429,13 +430,18 @@ const MEMORY_ITEM_OUTPUT = {
 };
 
 /**
- * Register the eleven tools on `server`. Call once per server instance.
+ * Register the eleven tools on `server`. Call once per server instance, before
+ * any other tool is registered on it: the first thing this does is make the
+ * server's `tools/list` describe every tool schema in JSON Schema 2020-12
+ * (src/schema-dialect.ts, #189), which has to happen before the SDK installs
+ * that handler at the first registration.
  * `deps.apiFetch` is the only way the tools reach the API.
  */
 export function registerMemoryTools(
   server: McpServer,
   deps: MemoryToolDeps,
 ): void {
+  serveToolSchemasIn2020_12(server);
   const { wording, writeAuthor } = deps;
   // STEP4-2: `wording` reaches the error text here, on every rejection, not
   // in the consumer's constructors. See wordedApiFetch.

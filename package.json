@@ -86,6 +86,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9"
   },
