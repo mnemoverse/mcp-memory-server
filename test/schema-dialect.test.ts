@@ -1,11 +1,14 @@
 /**
  * #189: every tool schema on `tools/list` is JSON Schema 2020-12.
  *
- * Claude Desktop refused every tool of this server with "JSON Schema declares
- * an unsupported dialect (draft-07). The default validator supports JSON
- * Schema 2020-12 only", because the SDK wrote `"$schema": draft-07` on every
- * inputSchema and outputSchema. src/schema-dialect.ts has the cause and the
- * fix; this file pins four things:
+ * A client whose validator accepts only 2020-12 refused every tool of this
+ * server with "JSON Schema declares an unsupported dialect (draft-07). The
+ * default validator supports JSON Schema 2020-12 only" (the message reported
+ * in #189, from `@modelcontextprotocol/client` 2.0.0-alpha.4 to 2.0.0-beta.5),
+ * because the SDK wrote `"$schema": draft-07` on every inputSchema and
+ * outputSchema. src/schema-dialect.ts has the cause and the fix; this file
+ * pins four things (test/schema-dialect-fallback.test.ts covers what happens
+ * when the SDK lacks a part the fix reads):
  *
  *  1. On the package's own server (src/index.ts), no schema declares a
  *     dialect, so each is 2020-12 under MCP 2025-11-25; each is valid against

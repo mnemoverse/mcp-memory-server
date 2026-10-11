@@ -58,28 +58,35 @@ git history and the GitHub releases are the record.
 
 ### Fixed
 
-- **Claude Desktop accepts the tools: every tool schema is JSON Schema
-  2020-12 (#189).** Up to 0.15.0, every `inputSchema` and `outputSchema` on
+- **Tool schemas are JSON Schema 2020-12, so clients that accept only 2020-12
+  accept them (#189).** Up to 0.15.0, every `inputSchema` and `outputSchema` on
   `tools/list` said `"$schema": "http://json-schema.org/draft-07/schema#"`,
   because `@modelcontextprotocol/sdk` 1.x converts zod schemas without a
   target and its converter then falls back to draft-07
   (modelcontextprotocol/typescript-sdk#2084, open on 2026-10-11; checked on SDK
-  1.30.0 and 1.32.1). MCP 2025-11-25 makes 2020-12 the default dialect, and
-  Claude Desktop's validator accepts only 2020-12, so it refused every tool of
-  this server with "JSON Schema declares an unsupported dialect (draft-07)".
-  `registerMemoryTools` now wraps the SDK's `tools/list` handler: each tool's
-  schemas are converted again with the SDK's own converter and
+  1.30.0 and 1.32.1). MCP 2025-11-25 makes 2020-12 the default dialect, and a
+  client whose validator accepts only 2020-12 refused every tool of this
+  server with "JSON Schema declares an unsupported dialect (draft-07)", the
+  error reported in #189. That message comes from the validator of
+  `@modelcontextprotocol/client` 2.0.0-alpha.4 to 2.0.0-beta.5: run on all 22
+  schemas, it rejected each one served by 0.15.0 and accepts each one served
+  now. `registerMemoryTools` now wraps the SDK's `tools/list` handler: each
+  tool's schemas are converted again with the SDK's own converter and
   `target: "draft-2020-12"`, and the `$schema` key is left out, which under the
   spec means 2020-12. Without the key, a client that validates with a draft-07
   Ajv instance still compiles the schemas; with the 2020-12 URI, a default
   `new Ajv()` cannot. The schema bodies are byte-identical to 0.15.0's (same
   fields, types, required lists and limits), so nothing a caller sends or
-  receives changes; only the dialect declaration goes. The fix covers every
-  tool on the server, so the hosted connector, which registers these tools
-  from this package, gets it when it updates its pin. `/shared` also exports
-  the wrapper as `serveToolSchemasIn2020_12(server)`; it has to run before the
-  first tool is registered, and `registerMemoryTools` throws if a tool was
-  registered before it (docs/shared.md).
+  receives changes; only the dialect declaration goes. The wrapper covers
+  every tool on the server. It reads parts of the SDK that are not documented
+  API (two converter modules, loaded with a dynamic `import()`, and
+  `McpServer._registeredTools`): if a later SDK 1.x does not have them, the
+  server still starts, `tools/list` returns the SDK's own draft-07 schemas as
+  0.15.0 did, and one line on stderr says why. `/shared` also exports the wrapper as
+  `serveToolSchemasIn2020_12(server)`, for a server that registers tools
+  without `registerMemoryTools`; it has to run before the first tool is
+  registered, and `registerMemoryTools` throws if a tool was registered before
+  it (docs/shared.md).
 
 ### Changed
 

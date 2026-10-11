@@ -67,7 +67,10 @@ draft-07 (`"$schema": "http://json-schema.org/draft-07/schema#"`): it
 converts zod schemas without a target, and its converter falls back to
 draft-07 (modelcontextprotocol/typescript-sdk#2084). MCP 2025-11-25 makes
 2020-12 the default dialect, and a client that validates only 2020-12
-refuses such a tool; Claude Desktop does (#189).
+refuses such a tool. #189 reports that refusal: "JSON Schema declares an
+unsupported dialect (draft-07). The default validator supports JSON Schema
+2020-12 only", the message of the validator in `@modelcontextprotocol/client`
+2.0.0-alpha.4 to 2.0.0-beta.5.
 
 `registerMemoryTools` therefore starts by calling
 `serveToolSchemasIn2020_12(server)`, which wraps the SDK's `tools/list`
@@ -98,6 +101,16 @@ What this asks of a consumer:
   `serveToolSchemasIn2020_12(server)` itself, before its first
   registration, to serve the same dialect. Calling it again on the same
   server does nothing.
+- **An SDK without the parts the wrapper reads still runs the server.**
+  The wrapper uses two SDK modules that are not documented API
+  (`server/zod-json-schema-compat.js` and `server/zod-compat.js`, loaded
+  with a dynamic `import()`) and the `McpServer._registeredTools` map. When
+  a later SDK 1.x does not have one of them, or installs `tools/list`
+  before any tool is registered, the wrapper leaves the SDK's own
+  `tools/list` answer as it is (draft-07 schemas, as in 0.15.0) and writes
+  one line to stderr, once per process, that starts with
+  `Mnemoverse: tool schemas are listed as the MCP SDK builds them`. Nothing
+  is written to stdout. The tools themselves work either way.
 
 ## The `apiFetch` contract
 
