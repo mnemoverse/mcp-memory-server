@@ -58,6 +58,17 @@ git history and the GitHub releases are the record.
 
 ## [0.15.1] — 2026-10-12
 
+### Security
+
+- **`@modelcontextprotocol/sdk` floor raised to `^1.32.1`, and patched
+  transitive dependencies.** The SDK range was `^1.30.0`, which still admitted
+  1.30.0 and 1.30.1, inside the range of a high-severity advisory for
+  1.12.0 to 1.30.1; installs now resolve 1.32.1 or later. The lockfile also
+  moves `proxy-addr` to 2.0.8 (critical advisory on 1.1.0 to 2.0.7),
+  `ip-address` to 10.7.4 and `source-map-js` (development only); `npm audit`
+  reports no vulnerabilities. The schema wrapper of #189 was tested on SDK
+  1.30.0 and 1.32.1.
+
 ### Fixed
 
 - **Tool schemas are JSON Schema 2020-12, so clients that accept only 2020-12
