@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.15.1] — 2026-10-12
+
 ### Fixed
 
 - **Tool schemas are JSON Schema 2020-12, so clients that accept only 2020-12
