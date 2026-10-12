@@ -5,7 +5,7 @@
  * converter modules `server/zod-json-schema-compat.js` and
  * `server/zod-compat.js`, and `McpServer._registeredTools`. It also relies on
  * the SDK installing `tools/list` at the first registration. `npx` installs
- * the newest SDK 1.x the `^1.30.0` range allows, so a later 1.x may lack any
+ * the newest SDK 1.x the `^1.32.1` range allows, so a later 1.x may lack any
  * of these. The server must still start and list its tools: this file takes
  * each part away in turn and checks that
  *

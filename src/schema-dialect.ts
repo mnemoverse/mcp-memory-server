@@ -60,7 +60,7 @@
  * modules `server/zod-json-schema-compat.js` and `server/zod-compat.js`, which
  * the SDK's `./*` export makes importable. None of them is needed for the
  * server to start or for its tools to work, so none of them is imported
- * statically: `npx` resolves `^1.30.0` to the newest 1.x, and a static import
+ * statically: `npx` resolves `^1.32.1` to the newest 1.x, and a static import
  * of a module that release had moved would stop the process before it
  * answered `initialize`. The converter modules are loaded with a dynamic
  * `import()` inside a `try`, and the map is looked up when this function
