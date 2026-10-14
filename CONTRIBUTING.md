@@ -18,7 +18,7 @@ Files that are **generated** (never edit by hand):
 | `docs/configs/claude-desktop.json` | Claude Desktop `claude_desktop_config.json` snippet |
 | `docs/configs/windsurf.json` | Devin Desktop (ex-Windsurf) `mcp_config.json` snippet |
 | `docs/configs/vscode.json` | VS Code `.vscode/mcp.json` snippet (uses `servers`, not `mcpServers`) |
-| `docs/configs/cursor-deep-link.txt` | Base64-encoded `cursor://...` install URL |
+| `docs/configs/cursor-deep-link.txt` | `cursor://...` install URL for the hosted server: base64 of `{"url": ...}` from `remotes`, browser sign-in, no key |
 | `docs/configs/vscode-deep-link.txt` | URL-encoded `vscode:mcp/install?...` URL |
 | `docs/configs/claude-code-cli.sh` | `claude mcp add ...` shell command |
 | `server.json` | Official MCP Registry manifest |

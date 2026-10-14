@@ -192,34 +192,92 @@ function genZedFormat() {
 }
 
 /**
- * Cursor deep link.
- *
- * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
- * The base64 payload is the inner server object (NOT wrapped in mcpServers).
+ * The hosted server's URL: the streamable-http entry of source.remotes, the
+ * same endpoint server.json publishes to the registry. OAuth-protected, so a
+ * config that points at it carries no key and no headers; the client runs
+ * the sign-in itself.
  */
-function genCursorDeepLink() {
-  const inner = {
-    command: source.command,
-    args: source.args,
-    env: ENV_VALUES,
-  };
-  const config = Buffer.from(JSON.stringify(inner)).toString("base64");
-  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(
-    source.name,
-  )}&config=${config}`;
+function hostedMcpUrl() {
+  const remote = (source.remotes ?? []).find((r) => r.type === "streamable-http");
+  if (!remote?.url) {
+    throw new Error(
+      "source.json has no streamable-http entry in `remotes`: the Cursor install links add the hosted server and need its URL",
+    );
+  }
+  return remote.url;
 }
 
 /**
- * "Add to Cursor" one-click install button (official badge).
+ * The `config` value of every Cursor install link: base64 of
+ * {"url": <hosted server>} and nothing else, the payload mnemoverse-portal's
+ * console button carries (src/lib/editor-install.ts, CURSOR_INSTALL_URL,
+ * portal#290). Cursor writes it as {"mnemoverse": {"url": ...}} into
+ * ~/.cursor/mcp.json, and the user signs in from Cursor's MCP settings
+ * (Connect), so no key is ever written and none can be a placeholder.
  *
- * Badge: https://cursor.com/deeplink/mcp-install-dark.svg (verified 200, image/svg+xml).
- * Link:  https://cursor.com/en/install-mcp?name=NAME&config=BASE64 — the web form.
- * The bare /install-mcp path 404s; /en/install-mcp 307-redirects into the
- * cursor:// deep link, so the button is clickable straight from a rendered
- * README/browser. The base64 payload is the SAME inner server object as
- * genCursorDeepLink() (command + args + env, NOT wrapped in mcpServers).
+ * It used to be the local stdio server with
+ * MNEMOVERSE_API_KEY=mk_live_YOUR_KEY: one click installed a server that
+ * listed its tools and refused every call until the reader replaced the key
+ * by hand (core#623, item 2).
+ *
+ * Written into the query string literally, as the portal does. That is only
+ * safe while the base64 holds no `+` (a query-string reader turns it into a
+ * space) and no `/`, so a URL change that produces either fails here rather
+ * than shipping a button that silently installs nothing.
+ */
+function cursorHostedConfig() {
+  const config = Buffer.from(JSON.stringify({ url: hostedMcpUrl() })).toString("base64");
+  if (/[+/]/.test(config)) {
+    throw new Error(
+      `base64 of the hosted Cursor config contains '+' or '/' (${config}); percent-encode it in the Cursor install links before shipping them`,
+    );
+  }
+  return config;
+}
+
+/**
+ * Cursor deep link, for the hosted server.
+ *
+ * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
+ * The base64 payload is the inner server object (NOT wrapped in mcpServers):
+ * here {"url": ...}, see cursorHostedConfig() above.
+ */
+function genCursorDeepLink() {
+  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(
+    source.name,
+  )}&config=${cursorHostedConfig()}`;
+}
+
+/**
+ * "Add to Cursor" one-click install button (official badge), for the hosted
+ * server with a browser sign-in. Built exactly like mnemoverse-portal's
+ * CURSOR_INSTALL_URL: same path, same name, same literal base64.
+ *
+ * Badge: https://cursor.com/deeplink/mcp-install-dark.svg (200, image/svg+xml).
+ * Link:  https://cursor.com/install-mcp?name=NAME&config=BASE64, Cursor's web
+ * page that hands off to its own MCP install. Checked 2026-10-14: this path
+ * answers 200, and /en/install-mcp answers 308 to it (the opposite of
+ * 2026-09, when the comment here said the bare path 404s).
  */
 function genCursorInstallButton() {
+  return `[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=${encodeURIComponent(
+    source.name,
+  )}&config=${cursorHostedConfig()})`;
+}
+
+/**
+ * The OLD "Add to Cursor" button: the local stdio server with the
+ * source.json placeholder key. It survives for ONE consumer only,
+ * docs/snippets/cursor.md, which mnemoverse-docs mirrors at build time into
+ * the API-key section of mnemoverse.com/docs/api/cursor. That page's own
+ * prose describes this button as the one that installs the local server
+ * with the placeholder, and its docs:build fails a clean-tree gate the
+ * moment the mirrored partial changes upstream. So the partial changes
+ * together with a docs PR, not before it; the README no longer uses this.
+ * When that docs PR lands, delete this function and point
+ * snippetCursorDocsPartial() at genCursorInstallButton() or at no button.
+ */
+function genCursorLocalInstallButton() {
   const inner = {
     command: source.command,
     args: source.args,
@@ -388,30 +446,51 @@ function snippetVscode() {
   );
 }
 
-function snippetCursor({ utm = false } = {}) {
-  // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
-  // manual JSON fallback. The button and the JSON encode the same config.
-  // The button carries the source.json placeholder key, so the paragraph
-  // below it must keep saying so — don't drop it if this function changes.
-  // The placeholder text is read from source.json (sampleValue), not
-  // hardcoded: if the MNEMOVERSE_API_KEY sample value ever changes, this
-  // sentence must not silently drift out of sync with it.
-  //
-  // `utm`: this function backs both the README block (npm's install page,
-  // where the CHANGELOG's "two console links carry UTM tags" policy applies
-  // because npm strips referrers) and docs/snippets/cursor.md, a partial
-  // mirrored as-is into mnemoverse-docs — a surface that already links
-  // console.mnemoverse.com cleanly elsewhere. Keep the tag npm-only: pass
-  // `utm: true` only from the README assembly below.
+/**
+ * The README's Cursor entry: the one-click button adds the HOSTED server with
+ * a browser sign-in (no key), and the JSON below it is the other path, the
+ * local server with an API key. The two are different servers under the same
+ * name, so the prose says which is which and to pick one.
+ *
+ * The console link carries UTM tags: this block renders on npm's package
+ * page, where the CHANGELOG's "two console links carry UTM tags" policy
+ * applies because npm strips referrers. /sign-up, not the root: the root
+ * redirects to /sign-in and drops the tags.
+ *
+ * The placeholder named in the prose is read from source.json (sampleValue),
+ * not hardcoded, so it cannot drift from the JSON it describes.
+ */
+function snippetCursorReadme() {
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
-  const consoleUrl = utm
-    ? // /sign-up, not the root: the root redirects to /sign-in and drops the UTM tags.
-      "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
-    : "https://console.mnemoverse.com";
+  const consoleUrl =
+    "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server";
+  return (
+    "**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:\n\n" +
+    genCursorInstallButton() +
+    "\n\n" +
+    `The button writes \`{"url": "${hostedMcpUrl()}"}\` under \`${source.name}\` in \`~/.cursor/mcp.json\`, the global config that covers every project. Then click **Connect** next to \`${source.name}\` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.\n\n` +
+    `To run the local server with an API key instead, add the JSON below to \`~/.cursor/mcp.json\`, merging it with any servers already there, and put your own key in place of \`${placeholderKey}\`. Get one at [console.mnemoverse.com](${consoleUrl}). Do not put it in a project-level \`.cursor/mcp.json\`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name \`${source.name}\`.\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+/**
+ * docs/snippets/cursor.md, mirrored as-is into mnemoverse-docs. Unchanged,
+ * byte for byte, by the switch of the README button to the hosted server:
+ * see genCursorLocalInstallButton() for why this partial waits for a docs PR.
+ * No UTM tags here: the docs site links console.mnemoverse.com cleanly
+ * elsewhere.
+ */
+function snippetCursorDocsPartial() {
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
+  const consoleUrl = "https://console.mnemoverse.com";
   return (
     "**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n" +
-    genCursorInstallButton() +
+    genCursorLocalInstallButton() +
     "\n\n" +
     `The install button carries the placeholder key \`${placeholderKey}\`, not yours, so the shortest path is to skip the button: add the JSON below to \`~/.cursor/mcp.json\`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](${consoleUrl}). If you did click the button, edit the same key in the \`mcp.json\` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.\n\n` +
     "```json\n" +
@@ -457,14 +536,13 @@ const WHY_LATEST_NOTE =
  * The FEATURED clients: the two this README leads with, above any fold.
  *
  * They are generated rather than hand-written for one reason. The Cursor entry
- * carries the install button AND the paragraph explaining that the button
- * writes the placeholder key `mk_live_YOUR_KEY` rather than yours. A README
- * that hand-copies the JSON above the fold and leaves the generated entry
- * below it puts the warning further from the button it warns about, and the
- * copy drifts from source.json the first time either changes.
+ * carries the install button, built from source.json's hosted endpoint, AND
+ * the paragraph that tells it apart from the API-key JSON below it. A README
+ * that hand-copies either one drifts from source.json the first time it
+ * changes, and a hand-typed base64 blob is unreadable in review.
  */
 function readmeFeaturedBlock() {
-  return [snippetClaudeCodeCli(), snippetCursor({ utm: true })].join("\n");
+  return [snippetClaudeCodeCli(), snippetCursorReadme()].join("\n");
 }
 
 /**
@@ -782,7 +860,7 @@ const OUTPUTS = [
   },
   {
     path: "docs/snippets/cursor.md",
-    content: PARTIAL_HEADER + snippetCursor(),
+    content: PARTIAL_HEADER + snippetCursorDocsPartial(),
   },
   {
     path: "docs/snippets/claude-desktop.md",

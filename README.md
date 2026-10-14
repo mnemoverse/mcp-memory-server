@@ -76,7 +76,7 @@ In the JSON, `reason` sits inside the `details` object (`details.reason`), next 
 
 ### 2. Connect to your AI tool
 
-The two canonical setups, Claude Code and Cursor. Each writes the key **once, at user scope, covering every project**. Avoid a per-project config file for this: it lives inside the repository and can be committed with it, and a key belongs outside:
+The two canonical setups, Claude Code and Cursor. Cursor's button adds the hosted server with a browser sign-in and no key; every setup that takes a key writes it **once, at user scope, covering every project**. Avoid a per-project config file for a key: it lives inside the repository and can be committed with it, and a key belongs outside:
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -95,11 +95,13 @@ On Windows (PowerShell), paste the same command as one line — PowerShell does 
 claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
-**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.
+**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)
 
-The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
+The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
+
+To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
 
 ```json
 {
@@ -261,7 +263,7 @@ Then open a **new chat / new session** (this is the whole point — memory survi
 
 Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
 
-If it doesn't remember: check that the client was fully restarted and the config has your real `mk_live_...` key, not the placeholder.
+If it doesn't remember: check that the client was fully restarted and the config has your real `mk_live_...` key, not the placeholder. On the hosted server there is no key to check; check that the browser sign-in finished (in Cursor, **Connect** next to `mnemoverse`).
 
 > ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 

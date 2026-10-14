@@ -56,6 +56,26 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README's "Add to Cursor" button adds the hosted server with a browser
+  sign-in, not a placeholder key.** Its base64 payload decoded to the local
+  server with `MNEMOVERSE_API_KEY=mk_live_YOUR_KEY`: Cursor showed a green
+  connection and the full tool list, then refused the first call, and the
+  README carried a paragraph telling readers to skip its own button
+  (core#623). The button is now the console's, character for character
+  (mnemoverse-portal#290): `config` is base64 of
+  `{"url":"https://mcp.mnemoverse.com/mcp"}`, Cursor writes that to
+  `~/.cursor/mcp.json`, and **Connect** in Cursor's MCP settings runs the
+  sign-in. The warning paragraph is gone; the API-key JSON stays below the
+  button as the local-server path, and the prose says which is which. The
+  generated `docs/configs/cursor-deep-link.txt` carries the same hosted
+  payload. `docs/snippets/cursor.md`, which mnemoverse.com/docs mirrors into
+  the API-key section of its Cursor page, is unchanged and moves with a docs
+  PR. `test/install-links.test.ts` decodes every install link in the README
+  and fails on one that installs anything but the hosted server or carries
+  a key.
+
 ## [0.15.1] — 2026-10-12
 
 ### Security
