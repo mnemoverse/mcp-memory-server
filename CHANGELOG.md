@@ -56,6 +56,10 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Changed
+
+- Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. Clarify that superseding a memory is not physical deletion, identify the personal-memory REST/support deletion path, and explain shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
+
 ### Documentation
 
 - **The README's "Add to Cursor" button adds the hosted server with a browser
