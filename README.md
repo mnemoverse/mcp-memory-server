@@ -37,7 +37,7 @@ claude mcp add -s user --transport http mnemoverse https://mcp.mnemoverse.com/mc
 ```
 Then run `/mcp` in a session, select `mnemoverse` and choose **Authenticate**.
 
-Cursor, in `.cursor/mcp.json`:
+Cursor, in `~/.cursor/mcp.json`, or the **Add to Cursor** button under step 2, which writes this entry for you:
 ```json
 { "mcpServers": { "mnemoverse": { "url": "https://mcp.mnemoverse.com/mcp" } } }
 ```
@@ -76,7 +76,7 @@ In the JSON, `reason` sits inside the `details` object (`details.reason`), next 
 
 ### 2. Connect to your AI tool
 
-The two canonical setups, Claude Code and Cursor. Each writes the key **once, at user scope, covering every project**. Avoid a per-project config file for this: it lives inside the repository and can be committed with it, and a key belongs outside:
+The two canonical setups, Claude Code and Cursor. The Cursor button adds the hosted server and signs in through the browser, with no key. The command and the JSON write the key **once, at user scope, covering every project**. Avoid a per-project config file for this: it lives inside the repository and can be committed with it, and a key belongs outside:
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
@@ -95,11 +95,13 @@ On Windows (PowerShell), paste the same command as one line — PowerShell does 
 claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
-**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.
+**Cursor** — click to install the hosted server and sign in through the browser; the link carries no key:
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mnemoverse&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtbmVtb3ZlcnNlL21jcC1tZW1vcnktc2VydmVyQGxhdGVzdCJdLCJlbnYiOnsiTU5FTU9WRVJTRV9BUElfS0VZIjoibWtfbGl2ZV9ZT1VSX0tFWSIsIk1ORU1PVkVSU0VfQVBJX1VSTCI6Imh0dHBzOi8vY29yZS5tbmVtb3ZlcnNlLmNvbS9hcGkvdjEifX0%3D)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)
 
-The install button carries the placeholder key `mk_live_YOUR_KEY`, not yours, so the shortest path is to skip the button: add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). If you did click the button, edit the same key in the `mcp.json` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.
+Cursor asks you to confirm, then writes `{ "mcpServers": { "mnemoverse": { "url": "https://mcp.mnemoverse.com/mcp" } } }` to `~/.cursor/mcp.json`, which covers every Cursor window, including the Agents Window; no Node.js is needed. Open **Cursor Settings → Tools & MCPs**, click **Connect** next to `mnemoverse` and approve in the browser; Cursor runs the sign-in and keeps the token itself.
+
+To run the local server through `npx` with an API key instead, add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project, merging it with any servers already there, and put your key in place of `mk_live_YOUR_KEY`; get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Pick one path, not both, so the tools are not listed twice.
 
 ```json
 {

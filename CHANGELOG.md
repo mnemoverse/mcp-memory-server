@@ -56,6 +56,24 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The "Add to Cursor" button installs the hosted server with a browser
+  sign-in, not a placeholder key.** The README button and
+  `docs/configs/cursor-deep-link.txt` carried base64 of the local stdio
+  server with the sample `MNEMOVERSE_API_KEY=mk_live_YOUR_KEY`, so one click
+  installed a server whose every tool call was refused; 0.10.1 added a
+  paragraph under the button saying so, this removes the cause. Both links
+  now carry `{"url":"https://mcp.mnemoverse.com/mcp"}` and no key, the link
+  the console's button has carried since mnemoverse-portal#290, and the
+  paragraph is gone: the README says what the button writes and where to
+  click **Connect**, and keeps the API-key JSON below it as the local-server
+  path. `docs/snippets/cursor.md`, the partial mirrored into mnemoverse-docs,
+  keeps the API-key JSON only, since the docs Cursor page carries the hosted
+  button in its own keyless section. `test/install-links.test.ts` decodes
+  every install link and fails on a key inside one. The VS Code deep link
+  already prompted for the key (0.10.1) and is unchanged.
+
 ## [0.15.1] — 2026-10-12
 
 ### Security

@@ -192,43 +192,72 @@ function genZedFormat() {
 }
 
 /**
+ * The hosted (remote) MCP server, read from source.remotes. Both Cursor
+ * install links below carry this URL and nothing else.
+ */
+function hostedRemoteUrl() {
+  const remote = (source.remotes ?? []).find(
+    (r) => r.type === "streamable-http" && typeof r.url === "string",
+  );
+  if (!remote) {
+    throw new Error(
+      "source.json has no streamable-http remote; the Cursor install links carry its url",
+    );
+  }
+  return remote.url;
+}
+
+/**
+ * The config both Cursor install links carry: base64 of {"url": <hosted
+ * server>}, the server object Cursor writes under the name in
+ * ~/.cursor/mcp.json. It holds no key and no headers: Cursor runs the OAuth
+ * sign-in itself (Cursor Settings → Tools & MCPs → Connect).
+ *
+ * Until 2026-10-14 the payload was the local stdio server with the
+ * source.json sample `MNEMOVERSE_API_KEY=mk_live_YOUR_KEY`, so one click
+ * installed a server whose every tool call was refused (R-656,
+ * mnemoverse-core#623). The console's button switched to this payload in
+ * mnemoverse-portal#290 (src/lib/editor-install.ts); the links here are
+ * built the same way and test/install-links.test.ts pins them to it.
+ *
+ * The base64 goes into the link literally, `==` and all, as the console's
+ * `CURSOR_INSTALL_URL` does. Only `+` and `/` would break query-string
+ * parsing (`+` reads as a space), so those two are percent-encoded should
+ * the URL ever produce them; today's payload has neither.
+ */
+function cursorHostedConfig() {
+  const base64 = Buffer.from(JSON.stringify({ url: hostedRemoteUrl() })).toString("base64");
+  return base64.replace(/\+/g, "%2B").replace(/\//g, "%2F");
+}
+
+/**
  * Cursor deep link.
  *
  * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=NAME&config=BASE64
- * The base64 payload is the inner server object (NOT wrapped in mcpServers).
+ * The base64 payload is the inner server object (NOT wrapped in mcpServers):
+ * the hosted server, see cursorHostedConfig().
  */
 function genCursorDeepLink() {
-  const inner = {
-    command: source.command,
-    args: source.args,
-    env: ENV_VALUES,
-  };
-  const config = Buffer.from(JSON.stringify(inner)).toString("base64");
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(
     source.name,
-  )}&config=${config}`;
+  )}&config=${cursorHostedConfig()}`;
 }
 
 /**
  * "Add to Cursor" one-click install button (official badge).
  *
- * Badge: https://cursor.com/deeplink/mcp-install-dark.svg (verified 200, image/svg+xml).
- * Link:  https://cursor.com/en/install-mcp?name=NAME&config=BASE64 — the web form.
- * The bare /install-mcp path 404s; /en/install-mcp 307-redirects into the
- * cursor:// deep link, so the button is clickable straight from a rendered
- * README/browser. The base64 payload is the SAME inner server object as
- * genCursorDeepLink() (command + args + env, NOT wrapped in mcpServers).
+ * Badge: https://cursor.com/deeplink/mcp-install-dark.svg (200, image/svg+xml, checked 2026-10-14).
+ * Link:  https://cursor.com/install-mcp?name=NAME&config=BASE64, the link the
+ * console's button carries (mnemoverse-portal src/lib/editor-install.ts). The
+ * page answers 200 and hands off to Cursor's own MCP install, so the button
+ * works from a rendered README in any browser; the /en/install-mcp path this
+ * used to link answers 308 to it now (checked 2026-10-14). The payload is
+ * the SAME as genCursorDeepLink(): the hosted server, no key.
  */
 function genCursorInstallButton() {
-  const inner = {
-    command: source.command,
-    args: source.args,
-    env: ENV_VALUES,
-  };
-  const config = Buffer.from(JSON.stringify(inner)).toString("base64");
-  return `[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=${encodeURIComponent(
+  return `[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=${encodeURIComponent(
     source.name,
-  )}&config=${encodeURIComponent(config)})`;
+  )}&config=${cursorHostedConfig()})`;
 }
 
 /**
@@ -388,35 +417,50 @@ function snippetVscode() {
   );
 }
 
-function snippetCursor({ utm = false } = {}) {
-  // Cursor gets a one-click "Add to Cursor" button (official badge) plus the
-  // manual JSON fallback. The button and the JSON encode the same config.
-  // The button carries the source.json placeholder key, so the paragraph
-  // below it must keep saying so — don't drop it if this function changes.
-  // The placeholder text is read from source.json (sampleValue), not
-  // hardcoded: if the MNEMOVERSE_API_KEY sample value ever changes, this
+function snippetCursor({ utm = false, button = false } = {}) {
+  // Cursor has two paths. The one-click "Add to Cursor" button (official
+  // badge) adds the HOSTED server and Cursor signs in through the browser;
+  // the link carries no key (cursorHostedConfig()). The JSON is the local
+  // npx server with an API key, in the global ~/.cursor/mcp.json. The
+  // placeholder the JSON names is read from source.json (sampleValue), not
+  // hardcoded: if the MNEMOVERSE_API_KEY sample value ever changes, the
   // sentence must not silently drift out of sync with it.
+  //
+  // `button`: the README gets the button. docs/snippets/cursor.md, the
+  // partial mirrored as-is into mnemoverse-docs, does not: the docs Cursor
+  // page carries the same hosted button in its own keyless section and
+  // includes this partial under "Add to Cursor with an API key", so a button
+  // here would show that page the same link twice.
   //
   // `utm`: this function backs both the README block (npm's install page,
   // where the CHANGELOG's "two console links carry UTM tags" policy applies
-  // because npm strips referrers) and docs/snippets/cursor.md, a partial
-  // mirrored as-is into mnemoverse-docs — a surface that already links
-  // console.mnemoverse.com cleanly elsewhere. Keep the tag npm-only: pass
-  // `utm: true` only from the README assembly below.
+  // because npm strips referrers) and docs/snippets/cursor.md, a surface
+  // that already links console.mnemoverse.com cleanly elsewhere. Keep the
+  // tag npm-only: pass `utm: true` only from the README assembly below.
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
   const consoleUrl = utm
     ? // /sign-up, not the root: the root redirects to /sign-in and drops the UTM tags.
       "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server"
     : "https://console.mnemoverse.com";
+  const jsonPath =
+    `add the JSON below to \`~/.cursor/mcp.json\`, the global config that covers every project, merging it with any servers already there, and put your key in place of \`${placeholderKey}\`; get one at [console.mnemoverse.com](${consoleUrl}). Do not put it in a project-level \`.cursor/mcp.json\`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.`;
+  const onePath = "Pick one path, not both, so the tools are not listed twice.";
+  const fence = "```json\n" + json + "\n```\n";
+  if (!button) {
+    return (
+      `**Cursor** — for the local server through \`npx\` with an API key, ${jsonPath} The keyless path is the **Add to Cursor** button, which adds the hosted server with a browser sign-in. ${onePath}\n\n` +
+      fence
+    );
+  }
+  const hostedEntry = `{ "mcpServers": { "${source.name}": { "url": "${hostedRemoteUrl()}" } } }`;
   return (
-    "**Cursor** — click to install, or add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n" +
+    "**Cursor** — click to install the hosted server and sign in through the browser; the link carries no key:\n\n" +
     genCursorInstallButton() +
     "\n\n" +
-    `The install button carries the placeholder key \`${placeholderKey}\`, not yours, so the shortest path is to skip the button: add the JSON below to \`~/.cursor/mcp.json\`, merging it with any servers already there, and put your own key in place. Get one at [console.mnemoverse.com](${consoleUrl}). If you did click the button, edit the same key in the \`mcp.json\` it wrote; Cursor keeps MCP environment values in that file, not in a settings form. Until the key is real the server starts and lists its tools, but every tool call is refused.\n\n` +
-    "```json\n" +
-    json +
-    "\n```\n"
+    `Cursor asks you to confirm, then writes \`${hostedEntry}\` to \`~/.cursor/mcp.json\`, which covers every Cursor window, including the Agents Window; no Node.js is needed. Open **Cursor Settings → Tools & MCPs**, click **Connect** next to \`${source.name}\` and approve in the browser; Cursor runs the sign-in and keeps the token itself.\n\n` +
+    `To run the local server through \`npx\` with an API key instead, ${jsonPath} ${onePath}\n\n` +
+    fence
   );
 }
 
@@ -457,14 +501,13 @@ const WHY_LATEST_NOTE =
  * The FEATURED clients: the two this README leads with, above any fold.
  *
  * They are generated rather than hand-written for one reason. The Cursor entry
- * carries the install button AND the paragraph explaining that the button
- * writes the placeholder key `mk_live_YOUR_KEY` rather than yours. A README
- * that hand-copies the JSON above the fold and leaves the generated entry
- * below it puts the warning further from the button it warns about, and the
- * copy drifts from source.json the first time either changes.
+ * carries the install button, whose payload comes from source.remotes, AND
+ * the API-key JSON, whose values come from source.env, with the prose that
+ * tells the two paths apart. A README that hand-copies any of it above the
+ * fold drifts from source.json the first time either changes.
  */
 function readmeFeaturedBlock() {
-  return [snippetClaudeCodeCli(), snippetCursor({ utm: true })].join("\n");
+  return [snippetClaudeCodeCli(), snippetCursor({ utm: true, button: true })].join("\n");
 }
 
 /**
