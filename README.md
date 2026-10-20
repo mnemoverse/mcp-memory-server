@@ -33,7 +33,7 @@ Most agent memory today lives in one of three places. Per-tool instruction files
 
 ### No key: the hosted endpoint
 
-If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
+If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
 
 Claude Code:
 ```bash
@@ -50,7 +50,7 @@ Claude Desktop, Devin Desktop (formerly Windsurf), VS Code and ChatGPT: [Remote 
 
 ### 1. Get a free API key
 
-Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
+Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
 **Check the key before you put it in a config.** Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in your shell history nor in the process list.
 
@@ -113,7 +113,7 @@ claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEM
 
 The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
 
-To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
+To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
 
 ```json
 {
@@ -428,7 +428,7 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 - [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
-- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server)
+- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server)
 
 **Background reading**
 

@@ -5,6 +5,7 @@
   "title": "Mnemoverse Memory",
   "description": "Hosted agent memory that learns from outcomes, with shared rooms. No key: mcp.mnemoverse.com/mcp",
   "websiteUrl": "https://mnemoverse.com",
+  "signupUrl": "https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server",
   "type": "stdio",
   "command": "npx",
   "args": [

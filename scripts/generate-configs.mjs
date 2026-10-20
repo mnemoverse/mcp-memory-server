@@ -491,10 +491,9 @@ function snippetVscode() {
  * local server with an API key. The two are different servers under the same
  * name, so the prose says which is which and to pick one.
  *
- * The console link carries UTM tags: this block renders on npm's package
- * page, where the CHANGELOG's "two console links carry UTM tags" policy
- * applies because npm strips referrers. /sign-up, not the root: the root
- * redirects to /sign-in and drops the tags.
+ * The console link comes from source.json's signupUrl so README signup CTAs
+ * share the same attribution tags. /sign-up, not the root: the root redirects
+ * to /sign-in and drops the tags.
  *
  * The placeholder named in the prose is read from source.json (sampleValue),
  * not hardcoded, so it cannot drift from the JSON it describes.
@@ -502,8 +501,7 @@ function snippetVscode() {
 function snippetCursorReadme() {
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
-  const consoleUrl =
-    "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server";
+  const consoleUrl = source.signupUrl;
   return (
     "**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:\n\n" +
     genCursorInstallButton() +
