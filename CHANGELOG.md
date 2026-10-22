@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.15.4] — 2026-10-22
+
 ### Changed
 
 - Describe `memory_feedback` as a rating operation without directing clients to call it automatically after an answer. Retain ranking effects, unchanged saved text, personal and room scoping, and the read-only membership restriction. No handler, schema, annotation, or permission changes.
