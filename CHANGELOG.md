@@ -56,6 +56,10 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Changed
+
+- Describe `memory_feedback` as a rating operation without directing clients to call it automatically after an answer. Retain ranking effects, unchanged saved text, personal and room scoping, and the read-only membership restriction. No handler, schema, annotation, or permission changes.
+
 ### Documentation
 
 - **The local Claude Code command spells the scope flag `--scope user`**, as

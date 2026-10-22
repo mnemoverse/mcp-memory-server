@@ -449,16 +449,16 @@ describe("no proactivity push on any advertised surface", () => {
  * from 17/30 to 6/30; naming the moment and the ids brought them to 22/30
  * (pre-registered measurement, mnemoverse-workspace
  * channels/2026-09-29-claude-chatgpt/eval-neutral-wording-plan.md). These
- * sentences say when the tool applies, which the directory asks for; losing
- * them loses the rating signal, so they are pinned.
+ * sentences increased the rating signal. The feedback description now uses
+ * neutral operation wording; the reduced prompting may lower rating frequency.
  */
-describe("the measured 'when' sentences stay", () => {
-  // "or rejected" (CodeRabbit on #190): a memory the answer set aside as
-  // wrong or stale is exactly the one a -1 is for.
-  it("memory_feedback names the moment and the ids, rejected memories included", () => {
-    expect(description("memory_feedback")).toContain(
-      "Use it after an answer that relied on or rejected memories from memory_read: pass the ids of those memories as memory_ids",
-    );
+describe("feedback applicability and identifiers", () => {
+  it("memory_feedback explains the operation and rating inputs without prescribing a post-answer call", () => {
+    const text = description("memory_feedback");
+    expect(text).toContain("Rate memories returned by memory_read");
+    expect(text).toContain("memory_ids");
+    expect(text).toContain("-1 (unhelpful) to 1 (helpful)");
+    expect(text).not.toContain("Use it after an answer");
   });
 
   it("memory_read ties its ids to memory_feedback after the answer", () => {
