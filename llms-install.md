@@ -14,7 +14,37 @@ claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.c
 
 Keep `--scope user`: without it the server is added for the current directory only. A Claude Code session that was running when the command ran does not load the new server, so tell the user to exit, start `claude` again, run `/mcp`, select `mnemoverse` and choose **Authenticate**.
 
-Use the local package below when the client has no remote-server support, or when the user asks for an API key.
+In Cline, open MCP Servers, then the Remote Servers tab. Enter `mnemoverse` as the server name and `https://mcp.mnemoverse.com/mcp` as the URL, choose Streamable HTTP and click Add Server, then tell the user to click Authenticate on the server's row and sign in in the browser. The same entry by hand, in `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "type": "streamableHttp",
+      "url": "https://mcp.mnemoverse.com/mcp"
+    }
+  }
+}
+```
+
+A client that only starts local commands reaches the same hosted server through the `mcp-remote` bridge, which needs Node.js 18 or newer and opens the same browser sign-in on first start. There is still no key:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
+```
+
+Use the local package below when the user asks for an API key, or when the browser sign-in cannot complete on this machine.
 
 ## What you are installing
 
@@ -47,7 +77,7 @@ For Cline, open MCP Servers, then Configure, or edit `cline_mcp_settings.json` d
 }
 ```
 
-Other clients use the same command and the same two environment variables in their own config file. The exact blocks for Claude Code, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains and Cline are in `README.md` under "Connect to your AI tool". VS Code uses the key `servers` instead of `mcpServers`.
+Other clients use the same command and the same two environment variables in their own config file. The exact blocks for Claude Code, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains and Cline are in `README.md` under "Local package with an API key". VS Code uses the key `servers` instead of `mcpServers`.
 
 Keep the key out of files that are committed to a repository. Prefer a user-level config over a project-level one.
 

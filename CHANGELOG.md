@@ -56,6 +56,28 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Every client starts with the keyless path; the API key has its own
+  section.** The README went from a short no-key block straight to "Get a free
+  API key", and showed Claude Desktop, Devin Desktop (formerly Windsurf), Zed,
+  JetBrains and Cline only with `MNEMOVERSE_API_KEY`; npm, GitHub and the
+  directories that copy the first `mcpServers` block passed that on. The Quick
+  Start now connects every client to the hosted server
+  `https://mcp.mnemoverse.com/mcp` with a browser sign-in: natively where the
+  client adds a remote URL (Claude Code, Cursor, VS Code, a Claude Desktop
+  custom connector, Cline), and through the `mcp-remote` bridge
+  (`npx -y mcp-remote@latest https://mcp.mnemoverse.com/mcp`) where it only
+  starts local commands (Claude Desktop's config file, Devin Desktop, Zed,
+  JetBrains). The README's first `mcpServers` block is that bridge entry, with
+  no key. "Local package with an API key" follows as its own section, with the
+  same key facts as before and one more: a client that can send a header can
+  use the hosted URL with `Authorization: Bearer mk_live_...`. Seven keyless
+  partials, `docs/snippets/<client>-hosted.md`, sit beside the API-key ones;
+  the five that mnemoverse.com/docs mirrors are unchanged. `llms-install.md`
+  and `llms.txt` give Cline's remote entry and the bridge before the local
+  steps.
+
 ## [0.16.0] — 2026-10-23
 
 A MINOR: it adds an output field to two tools.
