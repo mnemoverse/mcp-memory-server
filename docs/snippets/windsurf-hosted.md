@@ -1,6 +1,6 @@
 <!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->
 
-**Devin Desktop (formerly Windsurf)** — add the bridge to `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:
+**Devin Desktop (formerly Windsurf)** — add the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later), to `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:
 
 ```json
 {

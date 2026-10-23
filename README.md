@@ -51,7 +51,7 @@ Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticat
 
 The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
 
-**Any MCP client** — a client that adds a remote server by URL takes `https://mcp.mnemoverse.com/mcp` and runs the browser sign-in itself. A client that only starts local commands takes the entry below: [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), a separate open-source bridge, runs through `npx` (Node.js 18 or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:
+**Any MCP client** — a client that adds a remote server by URL and runs the MCP sign-in (OAuth) itself takes `https://mcp.mnemoverse.com/mcp`. Any other client takes the entry below: [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), a separate open-source bridge, runs through `npx` (Node.js 20.18.1 or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:
 
 ```json
 {
@@ -91,7 +91,7 @@ The bridge keeps its sign-ins in `~/.mcp-auth`. If a sign-in gets stuck, its REA
 }
 ```
 
-**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste `https://mcp.mnemoverse.com/mcp` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use `claude_desktop_config.json` instead, add the bridge and restart Claude Desktop; the bridge opens the same browser sign-in:
+**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste `https://mcp.mnemoverse.com/mcp` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use `claude_desktop_config.json` instead, add the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later), and restart Claude Desktop; the bridge opens the same browser sign-in:
 
 ```json
 {
@@ -123,7 +123,7 @@ The bridge keeps its sign-ins in `~/.mcp-auth`. If a sign-in gets stuck, its REA
 
 Keep `"type": "streamableHttp"`: without it Cline uses the older SSE transport.
 
-**Devin Desktop (formerly Windsurf)** — add the bridge to `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:
+**Devin Desktop (formerly Windsurf)** — add the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later), to `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:
 
 ```json
 {
@@ -142,7 +142,7 @@ Keep `"type": "streamableHttp"`: without it Cline uses the older SSE transport.
 
 Devin also documents a remote entry with only `"url"` and its own sign-in; that sign-in has not been tested with Mnemoverse yet.
 
-**Zed** — add the bridge to `~/.config/zed/settings.json` (Zed uses `context_servers`); it opens the browser sign-in on first start:
+**Zed** — add the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later), to `~/.config/zed/settings.json` (Zed uses `context_servers`); the bridge opens the browser sign-in on first start:
 
 ```json
 {
@@ -162,7 +162,7 @@ Devin also documents a remote entry with only `"url"` and its own sign-in; that 
 
 Zed also accepts the URL itself (`"url": "https://mcp.mnemoverse.com/mcp"`) and runs its own sign-in; that route has not been tested with Mnemoverse yet.
 
-**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste the bridge; it opens the browser sign-in on first start:
+**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later); the bridge opens the browser sign-in on first start:
 
 ```json
 {
@@ -290,7 +290,7 @@ claude mcp add mnemoverse --scope user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e
 }
 ```
 
-**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start servers that prompt for inputs; for unattended use there, put the key in the environment of the process that launches VS Code:
+**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start a server that prompts for inputs, so for unattended use there, leave out the `inputs` entry and the `MNEMOVERSE_API_KEY` line, and set `MNEMOVERSE_API_KEY` in the environment of the process that launches VS Code:
 
 ```json
 {

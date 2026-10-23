@@ -1,6 +1,6 @@
 <!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->
 
-**Zed** — add the bridge to `~/.config/zed/settings.json` (Zed uses `context_servers`); it opens the browser sign-in on first start:
+**Zed** — add the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which runs through `npx` (Node.js 20.18.1 or later), to `~/.config/zed/settings.json` (Zed uses `context_servers`); the bridge opens the browser sign-in on first start:
 
 ```json
 {

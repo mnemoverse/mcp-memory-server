@@ -30,7 +30,7 @@ const README = read("README.md");
 const SOURCE = JSON.parse(read("src/configs/source.json")) as {
   name: string;
   remotes: { type: string; url: string }[];
-  bridge: { package: string; command: string; args: string[] };
+  bridge: { package: string; node: string; command: string; args: string[] };
 };
 const HOSTED_URL = SOURCE.remotes.find((r) => r.type === "streamable-http")!.url;
 const KEY_MARKERS = /mk_live_|MNEMOVERSE_API_KEY/;
@@ -130,6 +130,15 @@ describe("the bridge entries", () => {
       expect(entry.args).toEqual([...SOURCE.bridge.args, HOSTED_URL]);
       expect(entry.env).toBeUndefined();
     }
+  });
+
+  it("name the Node.js the bridge needs, from source.json, wherever they appear", () => {
+    // The package's own README says 18; its undici 7 dependency needs
+    // 20.18.1 (see $comment_bridge). One number, kept in one place.
+    const named = [...README.matchAll(/`mcp-remote`\]\([^)]*\)[^.]*?Node\.js ([\d.]+) or later/g)].map((m) => m[1]);
+    // Any MCP client, Claude Desktop, Devin Desktop, Zed, JetBrains.
+    expect(named.length).toBe(5);
+    expect(new Set(named)).toEqual(new Set([SOURCE.bridge.node]));
   });
 
   it("keep npx non-interactive", () => {

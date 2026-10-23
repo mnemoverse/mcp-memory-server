@@ -216,9 +216,9 @@ function hostedMcpUrl() {
  */
 function bridgeServer() {
   const bridge = source.bridge;
-  if (!bridge?.command || !Array.isArray(bridge.args) || bridge.args.length === 0) {
+  if (!bridge?.command || !Array.isArray(bridge.args) || bridge.args.length === 0 || !bridge.package || !bridge.node) {
     throw new Error(
-      "source.json has no `bridge` {command, args}: the keyless entries for stdio-only clients need the mcp-remote command",
+      "source.json has no complete `bridge` {package, node, command, args}: the keyless entries for stdio-only clients need the mcp-remote command and the Node.js it needs",
     );
   }
   return { command: bridge.command, args: [...bridge.args, hostedMcpUrl()] };
@@ -242,6 +242,15 @@ function genBridgeZedFormat() {
 function bridgeLink() {
   const pkg = source.bridge.package;
   return `[\`${pkg}\`](https://www.npmjs.com/package/${pkg})`;
+}
+
+/**
+ * What the bridge needs, said once per entry that uses it, so each `-hosted`
+ * partial stands on its own. The Node.js minimum is source.bridge.node (see
+ * $comment_bridge for where it comes from).
+ */
+function bridgeNeeds() {
+  return `the ${bridgeLink()} bridge, which runs through \`npx\` (Node.js ${source.bridge.node} or later)`;
 }
 
 /**
@@ -591,7 +600,7 @@ function snippetCursorKeyReadme() {
 function snippetAnyClientHosted() {
   const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
   return (
-    `**Any MCP client** — a client that adds a remote server by URL takes \`${hostedMcpUrl()}\` and runs the browser sign-in itself. A client that only starts local commands takes the entry below: ${bridgeLink()}, a separate open-source bridge, runs through \`npx\` (Node.js 18 or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:\n\n` +
+    `**Any MCP client** — a client that adds a remote server by URL and runs the MCP sign-in (OAuth) itself takes \`${hostedMcpUrl()}\`. Any other client takes the entry below: ${bridgeLink()}, a separate open-source bridge, runs through \`npx\` (Node.js ${source.bridge.node} or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:\n\n` +
     "```json\n" +
     json +
     "\n```\n\n" +
@@ -628,7 +637,7 @@ function snippetVscodeHosted() {
 function snippetVscodeKeyReadme() {
   const json = JSON.stringify(genVscodeFormat(), null, 2);
   return (
-    "**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start servers that prompt for inputs; for unattended use there, put the key in the environment of the process that launches VS Code:\n\n" +
+    "**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start a server that prompts for inputs, so for unattended use there, leave out the `inputs` entry and the `MNEMOVERSE_API_KEY` line, and set `MNEMOVERSE_API_KEY` in the environment of the process that launches VS Code:\n\n" +
     "```json\n" +
     json +
     "\n```\n"
@@ -644,7 +653,7 @@ function snippetVscodeKeyReadme() {
 function snippetClaudeDesktopHosted() {
   const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
   return (
-    `**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste \`${hostedMcpUrl()}\` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use \`claude_desktop_config.json\` instead, add the bridge and restart Claude Desktop; the bridge opens the same browser sign-in:\n\n` +
+    `**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste \`${hostedMcpUrl()}\` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use \`claude_desktop_config.json\` instead, add ${bridgeNeeds()}, and restart Claude Desktop; the bridge opens the same browser sign-in:\n\n` +
     "```json\n" +
     json +
     "\n```\n"
@@ -680,7 +689,7 @@ function snippetClineHosted() {
 function snippetDevinHosted() {
   const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
   return (
-    "**Devin Desktop (formerly Windsurf)** — add the bridge to `~/.config/devin/mcp_config.json` (`%APPDATA%\\devin\\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:\n\n" +
+    `**Devin Desktop (formerly Windsurf)** — add ${bridgeNeeds()}, to \`~/.config/devin/mcp_config.json\` (\`%APPDATA%\\devin\\mcp_config.json\` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:\n\n` +
     "```json\n" +
     json +
     "\n```\n\n" +
@@ -697,7 +706,7 @@ function snippetDevinHosted() {
 function snippetZedHosted() {
   const json = JSON.stringify(genBridgeZedFormat(), null, 2);
   return (
-    "**Zed** — add the bridge to `~/.config/zed/settings.json` (Zed uses `context_servers`); it opens the browser sign-in on first start:\n\n" +
+    `**Zed** — add ${bridgeNeeds()}, to \`~/.config/zed/settings.json\` (Zed uses \`context_servers\`); the bridge opens the browser sign-in on first start:\n\n` +
     "```json\n" +
     json +
     "\n```\n\n" +
@@ -713,7 +722,7 @@ function snippetZedHosted() {
 function snippetJetBrainsHosted() {
   const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
   return (
-    "**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste the bridge; it opens the browser sign-in on first start:\n\n" +
+    `**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste ${bridgeNeeds()}; the bridge opens the browser sign-in on first start:\n\n` +
     "```json\n" +
     json +
     "\n```\n"

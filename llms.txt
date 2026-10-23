@@ -125,7 +125,7 @@ Named shortcuts that ask the model to use the tools above; they call nothing the
 
 ## Setup
 Hosted (no key, nothing to install): https://mcp.mnemoverse.com/mcp, streamable HTTP, OAuth sign-in, same tools. Claude Code: claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp, then start a new session, run /mcp, select mnemoverse and choose Authenticate.
-Hosted from a client that only starts local commands (still no key; Node.js 18 or later): command npx, args ["-y", "mcp-remote@latest", "https://mcp.mnemoverse.com/mcp"]. The mcp-remote bridge opens the same browser sign-in on first start.
+Hosted from a client that only starts local commands (still no key; Node.js 20.18.1 or later): command npx, args ["-y", "mcp-remote@latest", "https://mcp.mnemoverse.com/mcp"]. The mcp-remote bridge opens the same browser sign-in on first start.
 Local package (below): Node.js 18 or later and an API key. A client that can send a fixed header can instead use the hosted URL with Authorization: Bearer mk_live_YOUR_KEY.
 Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
 Transport: stdio
