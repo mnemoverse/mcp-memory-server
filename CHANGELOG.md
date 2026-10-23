@@ -56,8 +56,9 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
-This section is a MINOR: it adds an output field, so the next release is
-0.16.0.
+## [0.16.0] — 2026-10-23
+
+A MINOR: it adds an output field to two tools.
 
 ### Added
 

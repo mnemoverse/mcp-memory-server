@@ -1,6 +1,6 @@
 {
   "name": "@mnemoverse/mcp-memory-server",
-  "version": "0.15.4",
+  "version": "0.16.0",
   "description": "Hosted long-term memory for AI agents over MCP. Write and read memories from Claude Code, Cursor, VS Code and ChatGPT; rating a recalled memory as helpful or misleading re-ranks what comes back next. OAuth sign-in or API key, free plan.",
   "type": "module",
   "bin": {
