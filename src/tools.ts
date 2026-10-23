@@ -1000,7 +1000,7 @@ export function registerMemoryTools(
           .string()
           .optional()
           .describe(
-            "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms.",
+            "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms, or in `rooms_not_searched`, which an answer without `domain` carries when you have rooms.",
           ),
         order_by: z
           .enum(["relevance", "recency"])
@@ -1366,7 +1366,7 @@ export function registerMemoryTools(
     "memory_list_recent",
     {
       description:
-        "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
+        "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them, though it names the ones you have (`rooms_not_searched`).",
       inputSchema: {
         domain: z
           .string()

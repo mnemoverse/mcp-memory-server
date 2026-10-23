@@ -484,7 +484,7 @@ What each tool sends:
 | `memory_graph` | the `seeds`, plus any of `depth`, `domain`, `min_weight`, `limit` you pass |
 | `memory_stats` / `memory_list_rooms` / `vault_list` | no request body — authenticated GETs |
 
-One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).
+One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. Since 0.16.0 a search or feed without `domain` that does return results also sends one, to `/memory/rooms`, so the answer can name the shared rooms it did not search. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).
 
 | | |
 |---|---|

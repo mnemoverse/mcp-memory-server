@@ -96,7 +96,13 @@ This section is a MINOR: it adds an output field, so the next release is
   budget like any read, and it runs after the read rather than beside it, so
   it adds the room list's response time to every unscoped hit: up to 4 seconds
   when that endpoint is slow, the probe timeout, after which the note says the
-  room list could not be fetched.
+  room list could not be fetched. The README's privacy section, which lists the
+  probes, now names this one.
+- **Two descriptions name the new field.** `memory_read`'s `domain` parameter
+  points to `rooms_not_searched` next to memory_list_rooms as a place to find
+  room addresses, and `memory_list_recent`'s description says an unscoped call
+  names the rooms it does not cover. The server instructions are unchanged:
+  they sit at their 800-character ceiling.
 
 ## [0.15.4] — 2026-10-22
 
