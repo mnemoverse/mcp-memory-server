@@ -178,6 +178,37 @@ describe("memory_read, unscoped: the rooms it did not search", () => {
     expect(text.trimEnd().endsWith("Re-run with domain set to one of these to read it.")).toBe(true);
   });
 
+  it("a capped page with an ESCAPED tag and a plain room name fits the cap with note AND legend", async () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: "x".repeat(4000),
+      domain: "a b",
+    }));
+    mcp.on(READ, { items, search_time_ms: 9 }).on(ROOMS, [ROOM]);
+
+    const text = await mcp.callText("memory_read", { query: "everything" });
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(text).toContain('domain="xroom:room_01KX77"');
+    expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBe(1);
+    expect(text.endsWith(DOMAIN_ESCAPE_LEGEND)).toBe(true);
+  });
+
+  it("a capped SCOPED page with an escaped tag fits the cap with its legend too (it used to overshoot by the legend)", async () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: "x".repeat(4000),
+      domain: "a b",
+    }));
+    mcp.on(READ, { items, search_time_ms: 9 });
+
+    const text = await mcp.callText("memory_read", { query: "everything", domain: "a b" });
+
+    expect(text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(text.endsWith(DOMAIN_ESCAPE_LEGEND)).toBe(true);
+  });
+
   it("a read that FAILS spends no room probe: the list is fetched only after a successful read", async () => {
     mcp.on(READ, httpError(503, "down"));
 
@@ -238,6 +269,25 @@ describe("memory_list_recent, unscoped: the rooms the page did not cover", () =>
 
     expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBe(1);
     expect(text.endsWith(DOMAIN_ESCAPE_LEGEND)).toBe(true);
+  });
+
+  it("one oversized entry with an ESCAPED tag and a plain room name fits the cap with its note", async () => {
+    mcp
+      .on(RECENT, {
+        items: [{ ...HIT, content: "x".repeat(120_000), domain: "a b" }],
+        next_cursor: null,
+      })
+      .on(ROOMS, [ROOM]);
+
+    const text = await mcp.callText("memory_list_recent", {});
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(text).toContain('domain="xroom:room_01KX77"');
+    // The feed prints the tag after the content, so the cap removed it; the
+    // legend leaves with the last escaped name (handlers.test.ts pins that).
+    // The reserve was still taken, so the length bound above holds either way.
+    expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBeLessThanOrEqual(1);
   });
 
   it("a feed whose first batch FAILS spends no room probe", async () => {

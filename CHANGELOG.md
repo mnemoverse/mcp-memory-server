@@ -87,7 +87,15 @@ This section is a MINOR: it adds an output field, so the next release is
   end with the same room disclosure an empty result already carried.** A match
   in your own domains says nothing about what a room holds. The 96,000-character
   cap reserves the note, so a capped page plus the note still fits, and an
-  answer carries one escape legend, at its end. A `memory_list_recent` page can
+  answer carries one escape legend, at its end.
+- **A capped `memory_read` or `memory_list_recent` page now fits the cap with its
+  escape legend too.** The legend (275 characters) was appended after the cap,
+  so a capped page with an escaped domain or author name ran past
+  `MAX_RESULT_CHARS` by its length, scoped calls included and before this
+  release. The cap now reserves it whenever a name on the page would print
+  escaped and the room note does not already carry the legend, so such a page
+  is cut up to 275 characters earlier than before. Pages with no escaped name
+  are cut exactly where they were. A `memory_list_recent` page can
   exceed its 40,000-character page budget by the note, at most about 2,200
   characters; the budget is a target, the cap is the limit.
 - **One added read-only probe:** `GET /memory/rooms` once per unscoped call

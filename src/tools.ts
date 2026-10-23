@@ -48,6 +48,7 @@ import {
   type WriteAuthor,
 } from "./requests.js";
 import {
+  DOMAIN_ESCAPE_LEGEND,
   exactLiteral,
   formatDomainList,
   MAX_DOMAIN_LITERAL,
@@ -538,6 +539,27 @@ const ROOMS_NOT_SEARCHED_OUTPUT = z
   .describe(
     "Present only on a call WITHOUT `domain`, when you have shared rooms or they could not be checked: rooms are separate stores that call did not search.",
   );
+
+/**
+ * What capResult must reserve on a result page for what is appended after the
+ * cap: the room note, plus the escape legend when a name on the page would
+ * print escaped and the note does not already carry the legend
+ * (withEscapeLegendAt adds at most one). Before this, the legend alone could
+ * push a capped page past MAX_RESULT_CHARS. Conservative: a name the cap then
+ * removes still reserved its legend, which costs the page 275 characters,
+ * never the cap.
+ */
+function capTail(
+  roomNote: string,
+  names: readonly (string | null | undefined)[],
+): number {
+  const legendPending =
+    !roomNote.includes(DOMAIN_ESCAPE_LEGEND) &&
+    names.some(
+      (n) => exactLiteral(n, MAX_DOMAIN_TAG_LITERAL)?.escaped === true,
+    );
+  return roomNote.length + (legendPending ? DOMAIN_ESCAPE_LEGEND.length : 0);
+}
 
 /**
  * The `rooms_not_searched` entry for one call's {@link ReadScope}, spread into
@@ -1274,12 +1296,15 @@ export function registerMemoryTools(
       // none when one is present, and so an answer has one legend, at its end.
       const scope = searched ? undefined : await probeScope(searched);
       const roomNote = scope ? readScopeNote(scope) : "";
+      const legendNames = [
+        ...items.map((it) => it?.domain),
+        ...items.map((it) => rawAuthorName(it?.provenance)),
+      ];
       return structured(
         withEscapeLegendAt(
           MAX_DOMAIN_TAG_LITERAL,
-          capResult(text, undefined, roomNote.length) + roomNote,
-          ...items.map((it) => it?.domain),
-          ...items.map((it) => rawAuthorName(it?.provenance)),
+          capResult(text, undefined, capTail(roomNote, legendNames)) + roomNote,
+          ...legendNames,
         ),
         {
           items: items.map(structuredItem),
@@ -1735,6 +1760,10 @@ export function registerMemoryTools(
       // note, and the note sits inside the legend call so there is one legend.
       const scope = searched ? undefined : await probeScope(searched);
       const roomNote = scope ? readScopeNote(scope) : "";
+      const legendNames = [
+        ...items.map((it) => it?.domain),
+        ...items.map((it) => rawAuthorName(it?.provenance)),
+      ];
       return structured(
         // The page body comes from src/render.ts; the escape legend is
         // applied HERE, to the CAPPED text. formatRecentPage used to append
@@ -1760,10 +1789,9 @@ export function registerMemoryTools(
             // than the whole budget: the case `limit` cannot fix and the
             // global cap has to.
             "Lower `limit` or add a `domain` for smaller pages.",
-            roomNote.length,
+            capTail(roomNote, legendNames),
           ) + roomNote,
-          ...items.map((it) => it?.domain),
-          ...items.map((it) => rawAuthorName(it?.provenance)),
+          ...legendNames,
         ),
         {
           items: items.map(structuredItem),
