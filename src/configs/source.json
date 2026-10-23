@@ -39,6 +39,15 @@
       "url": "https://mcp.mnemoverse.com/mcp"
     }
   ],
+  "$comment_bridge": "The keyless path for a client that only starts local (stdio) commands: the mcp-remote package (npm, MIT, github.com/punkpeye/mcp-remote) runs as that local command, forwards to the hosted URL in `remotes` and runs the same browser sign-in itself. The generator appends the hosted URL to `args`. Verified live on 2026-10-23 by the packaging lane as `npx -y mcp-remote https://mcp.mnemoverse.com/mcp`: browser sign-in, then a write and a read of the same memory_id from two processes. `@latest` is mcp-remote's own documented form (README, Flags: 'To force npx to always check for an updated version of mcp-remote, add the @latest flag'), for the reason this package's `args` carry it: npx keeps whatever version it cached first. No other flag: the default transport (http-first) is the one the hosted server speaks.",
+  "bridge": {
+    "package": "mcp-remote",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote@latest"
+    ]
+  },
   "metadata": {
     "homepage": "https://mnemoverse.com/docs/api/mcp-server",
     "repository": "https://github.com/mnemoverse/mcp-memory-server",

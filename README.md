@@ -19,7 +19,7 @@ Shared rooms (beta) let several agents work from one memory.
 
 ## What is Mnemoverse Memory?
 
-Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. It stores what your agents learn (decisions, preferences, lessons) and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an API key in a local config, or an OAuth sign-in on the hosted endpoint.
+Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. It stores what your agents learn (decisions, preferences, lessons) and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an OAuth sign-in on the hosted endpoint, or an API key in a local config.
 
 **What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier. Self-hosting the engine is available on Enterprise plans by agreement, when security or compliance requirements call for it; by default we run it for you.
 
@@ -31,26 +31,192 @@ Most agent memory today lives in one of three places. Per-tool instruction files
 
 ## Quick Start
 
-### No key: the hosted endpoint
+Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card). Every setup in this section connects to the hosted server `https://mcp.mnemoverse.com/mcp` and signs you in through the browser, so there is no key to copy. To run this package on your machine with an API key instead, see [Local package with an API key](#local-package-with-an-api-key).
 
-If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
+### 1. Connect your AI tool
 
-Claude Code:
+<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
+
+**Claude Code** — the hosted server, with a browser sign-in. No API key, nothing to install:
+
 ```bash
 claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
 ```
-Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticate**. A session that was already running when the command ran does not load the new server: exit and start `claude` again first.
 
-Cursor, in `.cursor/mcp.json`:
+Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticate**. If the command ran inside a Claude Code session (yours, or Claude ran it for you), that session does not load the new server: exit and start `claude` again first.
+
+**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)
+
+The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
+
+**Any MCP client** — a client that adds a remote server by URL takes `https://mcp.mnemoverse.com/mcp` and runs the browser sign-in itself. A client that only starts local commands takes the entry below: [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), a separate open-source bridge, runs through `npx` (Node.js 18 or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:
+
 ```json
-{ "mcpServers": { "mnemoverse": { "url": "https://mcp.mnemoverse.com/mcp" } } }
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
 ```
 
-Claude Desktop, Devin Desktop (formerly Windsurf), VS Code and ChatGPT: [Remote MCP setup](https://mnemoverse.com/docs/api/remote-mcp-server). The local server below is the other path: it runs on your machine and reads an API key.
+The bridge keeps its sign-ins in `~/.mcp-auth`. If a sign-in gets stuck, its README says to delete that folder and restart the client.
+
+
+<!-- INSTALL_SNIPPETS_END -->
+
+<details>
+<summary><b>Setup per client</b> — VS Code, Claude Desktop, Cline, Devin Desktop (formerly Windsurf), Zed, JetBrains</summary>
+
+<!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
+
+**VS Code** — the [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode) signs in through the browser, with no key to paste: install it and run **Mnemoverse: Sign In**. Without the extension, add the hosted server to `.vscode/mcp.json` (VS Code 1.102 or later; VS Code uses `servers`, not `mcpServers`). VS Code opens the browser sign-in on first use, and the entry holds no key, so the file is safe to commit:
+
+```json
+{
+  "servers": {
+    "mnemoverse": {
+      "type": "http",
+      "url": "https://mcp.mnemoverse.com/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste `https://mcp.mnemoverse.com/mcp` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use `claude_desktop_config.json` instead, add the bridge and restart Claude Desktop; the bridge opens the same browser sign-in:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
+```
+
+**Cline** — in the Cline panel, open **MCP Servers**, then the **Remote Servers** tab. Enter `mnemoverse` as the server name and `https://mcp.mnemoverse.com/mcp` as the URL, choose **Streamable HTTP**, click **Add Server**, then click **Authenticate** on the server's row and sign in in the browser. The same entry by hand, in `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "type": "streamableHttp",
+      "url": "https://mcp.mnemoverse.com/mcp"
+    }
+  }
+}
+```
+
+Keep `"type": "streamableHttp"`: without it Cline uses the older SSE transport.
+
+**Devin Desktop (formerly Windsurf)** — add the bridge to `~/.config/devin/mcp_config.json` (`%APPDATA%\devin\mcp_config.json` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
+```
+
+Devin also documents a remote entry with only `"url"` and its own sign-in; that sign-in has not been tested with Mnemoverse yet.
+
+**Zed** — add the bridge to `~/.config/zed/settings.json` (Zed uses `context_servers`); it opens the browser sign-in on first start:
+
+```json
+{
+  "context_servers": {
+    "mnemoverse": {
+      "source": "custom",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
+```
+
+Zed also accepts the URL itself (`"url": "https://mcp.mnemoverse.com/mcp"`) and runs its own sign-in; that route has not been tested with Mnemoverse yet.
+
+**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste the bridge; it opens the browser sign-in on first start:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.mnemoverse.com/mcp"
+      ]
+    }
+  }
+}
+```
+
+
+<!-- MORE_CLIENTS_END -->
+
+</details>
+
+**Gemini CLI**: `gemini extensions install https://github.com/mnemoverse/gemini-extension` connects the same hosted server. **ChatGPT**: [add it as a custom MCP server](https://mnemoverse.com/docs/api/chatgpt). Steps for more hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
+
+> ⚠️ **Restart your AI client** after editing the config. MCP servers are only picked up on client startup.
+
+### 2. Try it — 30 seconds to verify it works
+
+Paste this in your AI chat:
+
+> **"Remember that my favourite TypeScript framework is Hono, and please call `memory_write` to save it."**
+
+Your agent should call `memory_write` and confirm the memory was stored.
+
+Then open a **new chat / new session** (this is the whole point — memory survives restarts), and ask:
+
+> **"What's my favourite TypeScript framework?"**
+
+Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
+
+If it doesn't remember: check that the client was fully restarted and that the browser sign-in finished (in Claude Code, `/mcp`; in Cursor, **Connect** next to `mnemoverse`). With the [local package](#local-package-with-an-api-key), check that the config has your real `mk_live_...` key, not the placeholder.
+
+> ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
+
+### 3. Make it a habit
+
+The test above works because you asked the agent to call the tool. In normal work it will not, unless it has a standing instruction that says when to read memory and when to save. The `setup_memory` prompt writes those rules for Claude Code, Claude, Cursor or Codex, and [Make Your Agent Use Memory](https://mnemoverse.com/docs/api/agent-memory) explains where they go and how to confirm the tools work first.
+
+## Local package with an API key
+
+This package also runs on your machine as a local MCP server (stdio, Node.js 18 or later) that authenticates with an API key. Use it when a client cannot complete a browser sign-in, for unattended runs, or when you would rather manage a key yourself. It reaches the same memory as the hosted server.
 
 ### 1. Get a free API key
 
-Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
+Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card) and create a key.
 
 **Check the key before you put it in a config.** Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in your shell history nor in the process list.
 
@@ -78,21 +244,18 @@ catch { if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { (New-Obj
 
 In the JSON, `reason` sits inside the `details` object (`details.reason`), next to `details.keys_url`, the console page where keys are created.
 
-### 2. Connect to your AI tool
+**The hosted server accepts the key too.** A client that can send a fixed header needs no local package: point it at `https://mcp.mnemoverse.com/mcp` with the header `Authorization: Bearer mk_live_YOUR_KEY` ([details](https://mnemoverse.com/docs/api/remote-mcp-server#with-an-api-key-instead-of-the-sign-in)).
 
-The two canonical setups, Claude Code and Cursor. Each starts with the hosted server: a browser sign-in and no key. Their key-based setups write the key **once, at user scope, covering every project**; each client further down says where its own config lives. Avoid a per-project config file for a key: it lives inside the repository and can be committed with it, and a key belongs outside:
+### 2. Add it to your client
 
-<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
+Where a client has a user-level config, the entry below goes there, so the key is written **once, covering every project**. Avoid a per-project config file for a key: it lives inside the repository and can be committed with it. The local entry and the hosted one share the name `mnemoverse`, so use one or the other in a client, not both.
 
-**Claude Code** — the hosted server, with a browser sign-in. No API key, nothing to install:
+<details>
+<summary><b>Config per client</b> — Claude Code, Cursor, VS Code, Claude Desktop, Cline, Devin Desktop (formerly Windsurf), Zed, JetBrains</summary>
 
-```bash
-claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
-```
+<!-- LOCAL_KEY_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
-Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticate**. If the command ran inside a Claude Code session (yours, or Claude ran it for you), that session does not load the new server: exit and start `claude` again first.
-
-To run the local server with an API key instead (Node.js 18 or later), put your own key in place of `mk_live_YOUR_KEY`. Use one or the other, not both: they share the name `mnemoverse`.
+**Claude Code** — put your own key in place of `mk_live_YOUR_KEY`:
 
 ```bash
 claude mcp add mnemoverse --scope user \
@@ -107,13 +270,7 @@ On Windows (PowerShell), paste the same command as one line — PowerShell does 
 claude mcp add mnemoverse --scope user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
-**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:
-
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)
-
-The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
-
-To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
+**Cursor** — add the JSON below to `~/.cursor/mcp.json`, the global config that covers every project, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.
 
 ```json
 {
@@ -133,15 +290,7 @@ To run the local server with an API key instead, add the JSON below to `~/.curso
 }
 ```
 
-
-<!-- INSTALL_SNIPPETS_END -->
-
-<details>
-<summary><b>All other clients</b> — VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline</summary>
-
-<!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
-
-**VS Code** — the [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode) signs in through the browser and needs no key; that's the default path. In VS Code's non-interactive Agent Host mode, servers that prompt for inputs like this one are not started; for unattended use there, put the key in the environment of the process that launches VS Code instead. To wire the MCP server directly instead, add this to `.vscode/mcp.json` (note: VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file — it's committed with the repo. The `inputs` entry below prompts for the key instead: VS Code masks what you type and stores it in its own secret storage, not in the file:
+**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start servers that prompt for inputs; for unattended use there, put the key in the environment of the process that launches VS Code:
 
 ```json
 {
@@ -170,7 +319,7 @@ To run the local server with an API key instead, add the JSON below to `~/.curso
 }
 ```
 
-**Devin Desktop (formerly Windsurf)** — add to `~/.config/devin/mcp_config.json`:
+**Claude Desktop** — add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -190,7 +339,45 @@ To run the local server with an API key instead, add the JSON below to `~/.curso
 }
 ```
 
-**More MCP clients** — same server, different config file:
+**Cline** — *MCP Servers → Configure* (or edit `cline_mcp_settings.json`). Cline reads `env` values literally, so paste your real key — not a `${VAR}` reference:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
+      }
+    }
+  }
+}
+```
+
+**Devin Desktop (formerly Windsurf)** — add to `~/.config/devin/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mnemoverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnemoverse/mcp-memory-server@latest"
+      ],
+      "env": {
+        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
+        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
+      }
+    }
+  }
+}
+```
 
 **Zed** — add to `~/.config/zed/settings.json` (Zed uses `context_servers`, and `"source": "custom"` is required):
 
@@ -233,55 +420,13 @@ To run the local server with an API key instead, add the JSON below to `~/.curso
 }
 ```
 
-**Cline** — *MCP Servers → Configure* (or edit `cline_mcp_settings.json`). Cline reads `env` values literally, so paste your real key — not a `${VAR}` reference:
-
-```json
-{
-  "mcpServers": {
-    "mnemoverse": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@mnemoverse/mcp-memory-server@latest"
-      ],
-      "env": {
-        "MNEMOVERSE_API_KEY": "mk_live_YOUR_KEY",
-        "MNEMOVERSE_API_URL": "https://core.mnemoverse.com/api/v1"
-      }
-    }
-  }
-}
-```
-
 > Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.
 
-<!-- MORE_CLIENTS_END -->
+<!-- LOCAL_KEY_SNIPPETS_END -->
 
 </details>
 
-> ⚠️ **Restart your AI client** after editing the config. MCP servers are only picked up on client startup.
-
-### 3. Try it — 30 seconds to verify it works
-
-Paste this in your AI chat:
-
-> **"Remember that my favourite TypeScript framework is Hono, and please call `memory_write` to save it."**
-
-Your agent should call `memory_write` and confirm the memory was stored.
-
-Then open a **new chat / new session** (this is the whole point — memory survives restarts), and ask:
-
-> **"What's my favourite TypeScript framework?"**
-
-Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
-
-If it doesn't remember: check that the client was fully restarted and the config has your real `mk_live_...` key, not the placeholder. On the hosted server there is no key to check; check that the browser sign-in finished (in Cursor, **Connect** next to `mnemoverse`).
-
-> ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
-
-### 4. Make it a habit
-
-The test above works because you asked the agent to call the tool. In normal work it will not, unless it has a standing instruction that says when to read memory and when to save. The `setup_memory` prompt writes those rules for Claude Code, Claude, Cursor or Codex, and [Make Your Agent Use Memory](https://mnemoverse.com/docs/api/agent-memory) explains where they go and how to confirm the tools work first.
+Restart the client after editing its config, then run the two-session check from step 2 of the Quick Start.
 
 ## Tools
 
@@ -379,7 +524,7 @@ description and annotations per tool); the test suite and the release workflow
 fail when it does not list what the server registers, and the `.mcpb` manifest's
 tool list is derived from it.
 
-**If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in the Quick Start, reaches the same memory and does not depend on that session's sign-in.
+**If the hosted connector stops answering in a session.** A client can keep showing the connector as connected while every call in that session fails with "not connected". Reconnecting it on claude.ai does not revive a session that is already stuck; reconnect from inside the session instead (in Claude Code, `/mcp`, then sign in again). Meanwhile this local server, set up with an API key from the same account as in [Local package with an API key](#local-package-with-an-api-key), reaches the same memory and does not depend on that session's sign-in.
 
 ### Building a second MCP server on this package
 
@@ -400,7 +545,7 @@ Concrete things worth writing:
 
 ## Universal Memory
 
-The same API key works across all tools. Write a memory in Claude Code — read it in Cursor. Learn something in VS Code — your GPT Custom Action knows it too.
+One account works across all tools, whether a tool signs in through the browser or uses an API key. Write a memory in Claude Code — read it in Cursor. Learn something in VS Code — your GPT Custom Action knows it too.
 
 ```
                     ┌── Claude Code (this MCP server)
@@ -412,6 +557,8 @@ The same API key works across all tools. Write a memory in Claude Code — read 
 ```
 
 ## Configuration
+
+The local package reads two environment variables. The hosted server needs neither: it signs you in through the browser.
 
 | Env Variable | Required | Default |
 |-------------|----------|---------|
@@ -430,7 +577,7 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 - [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
-- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server)
+- [Console (account and API keys)](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server)
 
 **Background reading**
 

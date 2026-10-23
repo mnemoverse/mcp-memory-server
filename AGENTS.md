@@ -26,7 +26,7 @@ CI runs the tests in three time zones, so do not assume UTC in tests that touch 
 2. `npm run verify:configs`
 3. Commit the source change together with every regenerated file.
 
-Do not edit generated files by hand. They are `server.json`, `manifest.json`, everything under `docs/configs/` and `docs/snippets/`, and the README regions between the `INSTALL_SNIPPETS` and `MORE_CLIENTS` HTML comment markers. A hand edit is overwritten on the next run and fails `verify-configs.yml` in the meantime. If a diff appears in one of these files and `source.json` did not change, discard it.
+Do not edit generated files by hand. They are `server.json`, `manifest.json`, everything under `docs/configs/` and `docs/snippets/`, and the README regions between the `INSTALL_SNIPPETS`, `MORE_CLIENTS` and `LOCAL_KEY_SNIPPETS` HTML comment markers. A hand edit is overwritten on the next run and fails `verify-configs.yml` in the meantime. If a diff appears in one of these files and `source.json` did not change, discard it.
 
 Do not hard-code distribution metadata in `src/`, and do not add a parallel config file next to `source.json`.
 
