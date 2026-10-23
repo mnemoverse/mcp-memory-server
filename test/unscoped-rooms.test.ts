@@ -15,6 +15,8 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DOMAIN_ESCAPE_LEGEND } from "../src/names.js";
+import { MAX_RESULT_CHARS } from "../src/tools.js";
 import { httpError, startMemoryServer, type Harness } from "./harness.js";
 
 let mcp: Harness;
@@ -139,6 +141,43 @@ describe("memory_read, unscoped: the rooms it did not search", () => {
     });
   });
 
+  it("the note comes after the page, timing line included", async () => {
+    mcp.on(READ, { items: [HIT], search_time_ms: 9 }).on(ROOMS, [ROOM]);
+
+    const text = await mcp.callText("memory_read", { query: "deploy day" });
+
+    expect(text.indexOf("(9ms)")).toBeGreaterThan(-1);
+    expect(text.indexOf("Scope:")).toBeGreaterThan(text.indexOf("(9ms)"));
+    expect(text.trimEnd().endsWith("Re-run with domain set to one of these to read it.")).toBe(true);
+  });
+
+  it("an escaped domain tag AND an escaped room name share ONE legend, at the end", async () => {
+    mcp
+      .on(READ, { items: [{ ...HIT, domain: "a b" }], search_time_ms: 9 })
+      .on(ROOMS, [{ ...ROOM, name: "Zo e" }]);
+
+    const text = await mcp.callText("memory_read", { query: "deploy day" });
+
+    expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBe(1);
+    expect(text.endsWith(DOMAIN_ESCAPE_LEGEND)).toBe(true);
+  });
+
+  it("a capped hit page still fits the cap WITH the note, and the note survives whole", async () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      atom_id: `atom_${i}`,
+      content: "x".repeat(4000),
+      domain: "general",
+    }));
+    mcp.on(READ, { items, search_time_ms: 9 }).on(ROOMS, [ROOM]);
+
+    const text = await mcp.callText("memory_read", { query: "everything" });
+
+    expect(text).toContain("[…truncated to fit the 25K token limit.");
+    expect(text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(text).toContain('domain="xroom:room_01KX77"');
+    expect(text.trimEnd().endsWith("Re-run with domain set to one of these to read it.")).toBe(true);
+  });
+
   it("a read that FAILS spends no room probe: the list is fetched only after a successful read", async () => {
     mcp.on(READ, httpError(503, "down"));
 
@@ -190,10 +229,39 @@ describe("memory_list_recent, unscoped: the rooms the page did not cover", () =>
     });
   });
 
+  it("an escaped domain tag AND an escaped room name share ONE legend, at the end", async () => {
+    mcp
+      .on(RECENT, { items: [{ ...HIT, domain: "a b" }], next_cursor: null })
+      .on(ROOMS, [{ ...ROOM, name: "Zo e" }]);
+
+    const text = await mcp.callText("memory_list_recent", {});
+
+    expect(text.split(DOMAIN_ESCAPE_LEGEND).length - 1).toBe(1);
+    expect(text.endsWith(DOMAIN_ESCAPE_LEGEND)).toBe(true);
+  });
+
+  it("a feed whose first batch FAILS spends no room probe", async () => {
+    mcp.on(RECENT, httpError(503, "down"));
+
+    const result = await mcp.call("memory_list_recent", {});
+
+    expect(result.isError).toBe(true);
+    expect(mcp.calls.every((c) => c.key === RECENT)).toBe(true);
+  });
+
   it("a scoped page makes no room request and carries no rooms_not_searched", async () => {
     mcp.on(RECENT, { items: [HIT], next_cursor: null });
 
     const result = await mcp.call("memory_list_recent", { domain: "engineering" });
+
+    expect(mcp.calls.map((c) => c.key)).toEqual([RECENT]);
+    expect(result.structuredContent).not.toHaveProperty("rooms_not_searched");
+  });
+
+  it("a page read FROM a room makes no room-list request either: it searched that room", async () => {
+    mcp.on(RECENT, { items: [{ ...HIT, domain: ROOM.address }], next_cursor: null });
+
+    const result = await mcp.call("memory_list_recent", { domain: ROOM.address });
 
     expect(mcp.calls.map((c) => c.key)).toEqual([RECENT]);
     expect(result.structuredContent).not.toHaveProperty("rooms_not_searched");

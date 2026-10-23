@@ -56,6 +56,9 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+This section is a MINOR: it adds an output field, so the next release is
+0.16.0.
+
 ### Added
 
 - **`memory_read` and `memory_list_recent` name the shared rooms they did not
@@ -72,17 +75,28 @@ git history and the GitHub releases are the record.
   the text (Claude Code, observed 2026-10-23) got `{"items":[]}` from an empty
   unscoped read and nothing else, while twenty live rooms held the answer.
   Room content is still NOT searched or mixed into the result; whether it
-  should be is a separate decision.
+  should be is a separate decision. A row missing `room_id`, `address` or
+  `role` is left out of `rooms` (still named in `note`), the rule
+  memory_list_rooms already applies. **Differs from the hosted connector:**
+  its `memory_read` and `memory_list_recent` schemas have no
+  `rooms_not_searched` yet.
 
 ### Changed
 
 - **An unscoped `memory_read` hit and an unscoped `memory_list_recent` page now
   end with the same room disclosure an empty result already carried.** A match
-  in your own domains says nothing about what a room holds.
+  in your own domains says nothing about what a room holds. The 96,000-character
+  cap reserves the note, so a capped page plus the note still fits, and an
+  answer carries one escape legend, at its end. A `memory_list_recent` page can
+  exceed its 40,000-character page budget by the note, at most about 2,200
+  characters; the budget is a target, the cap is the limit.
 - **One added read-only probe:** `GET /memory/rooms` once per unscoped call
   that returns results, issued after the read succeeds (an empty unscoped
   result already made it, and a failed read still makes none). It spends rate
-  budget like any read.
+  budget like any read, and it runs after the read rather than beside it, so
+  it adds the room list's response time to every unscoped hit: up to 4 seconds
+  when that endpoint is slow, the probe timeout, after which the note says the
+  room list could not be fetched.
 
 ## [0.15.4] — 2026-10-22
 

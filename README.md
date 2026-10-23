@@ -346,7 +346,9 @@ saw and diff it against what the server serves today, by version.
   `memory_list_rooms` and `vault_list`, which drop a row with no usable
   identity (`room_id`, `address`, `role`; `alias`, `context`) from the data,
   reported once on stderr, instead of emitting empty strings into required
-  fields.
+  fields; and `memory_read` and `memory_list_recent`, which carry an optional
+  `rooms_not_searched` field (the shared rooms an unscoped call did not
+  search) that the connector's schemas do not declare yet.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
   renaming a declared annotation field,** is announced one MINOR ahead: the
   tool (or parameter) stays, its description says

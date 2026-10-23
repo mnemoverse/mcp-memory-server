@@ -176,8 +176,12 @@ export function capResult(
   // 1/5/20 returned 6/7/4 items), which this release's own top_k description
   // already admits. One surface must not recommend the knob another refutes.
   moreHint = "Use a more specific query to see all results.",
+  // Characters the caller appends AFTER the cap (the room note that ends an
+  // unscoped page), reserved here so the page plus that tail still fits.
+  // 0, the default, leaves every existing cut exactly where it was.
+  tail = 0,
 ): string {
-  if (text.length <= MAX_RESULT_CHARS) return text;
+  if (text.length + tail <= MAX_RESULT_CHARS) return text;
   // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
   // guidance instead of the read-tool default (which points at a query control a
   // repeated no-arg call cannot use). Existing callers keep the default message.
@@ -191,7 +195,7 @@ export function capResult(
   const hint = [...moreHint].slice(0, MAX_HINT_CODE_POINTS).join("");
   const suffix = `\n\n[…truncated to fit the 25K token limit. ${hint}]`;
   const reserve = Math.max(200, suffix.length);
-  let truncated = text.slice(0, MAX_RESULT_CHARS - reserve);
+  let truncated = text.slice(0, Math.max(0, MAX_RESULT_CHARS - reserve - tail));
   const lastCode = truncated.charCodeAt(truncated.length - 1);
   if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
     truncated = truncated.slice(0, -1);
@@ -526,7 +530,7 @@ const ROOMS_NOT_SEARCHED_OUTPUT = z
       .array(z.object(ROOM_ROW_OUTPUT))
       .optional()
       .describe(
-        "Every live room this call did not search; present only when state is 'live'.",
+        "The live rooms this call did not search; present only when state is 'live'. A row missing room_id, address or role is omitted here and still named in `note`.",
       ),
     note: z.string().describe("The same disclosure the text ends with."),
   })
@@ -1264,16 +1268,19 @@ export function registerMemoryTools(
       // only on a miss: a match in your own domains says nothing about what a
       // room holds, and the room is where the answer was the day this was
       // added. Probed after the read, so a failed read spends no extra GET.
-      // The note goes after the cap and the legend, which belong to the page;
-      // it carries its own legend for the room names it prints.
+      // The cap reserves the note's length, so the page plus the note still
+      // fits. The note goes INSIDE the legend call: it already carries the
+      // legend when a room name it prints is escaped, withEscapeLegendAt adds
+      // none when one is present, and so an answer has one legend, at its end.
       const scope = searched ? undefined : await probeScope(searched);
+      const roomNote = scope ? readScopeNote(scope) : "";
       return structured(
         withEscapeLegendAt(
           MAX_DOMAIN_TAG_LITERAL,
-          capResult(text),
+          capResult(text, undefined, roomNote.length) + roomNote,
           ...items.map((it) => it?.domain),
           ...items.map((it) => rawAuthorName(it?.provenance)),
-        ) + (scope ? readScopeNote(scope) : ""),
+        ),
         {
           items: items.map(structuredItem),
           ...roomsNotSearchedField(scope, "memory_read"),
@@ -1316,6 +1323,13 @@ export function registerMemoryTools(
    * given client is unmeasured, and calibrating it is follow-up work. It does NOT
    * touch MAX_RESULT_CHARS, which is shared with memory_read and every other
    * surface and remains the final backstop after this budget has done its work.
+   *
+   * THE ROOM NOTE IS OUTSIDE IT. An UNSCOPED page ends with the rooms it did
+   * not cover, and that note is known only after the loop, because the room
+   * list is fetched only once the feed has answered. So a page can exceed this
+   * budget by the note: at most about 2,200 characters (five room names of up
+   * to 256 characters, their addresses, fixed text and the escape legend).
+   * MAX_RESULT_CHARS still holds, because capResult reserves the note.
    */
   const LIST_PAGE_CHAR_BUDGET = 40_000;
 
@@ -1717,7 +1731,10 @@ export function registerMemoryTools(
       // result page does and for the same reason: "what happened lately" in
       // your own domains is not what happened in the rooms. Every page,
       // continuations included, so the field's absence keeps meaning "no rooms".
+      // Cap and legend as on memory_read's result page: the cap reserves the
+      // note, and the note sits inside the legend call so there is one legend.
       const scope = searched ? undefined : await probeScope(searched);
+      const roomNote = scope ? readScopeNote(scope) : "";
       return structured(
         // The page body comes from src/render.ts; the escape legend is
         // applied HERE, to the CAPPED text. formatRecentPage used to append
@@ -1743,10 +1760,11 @@ export function registerMemoryTools(
             // than the whole budget: the case `limit` cannot fix and the
             // global cap has to.
             "Lower `limit` or add a `domain` for smaller pages.",
-          ),
+            roomNote.length,
+          ) + roomNote,
           ...items.map((it) => it?.domain),
           ...items.map((it) => rawAuthorName(it?.provenance)),
-        ) + (scope ? readScopeNote(scope) : ""),
+        ),
         {
           items: items.map(structuredItem),
           ...roomsNotSearchedField(scope, "memory_list_recent"),
