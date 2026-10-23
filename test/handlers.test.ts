@@ -1038,7 +1038,8 @@ describe("the load-bearing sentences, as returned", () => {
       content: "x".repeat(4000),
       domain: "general",
     }));
-    mcp.on(READ, { items, search_time_ms: 12 });
+    // Unscoped, so the hit page also lists the rooms it did not search: none.
+    mcp.on(READ, { items, search_time_ms: 12 }).on(ROOMS, []);
 
     const text = await mcp.callText("memory_read", { query: "everything" });
 
@@ -1287,6 +1288,12 @@ describe("the room usage line names what the scope actually allows", () => {
  * page, a cap that removed every escaped name drops the legend with it.
  */
 describe("the escape legend survives the size cap", () => {
+  // Every page here is UNSCOPED, so it also lists the rooms it did not
+  // search. None are stubbed, which keeps each legend count about the page.
+  beforeEach(() => {
+    mcp.on(ROOMS, []);
+  });
+
   /** Items long enough that a hundred of them overflow the 96K-char cap. */
   const longItems = (domain: string, n: number) =>
     Array.from({ length: n }, (_, i) => ({
@@ -1343,7 +1350,7 @@ describe("the escape legend survives the size cap", () => {
     expect(read).toContain(ZWSP_LITERAL);
     expect(legends(read)).toBe(1);
 
-    mcp.reset().on(RECENT, {
+    mcp.reset().on(ROOMS, []).on(RECENT, {
       items: [{ atom_id: "a1", content: "x", domain: ZWSP_NAME }],
       next_cursor: null,
     });
@@ -1366,6 +1373,11 @@ describe("the escape legend survives the size cap", () => {
  * render.ts unit) actually wires an escaped author name to the legend.
  */
 describe("the escape legend cannot be suppressed or faked by an author name (review round 2, issue #66)", () => {
+  // Unscoped pages, no rooms: see the size-cap block above.
+  beforeEach(() => {
+    mcp.on(ROOMS, []);
+  });
+
   it("an author name equal to the legend's own wording does not suppress the legend an escaped domain needs", async () => {
     mcp.on(READ, {
       items: [
@@ -1413,6 +1425,11 @@ describe("the escape legend cannot be suppressed or faked by an author name (rev
 });
 
 describe("the escape legend also fires for an escaped author name", () => {
+  // Unscoped pages, no rooms: see the size-cap block above.
+  beforeEach(() => {
+    mcp.on(ROOMS, []);
+  });
+
   const AUTHOR_ZWSP_NAME = "sigma\u200b";
   const AUTHOR_ZWSP_LITERAL = '"sigma\\u200b"';
 

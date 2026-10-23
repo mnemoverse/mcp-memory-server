@@ -185,7 +185,8 @@ describe("memory_list_recent", () => {
       next_cursor: null,
     };
     for (const asked of [1, 3, 11, 100]) {
-      mcp.reset().on("POST /memory/recent", reply);
+      // Unscoped: the page also lists the rooms it did not search (none).
+      mcp.reset().on("POST /memory/recent", reply).on("GET /memory/rooms", []);
       await mcp.callText("memory_list_recent", { limit: asked });
 
       const sent = mcp.requestTo("POST /memory/recent").body as { limit?: number };
@@ -239,7 +240,11 @@ describe("a domain crosses the handler untouched", () => {
     // what this case checks: the REQUEST must omit `domain` for an empty
     // input string, and the item needs a domain only to satisfy memory_read's
     // item guard so the call completes.
-    mcp.on("POST /memory/read", { items: [{ atom_id: "a1", content: "hit", domain: "general" }] });
+    // An empty domain IS unscoped, so the hit page also lists the rooms it
+    // did not search (none here).
+    mcp
+      .on("POST /memory/read", { items: [{ atom_id: "a1", content: "hit", domain: "general" }] })
+      .on("GET /memory/rooms", []);
     await mcp.callText("memory_read", { query: "q", domain: "" });
     expect(mcp.requestTo("POST /memory/read").body).not.toHaveProperty("domain");
   });

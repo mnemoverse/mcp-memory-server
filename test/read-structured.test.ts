@@ -40,11 +40,16 @@ const READ = "POST /memory/read";
 const STATS = "GET /memory/stats";
 const ROOMS = "GET /memory/rooms";
 
-/** One live room, in the shape core returns (mirrors test/handlers.test.ts). */
+/** One live room, with every field core's RoomListItemSchema sends: a row
+ *  without `role` is dropped from `rooms_not_searched.rooms`, as it is from
+ *  memory_list_rooms's `rooms`. */
 const ROOM = {
   room_id: "room_01ABC",
   name: "me-and-olya",
   address: "xroom:room_01ABC",
+  role: "member",
+  scope: "read_write",
+  archived: false,
 };
 
 describe("memory_read: tools/list carries the output schema", () => {
@@ -61,10 +66,14 @@ describe("memory_read: tools/list carries the output schema", () => {
       };
       required?: string[];
     };
-    // The top-level shape has exactly one field, `items`, and it is required
-    // (never optional: a memory_read answer always carries a list, possibly
-    // empty).
-    expect(Object.keys(schema.properties ?? {})).toEqual(["items"]);
+    // `items` is required (a memory_read answer always carries a list,
+    // possibly empty). `rooms_not_searched` was added in a MINOR, which may
+    // add output fields (CHANGELOG), and is optional: absent on a scoped read
+    // and for a caller with no rooms.
+    expect(Object.keys(schema.properties ?? {})).toEqual([
+      "items",
+      "rooms_not_searched",
+    ]);
     expect(schema.required).toEqual(["items"]);
 
     expect(schema.properties?.items?.type).toBe("array");
@@ -84,10 +93,13 @@ describe("memory_read: tools/list carries the output schema", () => {
 
 describe("memory_read: structuredContent, ported from the connector's item shape", () => {
   it("one item with only atom_id/content/domain (atom_7 is not a UUID, OD-7) carries exactly those three keys", async () => {
-    mcp.on(READ, {
-      items: [{ atom_id: "atom_7", content: "Rotations preserve symmetry.", domain: "arc" }],
-      search_time_ms: 12,
-    });
+    // No rooms, so the unscoped hit carries no `rooms_not_searched` either.
+    mcp
+      .on(READ, {
+        items: [{ atom_id: "atom_7", content: "Rotations preserve symmetry.", domain: "arc" }],
+        search_time_ms: 12,
+      })
+      .on(ROOMS, []);
 
     const result = await mcp.call("memory_read", { query: "rotation patterns" });
 
@@ -114,7 +126,7 @@ describe("memory_read: structuredContent on the two empty branches", () => {
     expect(result.structuredContent).toEqual({ items: [] });
   });
 
-  it("a filtered empty read (since/until/exclude_author) carries {items: []} with the unchanged filtered-copy text", async () => {
+  it("a filtered empty read (since/until/exclude_author) carries {items: []} and the room it did not search, with the unchanged filtered-copy text", async () => {
     mcp.on(READ, { items: [] }).on(ROOMS, [ROOM]);
 
     const result = await mcp.call("memory_read", {
@@ -123,7 +135,14 @@ describe("memory_read: structuredContent on the two empty branches", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toEqual({ items: [] });
+    expect(result.structuredContent).toEqual({
+      items: [],
+      rooms_not_searched: {
+        state: "live",
+        rooms: [ROOM],
+        note: expect.stringContaining('domain="xroom:room_01ABC"'),
+      },
+    });
     expect(result.text).toContain(
       "Nothing in your own domains matches within the given time/author filters.",
     );

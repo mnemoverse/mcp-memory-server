@@ -56,6 +56,34 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`memory_read` and `memory_list_recent` name the shared rooms they did not
+  search, as data and on a hit too.** Both declare a new optional output field,
+  `rooms_not_searched: {state, rooms?, note}`, present only on a call without
+  `domain` when the caller has rooms or the room list could not be checked.
+  `state` is `live` (the rooms listed can be read by passing an address as
+  `domain`), `archived-only` or `unknown`; `rooms` carries the live rooms in
+  memory_list_rooms's row shape (the two now share one schema and one row
+  builder, so memory_list_rooms's `tools/list` entry is unchanged); `note` is
+  the disclosure the text ends with. A scoped call, and a caller with no rooms,
+  get no field. Why: the disclosure lived in the text only, and only on an
+  empty result. A client that hands the model `structuredContent` instead of
+  the text (Claude Code, observed 2026-10-23) got `{"items":[]}` from an empty
+  unscoped read and nothing else, while twenty live rooms held the answer.
+  Room content is still NOT searched or mixed into the result; whether it
+  should be is a separate decision.
+
+### Changed
+
+- **An unscoped `memory_read` hit and an unscoped `memory_list_recent` page now
+  end with the same room disclosure an empty result already carried.** A match
+  in your own domains says nothing about what a room holds.
+- **One added read-only probe:** `GET /memory/rooms` once per unscoped call
+  that returns results, issued after the read succeeds (an empty unscoped
+  result already made it, and a failed read still makes none). It spends rate
+  budget like any read.
+
 ## [0.15.4] — 2026-10-22
 
 ### Changed
