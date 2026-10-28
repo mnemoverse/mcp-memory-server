@@ -73,6 +73,18 @@ git history and the GitHub releases are the record.
   user settled on before, or a request to do something like last time. It
   still says when the tool applies and when it does not, with no instruction to
   the model, in line with the directory rules quoted in src/teaching.ts.
+- **Three refusals name the next step.** With no key configured, and with the
+  docs' example key, the refusal now also names the hosted connector
+  (https://mcp.mnemoverse.com/mcp), which signs in through the browser and
+  needs no key. A 429 that waiting cannot clear now says that the Pro and Team
+  plans raise these limits, links the pricing page, and no longer says "its
+  subscription is blocking writes", which told the user neither what to do nor
+  where. Plan names only, no prices.
+- **Console links in those refusals carry `reason` and `surface`**
+  (`?reason=missing_key|placeholder_key|quota&surface=npm|remote`), so a visit
+  from a refusal can be told apart from any other. The console ignores
+  parameters it does not use. Pinned in test/refusal-next-step.test.ts,
+  test/errors-keyless.test.ts and test/errors.test.ts.
 
 ## [0.16.0] — 2026-10-23
 
