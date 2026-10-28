@@ -56,6 +56,24 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`memory_read` is kept loaded up front in Claude Code.** Its tools/list
+  entry carries `_meta: {"anthropic/alwaysLoad": true}`. Claude Code puts MCP
+  tools behind tool search by default, so at the start of a task the read could
+  be out of context entirely; this flag (Claude Code 2.1.285,
+  https://code.claude.com/docs/en/mcp.md) opts one tool out. Only `memory_read`
+  carries it; every other tool stays behind search. Clients that do not know
+  the key ignore `_meta`. Pinned in test/always-load.test.ts.
+
+### Changed
+
+- **`memory_read`'s description names the moments a read applies to:**
+  resuming work in a familiar codebase, choosing a library or approach the
+  user settled on before, or a request to do something like last time. It
+  still says when the tool applies and when it does not, with no instruction to
+  the model, in line with the directory rules quoted in src/teaching.ts.
+
 ## [0.16.0] — 2026-10-23
 
 A MINOR: it adds an output field to two tools.
