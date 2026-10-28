@@ -38,11 +38,4 @@ describe("anthropic/alwaysLoad on tools/list", () => {
     const flagged = tools.filter((t) => t._meta?.[FLAG] !== undefined).map((t) => t.name);
     expect(flagged).toEqual(["memory_read"]);
   });
-
-  it("memory_read's description names the moments a read applies to", async () => {
-    const { tools } = await mcp.client.listTools();
-    const description = tools.find((t) => t.name === "memory_read")?.description ?? "";
-    expect(description).toMatch(/resuming work in a familiar codebase/);
-    expect(description).toMatch(/like last time/);
-  });
 });

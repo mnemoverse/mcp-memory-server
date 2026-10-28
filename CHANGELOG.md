@@ -64,15 +64,8 @@ git history and the GitHub releases are the record.
   be out of context entirely; this flag (Claude Code 2.1.285,
   https://code.claude.com/docs/en/mcp.md) opts one tool out. Only `memory_read`
   carries it; every other tool stays behind search. Clients that do not know
-  the key ignore `_meta`. Pinned in test/always-load.test.ts.
-
-### Changed
-
-- **`memory_read`'s description names the moments a read applies to:**
-  resuming work in a familiar codebase, choosing a library or approach the
-  user settled on before, or a request to do something like last time. It
-  still says when the tool applies and when it does not, with no instruction to
-  the model, in line with the directory rules quoted in src/teaching.ts.
+  the key ignore `_meta`. No tool text changes: the flag is metadata, and the
+  descriptions stay as reviewed. Pinned in test/always-load.test.ts.
 
 ## [0.16.0] — 2026-10-23
 
