@@ -73,9 +73,12 @@ describe("no key configured at all", () => {
     expect(res.text).toBe(
       "Mnemoverse: no API key is configured, so this tool cannot run. Tell the " +
         "user to set MNEMOVERSE_API_KEY in their MCP client config — a free key " +
-        "takes about 30 seconds at https://console.mnemoverse.com/dashboard/keys " +
-        "and starts with mk_live_. Do not retry until it is set; every memory " +
-        "tool will fail the same way until then.",
+        "takes about 30 seconds at " +
+        "https://console.mnemoverse.com/dashboard/keys?reason=missing_key&surface=npm " +
+        "and starts with mk_live_. If their client can sign in through a " +
+        "browser, the hosted connector at https://mcp.mnemoverse.com/mcp needs " +
+        "no key at all. Do not retry until one of these is set up; every " +
+        "memory tool will fail the same way until then.",
     );
   });
 

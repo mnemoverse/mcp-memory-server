@@ -12,7 +12,14 @@ import { registerMemoryResources } from "./resources.js";
 // wire echo — see the header of src/errors.ts for why, and for what each status
 // actually means in this engine. So does a 2xx whose body this client cannot
 // parse, which is a third case and not a variant of either of the other two.
-import { ApiError, NetworkError, UnreadableBodyError } from "./errors.js";
+import {
+  ApiError,
+  HOSTED_MCP_URL,
+  KEYS_URL,
+  labelledConsoleUrl,
+  NetworkError,
+  UnreadableBodyError,
+} from "./errors.js";
 
 // Version is read at runtime from package.json so there is exactly one place
 // to bump on each release. Works both from `dist/` during local dev and from
@@ -200,12 +207,19 @@ async function apiFetch<T = unknown>(
     // The one failure that needs no request to diagnose — and the only one
     // where the fix is "set the variable" rather than "replace its value".
     // Kept distinct from the 401 sentence for exactly that reason.
+    // Two ways forward, both named: a free key for this package, or the
+    // hosted connector, which signs in through the browser and needs no key.
+    // The console link carries reason and surface so a visit from here can be
+    // told apart from any other.
     throw new Error(
       "Mnemoverse: no API key is configured, so this tool cannot run. Tell the " +
         "user to set MNEMOVERSE_API_KEY in their MCP client config — a free key " +
-        "takes about 30 seconds at https://console.mnemoverse.com/dashboard/keys " +
-        "and starts with mk_live_. Do not retry until it is set; every memory " +
-        "tool will fail the same way until then.",
+        "takes about 30 seconds at " +
+        `${labelledConsoleUrl(KEYS_URL, "missing_key", "npm")} ` +
+        "and starts with mk_live_. If their client can sign in through a " +
+        `browser, the hosted connector at ${HOSTED_MCP_URL} needs no key at ` +
+        "all. Do not retry until one of these is set up; every memory tool " +
+        "will fail the same way until then.",
     );
   }
   if (PLACEHOLDER_KEY_REFUSAL !== undefined) {

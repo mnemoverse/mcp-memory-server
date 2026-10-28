@@ -35,7 +35,7 @@
 // a config-only guard that otherwise has nothing to do with request bodies,
 // but needs the same console URL a 401 already points at (src/errors.ts) and
 // is documented at its own definition rather than here.
-import { KEYS_URL } from "./errors.js";
+import { HOSTED_MCP_URL, KEYS_URL, labelledConsoleUrl } from "./errors.js";
 
 export interface ReadArgs {
   query: string;
@@ -233,10 +233,13 @@ export function refusePlaceholderKey(
       "still the example value from the documentation, not a real key. " +
       "Nothing was sent: this client refuses the call instead. This is the " +
       "user's configuration, not a fault of the key, the network or the " +
-      `service. Tell them to create a key at ${KEYS_URL}, put it in the ` +
-      "MCP client config in place of the placeholder, and restart the MCP " +
-      "server. Do not retry until then; every memory tool will fail the " +
-      "same way until it is replaced.",
+      "service. Tell them to create a key at " +
+      `${labelledConsoleUrl(KEYS_URL, "placeholder_key", "npm")}, put it in ` +
+      "the MCP client config in place of the placeholder, and restart the " +
+      "MCP server. If their client can sign in through a browser, the " +
+      `hosted connector at ${HOSTED_MCP_URL} needs no key at all. Do not ` +
+      "retry until then; every memory tool will fail the same way until it " +
+      "is replaced.",
     startupLog:
       "Mnemoverse: startup key check SKIPPED, and nothing was sent. " +
       "MNEMOVERSE_API_KEY is still the example value from the " +

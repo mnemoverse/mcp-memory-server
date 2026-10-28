@@ -690,6 +690,14 @@ describe("a 429 says whether waiting helps — because sometimes it does not", (
     expect(res.text).toContain("Do not retry");
     expect(res.text).toContain("https://console.mnemoverse.com/dashboard/usage");
     expect(res.text).not.toContain("AT MOST ONE more attempt");
+    // The next step is named: which plans raise the limit, where to compare
+    // them, and a usage link labelled with why and from where the user came.
+    expect(res.text).toContain("the Pro and Team plans raise these limits");
+    expect(res.text).toContain("https://mnemoverse.com/pricing");
+    expect(res.text).toContain(
+      "https://console.mnemoverse.com/dashboard/usage?reason=quota&surface=npm",
+    );
+    expect(res.text).not.toContain("subscription is blocking writes");
 
     // The stubbed body itself carries the same URL, and the raw echo is
     // appended below every guidance — so a bare toContain would stay green

@@ -88,6 +88,37 @@ export const KEYS_URL = "https://console.mnemoverse.com/dashboard/keys";
  *  cannot fix is resolved. Same URL the engine puts in its own 429 bodies. */
 const USAGE_URL = "https://console.mnemoverse.com/dashboard/usage";
 
+/** The hosted connector, which signs in through the browser and needs no
+ *  key. Mirrors the `remotes[].url` in src/configs/source.json; a refusal
+ *  about a missing or example key names it as the keyless alternative. */
+export const HOSTED_MCP_URL = "https://mcp.mnemoverse.com/mcp";
+
+/** The public plans page a quota refusal names alongside the usage page. */
+const PRICING_URL = "https://mnemoverse.com/pricing";
+
+/**
+ * A console link that says why the user was sent and from where: `reason`
+ * (missing_key, placeholder_key, quota) and `surface` (npm for this package,
+ * remote for the hosted connector). The console ignores parameters it does
+ * not use, so the link works the same either way; the labels make a visit
+ * countable by cause. A URL that does not parse is returned unchanged rather
+ * than thrown on, because a refusal must always be printable.
+ */
+export function labelledConsoleUrl(
+  url: string,
+  reason: string,
+  surface: "npm" | "remote",
+): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("reason", reason);
+    u.searchParams.set("surface", surface);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 /** The base URL a user is sent back to when theirs is aimed somewhere wrong.
  *  Mirrors `DEFAULT_API_URL` in src/index.ts and is duplicated on purpose: this
  *  module is imported BY index.ts, so reading the value from there would be a
@@ -782,11 +813,19 @@ function explain429(f: ApiFailure, env: ErrorEnvelope, wording: ResolvedWording)
     );
   }
   if (env.retryable === false) {
+    // Names the plans that raise the limit and where to compare them: this
+    // refusal is the moment a user is closest to upgrading, and "the
+    // subscription is blocking writes" told them neither what to do nor
+    // where. Plan names only, no prices: prices live on the pricing page.
+    const surface = wording.serverNoun === "this connector" ? "remote" : "npm";
     return (
       "Mnemoverse: refused for quota, not for speed (429). Waiting will NOT " +
-      "clear this one — the account is at its daily limit, at its stored-memory " +
-      "limit, or its subscription is blocking writes. Do not retry. Tell the " +
-      `user what the detail below says and point them at ${USAGE_URL}.`
+      "clear this one: the account is at its daily limit or its stored-memory " +
+      "limit, or its plan or billing status is holding writes. Do not retry. " +
+      "Tell the user what the detail below says, and that the Pro and Team " +
+      `plans raise these limits (plans: ${PRICING_URL}). The usage page ` +
+      `${labelledConsoleUrl(USAGE_URL, "quota", surface)} shows which limit ` +
+      "was hit and where to upgrade."
     );
   }
   return (
