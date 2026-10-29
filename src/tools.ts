@@ -37,6 +37,7 @@ import {
   readScopeNote,
   scopeLabel,
   type ReadScope,
+  type RoomSummary,
 } from "./scope.js";
 import {
   graphRequestBody,
@@ -47,6 +48,7 @@ import {
   type WriteAuthor,
 } from "./requests.js";
 import {
+  DOMAIN_ESCAPE_LEGEND,
   exactLiteral,
   formatDomainList,
   MAX_DOMAIN_LITERAL,
@@ -175,8 +177,12 @@ export function capResult(
   // 1/5/20 returned 6/7/4 items), which this release's own top_k description
   // already admits. One surface must not recommend the knob another refutes.
   moreHint = "Use a more specific query to see all results.",
+  // Characters the caller appends AFTER the cap (the room note that ends an
+  // unscoped page), reserved here so the page plus that tail still fits.
+  // 0, the default, leaves every existing cut exactly where it was.
+  tail = 0,
 ): string {
-  if (text.length <= MAX_RESULT_CHARS) return text;
+  if (text.length + tail <= MAX_RESULT_CHARS) return text;
   // `moreHint` lets no-input tools (the discovery lists) give accurate truncation
   // guidance instead of the read-tool default (which points at a query control a
   // repeated no-arg call cannot use). Existing callers keep the default message.
@@ -190,7 +196,7 @@ export function capResult(
   const hint = [...moreHint].slice(0, MAX_HINT_CODE_POINTS).join("");
   const suffix = `\n\n[…truncated to fit the 25K token limit. ${hint}]`;
   const reserve = Math.max(200, suffix.length);
-  let truncated = text.slice(0, MAX_RESULT_CHARS - reserve);
+  let truncated = text.slice(0, Math.max(0, MAX_RESULT_CHARS - reserve - tail));
   const lastCode = truncated.charCodeAt(truncated.length - 1);
   if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
     truncated = truncated.slice(0, -1);
@@ -428,6 +434,160 @@ const MEMORY_ITEM_OUTPUT = {
       "Sanitized AGENT identity of the writer (never the human principal) — attribution in shared rooms.",
     ),
 };
+
+/**
+ * The room-row shape of memory_list_rooms's `outputSchema`, shared with the
+ * `rooms_not_searched` field below so one room reads the same on every
+ * surface that lists it. A raw shape, like MEMORY_ITEM_OUTPUT, so
+ * memory_list_rooms's emitted JSON schema stays byte-identical to what it was
+ * when the shape was written inline there.
+ */
+const ROOM_ROW_OUTPUT = {
+  room_id: z.string().describe("The room's id (room_...)."),
+  name: z.string().optional().describe("The room name."),
+  address: z
+    .string()
+    .describe("Domain address (xroom:<id>); pass as `domain` on read/write."),
+  role: z.string().describe("'owner' or 'member'."),
+  scope: z.string().optional().describe("'read' or 'read_write'."),
+  archived: z.boolean().describe("True if archived (owned rooms only)."),
+};
+
+interface StructuredRoomRow {
+  room_id: string;
+  address: string;
+  role: string;
+  scope?: string;
+  archived: boolean;
+  name?: string;
+}
+
+/**
+ * Room records as `structuredContent` rows, under the rules memory_list_rooms
+ * states at its call site: room_id/address/role/scope through safeInline (with
+ * the xroom:<room_id> address fallback), `name` only where the text can print
+ * it exactly, and a row missing room_id, address or role DROPPED rather than
+ * carried with fabricated empty strings. One function so a room cannot be kept
+ * by one surface and dropped by another. `dropped` is returned, not logged:
+ * each caller names itself in its own stderr line.
+ */
+function structuredRoomRows(list: readonly RoomSummary[]): {
+  rows: StructuredRoomRow[];
+  dropped: number;
+} {
+  const rows: StructuredRoomRow[] = [];
+  let dropped = 0;
+  for (const r of list) {
+    const roomId = safeInline(r?.room_id);
+    const address =
+      safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
+    const role = safeInline(r?.role);
+    const scope = safeInline(r?.scope);
+    if (!roomId || !address || !role) {
+      dropped += 1;
+      continue;
+    }
+    const name =
+      typeof r?.name === "string" && exactLiteral(r.name, MAX_DOMAIN_LITERAL)
+        ? structuredText(r.name, MAX_DOMAIN_LITERAL)
+        : undefined;
+    rows.push({
+      room_id: roomId,
+      address,
+      role,
+      ...(scope ? { scope } : {}),
+      archived: Boolean(r?.archived),
+      ...(name === undefined ? {} : { name }),
+    });
+  }
+  return { rows, dropped };
+}
+
+/**
+ * `rooms_not_searched` on memory_read and memory_list_recent: the room
+ * disclosure an UNSCOPED call ends its text with, as data.
+ *
+ * Until this field existed the disclosure lived in the text only, so a client
+ * that hands the model `structuredContent` rather than the text (Claude Code
+ * does, observed 2026-10-23) got `{"items":[]}` from an empty unscoped read
+ * and nothing else: no rooms, and no hint that any existed. Twenty live rooms
+ * held the answer that session was looking for.
+ *
+ * Absent on a scoped call, which searched exactly the store it named, and
+ * absent when the caller has no rooms: the one state with nothing to
+ * disclose, and the one where `RoomScope` carries no `note` either. No archived
+ * COUNT, for the reason the live note has none (src/scope.ts): core filters
+ * archived rooms out of the member query, so a count would only ever be true
+ * for an owner.
+ */
+const ROOMS_NOT_SEARCHED_OUTPUT = z
+  .object({
+    state: z
+      .enum(["live", "archived-only", "unknown"])
+      .describe(
+        "'live': the rooms listed can be read by passing an address as `domain`. 'archived-only': every room you have is archived and refuses reads. 'unknown': the room list could not be checked, so whether any room went unsearched is not known.",
+      ),
+    rooms: z
+      .array(z.object(ROOM_ROW_OUTPUT))
+      .optional()
+      .describe(
+        "The live rooms this call did not search; present only when state is 'live'. A row missing room_id, address or role is omitted here and still named in `note`.",
+      ),
+    note: z.string().describe("The same disclosure the text ends with."),
+  })
+  .optional()
+  .describe(
+    "Present only on a call WITHOUT `domain`, when you have shared rooms or they could not be checked: rooms are separate stores that call did not search.",
+  );
+
+/**
+ * What capResult must reserve on a result page for what is appended after the
+ * cap: the room note, plus the escape legend when a name on the page would
+ * print escaped and the note does not already carry the legend
+ * (withEscapeLegendAt adds at most one). Before this, the legend alone could
+ * push a capped page past MAX_RESULT_CHARS. Conservative: a name the cap then
+ * removes still reserved its legend, which costs the page 275 characters,
+ * never the cap.
+ */
+function capTail(
+  roomNote: string,
+  names: readonly (string | null | undefined)[],
+): number {
+  const legendPending =
+    !roomNote.includes(DOMAIN_ESCAPE_LEGEND) &&
+    names.some(
+      (n) => exactLiteral(n, MAX_DOMAIN_TAG_LITERAL)?.escaped === true,
+    );
+  return roomNote.length + (legendPending ? DOMAIN_ESCAPE_LEGEND.length : 0);
+}
+
+/**
+ * The `rooms_not_searched` entry for one call's {@link ReadScope}, spread into
+ * `structuredContent`: `{}` where the field must be absent, so every return
+ * site can spread it unconditionally.
+ */
+function roomsNotSearchedField(
+  scope: ReadScope | undefined,
+  tool: string,
+): { rooms_not_searched?: z.infer<typeof ROOMS_NOT_SEARCHED_OUTPUT> } {
+  if (scope?.kind !== "own-domains" || scope.rooms.state === "none") return {};
+  const rooms = scope.rooms;
+  // The note opens with the blank line that separates it from the text it is
+  // appended to; as a value it stands alone.
+  const note = rooms.note.trim();
+  if (rooms.state !== "live") {
+    return { rooms_not_searched: { state: rooms.state, note } };
+  }
+  const { rows, dropped } = structuredRoomRows(rooms.live);
+  if (dropped > 0) {
+    console.error(
+      `Mnemoverse: ${tool} dropped ${dropped} malformed room ` +
+        `row${dropped === 1 ? "" : "s"} from structuredContent.rooms_not_searched ` +
+        `(room_id, address or role missing or not usable; still named in the text).`,
+    );
+  }
+  return { rooms_not_searched: { state: "live", rooms: rows, note } };
+}
 
 /**
  * Register the eleven tools on `server`. Call once per server instance, before
@@ -862,7 +1022,7 @@ export function registerMemoryTools(
           .string()
           .optional()
           .describe(
-            "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms.",
+            "Restrict the search to one domain namespace (e.g. 'project:acme'). Omitting it searches your OWN domains — it does NOT include shared rooms, which are separate stores: to search a room, pass its address here (e.g. 'xroom:room_01ABC'). Find room addresses with memory_list_rooms, or in `rooms_not_searched`, which an answer without `domain` carries when you have rooms.",
           ),
         order_by: z
           .enum(["relevance", "recency"])
@@ -918,6 +1078,7 @@ export function registerMemoryTools(
         items: z
           .array(z.object(MEMORY_ITEM_OUTPUT))
           .describe("Matching memories, ordered per order_by."),
+        rooms_not_searched: ROOMS_NOT_SEARCHED_OUTPUT,
       },
       annotations: {
         title: "Search Memories",
@@ -995,7 +1156,8 @@ export function registerMemoryTools(
         // the truthful answer is "nothing new for these filters" (the feed's
         // filtered head uses the same sentence; no stats probe, no broaden
         // hint). Unscoped, it also has to name the rooms it never looked in.
-        const scopeNote = readScopeNote(await probeScope(searched));
+        const scope = await probeScope(searched);
+        const scopeNote = readScopeNote(scope);
         // The scope is IN the sentence, not appended after it. This branch
         // was already the honest one in 0.8.0 — it names its filters — and
         // it is the model the feed's copy now follows.
@@ -1010,7 +1172,7 @@ export function registerMemoryTools(
               scopeNote,
             searched,
           ),
-          { items: [] },
+          { items: [], ...roomsNotSearchedField(scope, "memory_read") },
         );
       }
 
@@ -1056,7 +1218,10 @@ export function registerMemoryTools(
         // need one. So there was no input on which the wrapper fired.
         // Pinned by "the plain-empty read is legended by its notes" in
         // test/handlers.test.ts.
-        return structured(text, { items: [] });
+        return structured(text, {
+          items: [],
+          ...roomsNotSearchedField(scope, "memory_read"),
+        });
       }
 
       // Every item must carry the three fields core's MemoryItemSchema always
@@ -1120,14 +1285,31 @@ export function registerMemoryTools(
       // already gets. `rawAuthorName` is the SAME raw value `formatAuthorTag`
       // quoted, so this recomputation finds the same literal that is
       // actually on the page.
+      //
+      // An UNSCOPED read names the rooms it did not search on a HIT too, not
+      // only on a miss: a match in your own domains says nothing about what a
+      // room holds, and the room is where the answer was the day this was
+      // added. Probed after the read, so a failed read spends no extra GET.
+      // The cap reserves the note's length, so the page plus the note still
+      // fits. The note goes INSIDE the legend call: it already carries the
+      // legend when a room name it prints is escaped, withEscapeLegendAt adds
+      // none when one is present, and so an answer has one legend, at its end.
+      const scope = searched ? undefined : await probeScope(searched);
+      const roomNote = scope ? readScopeNote(scope) : "";
+      const legendNames = [
+        ...items.map((it) => it?.domain),
+        ...items.map((it) => rawAuthorName(it?.provenance)),
+      ];
       return structured(
         withEscapeLegendAt(
           MAX_DOMAIN_TAG_LITERAL,
-          capResult(text),
-          ...items.map((it) => it?.domain),
-          ...items.map((it) => rawAuthorName(it?.provenance)),
+          capResult(text, undefined, capTail(roomNote, legendNames)) + roomNote,
+          ...legendNames,
         ),
-        { items: items.map(structuredItem) },
+        {
+          items: items.map(structuredItem),
+          ...roomsNotSearchedField(scope, "memory_read"),
+        },
       );
     },
   );
@@ -1166,6 +1348,13 @@ export function registerMemoryTools(
    * given client is unmeasured, and calibrating it is follow-up work. It does NOT
    * touch MAX_RESULT_CHARS, which is shared with memory_read and every other
    * surface and remains the final backstop after this budget has done its work.
+   *
+   * THE ROOM NOTE IS OUTSIDE IT. An UNSCOPED page ends with the rooms it did
+   * not cover, and that note is known only after the loop, because the room
+   * list is fetched only once the feed has answered. So a page can exceed this
+   * budget by the note: at most about 2,200 characters (five room names of up
+   * to 256 characters, their addresses, fixed text and the escape legend).
+   * MAX_RESULT_CHARS still holds, because capResult reserves the note.
    */
   const LIST_PAGE_CHAR_BUDGET = 40_000;
 
@@ -1202,7 +1391,7 @@ export function registerMemoryTools(
     "memory_list_recent",
     {
       description:
-        "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them.",
+        "List the NEWEST memories first — no search query needed. Semantic search answers 'what do I know about X'; this answers 'what happened lately': resuming work after a break, catching up on a shared room ('any new messages?'), or reviewing what was saved recently. Pass `since` (your last-seen time) to get only what's new, and page through older entries with the returned cursor. Complete by construction WITHIN ONE SCOPE — nothing is skipped there, unlike a semantic search. A page is also bounded by SIZE, so a page of long entries comes back shorter than `limit` and hands you a cursor for the rest — nothing is dropped, and following the cursor is how you get it. To catch up on a shared room you MUST pass its address as `domain`: rooms are separate stores and an unscoped call never covers them, though it names the ones you have (`rooms_not_searched`).",
       inputSchema: {
         domain: z
           .string()
@@ -1268,6 +1457,7 @@ export function registerMemoryTools(
           .describe(
             "Pass back as cursor for the next (older) page; null = listing complete. Absent when the service sent a continuation token this client will not pass on; the text then says the token could not be displayed.",
           ),
+        rooms_not_searched: ROOMS_NOT_SEARCHED_OUTPUT,
       },
       annotations: {
         title: "List Recent Memories",
@@ -1531,7 +1721,8 @@ export function registerMemoryTools(
         // head-selection fix, 2026-08-08). Decided by the same truthiness the
         // request used: an empty-string cursor never reaches the wire
         // (src/requests.ts), so it may not pick the sentence either.
-        const scopeNote = readScopeNote(await probeScope(searched));
+        const scope = await probeScope(searched);
+        const scopeNote = readScopeNote(scope);
         const where = scopeLabel(searched);
         const head = cursor
           ? `Nothing further in ${where} past this cursor — entries may have been ` +
@@ -1554,9 +1745,25 @@ export function registerMemoryTools(
             head + futureSinceNote(since, Date.now()) + scopeNote,
             searched,
           ),
-          { items: [], next_cursor: null },
+          {
+            items: [],
+            next_cursor: null,
+            ...roomsNotSearchedField(scope, "memory_list_recent"),
+          },
         );
       }
+      // An UNSCOPED page names the rooms it did not cover, as memory_read's
+      // result page does and for the same reason: "what happened lately" in
+      // your own domains is not what happened in the rooms. Every page,
+      // continuations included, so the field's absence keeps meaning "no rooms".
+      // Cap and legend as on memory_read's result page: the cap reserves the
+      // note, and the note sits inside the legend call so there is one legend.
+      const scope = searched ? undefined : await probeScope(searched);
+      const roomNote = scope ? readScopeNote(scope) : "";
+      const legendNames = [
+        ...items.map((it) => it?.domain),
+        ...items.map((it) => rawAuthorName(it?.provenance)),
+      ];
       return structured(
         // The page body comes from src/render.ts; the escape legend is
         // applied HERE, to the CAPPED text. formatRecentPage used to append
@@ -1582,12 +1789,13 @@ export function registerMemoryTools(
             // than the whole budget: the case `limit` cannot fix and the
             // global cap has to.
             "Lower `limit` or add a `domain` for smaller pages.",
-          ),
-          ...items.map((it) => it?.domain),
-          ...items.map((it) => rawAuthorName(it?.provenance)),
+            capTail(roomNote, legendNames),
+          ) + roomNote,
+          ...legendNames,
         ),
         {
           items: items.map(structuredItem),
+          ...roomsNotSearchedField(scope, "memory_list_recent"),
           // Same field name and meaning as the connector's `next_cursor`
           // (mnemoverse-mcp-remote `memoryListRecentOutput`): the cursor a
           // client can safely pass back to continue, null when the feed is
@@ -1657,7 +1865,7 @@ export function registerMemoryTools(
         // reads. Nothing time-decays and nothing is auto-deleted: a downvoted
         // memory is OUT-RANKED, and deletion has been administrative-only since
         // 0.9.0. The replacement is the wording that release put on the README.
-        "Report whether memories returned by memory_read were actually helpful. This is a learning signal, not a log: positive feedback raises a memory's ranking so it surfaces faster next time (across all of the user's tools), negative feedback lowers it so other memories out-rank it — nothing is erased and nothing decays with time. Use it after an answer that relied on or rejected memories from memory_read: pass the ids of those memories as memory_ids, with outcome 1 when they helped and -1 when they were wrong or stale. For memories read from a shared room, also pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
+        "Rate memories returned by memory_read to help improve future retrieval ranking. Pass their IDs as memory_ids and an outcome from -1 (unhelpful) to 1 (helpful). Records feedback and updates ranking signals: positive feedback raises a memory's ranking; negative feedback lowers it so other memories out-rank it — nothing is erased. Saved text is not changed or deleted. For memories read from a shared room, pass that room's address as domain; your own memories need no domain. A read-only room member cannot rate the room's memories.",
       // `memory_ids` is the name (2026-09-21): the tool rates memories, which
       // is what every result is (an atom is the engine's word for its smallest
       // unit), and the hosted connector already names the parameter so. The old
@@ -2722,22 +2930,7 @@ export function registerMemoryTools(
         "List the shared memory rooms you can use — the ones you OWN plus the ones you've JOINED — each with the address to pass as `domain` on memory_read, and on memory_write too where your membership scope is read_write; a read-only membership has that write refused. Use this to RE-FIND a room in a new session (e.g. 'what rooms do I have?', 'resume the room with my teammate') instead of having to create or re-join it.",
       inputSchema: {},
       outputSchema: {
-        rooms: z.array(
-          z.object({
-            room_id: z.string().describe("The room's id (room_...)."),
-            name: z.string().optional().describe("The room name."),
-            address: z
-              .string()
-              .describe(
-                "Domain address (xroom:<id>); pass as `domain` on read/write.",
-              ),
-            role: z.string().describe("'owner' or 'member'."),
-            scope: z.string().optional().describe("'read' or 'read_write'."),
-            archived: z
-              .boolean()
-              .describe("True if archived (owned rooms only)."),
-          }),
-        ),
+        rooms: z.array(z.object(ROOM_ROW_OUTPUT)),
       },
       annotations: {
         title: "List rooms",
@@ -2860,39 +3053,11 @@ export function registerMemoryTools(
       // access was not reported. The text keeps its existing per-row
       // degrade; the drop is counted and reported once on stderr, as
       // vault_list and memory_stats report theirs.
-      const roomsStructured: {
-        room_id: string;
-        address: string;
-        role: string;
-        scope?: string;
-        archived: boolean;
-        name?: string;
-      }[] = [];
-      let droppedRooms = 0;
-      for (const r of list) {
-        const roomId = safeInline(r?.room_id);
-        const address =
-          safeInline(r?.address) || (roomId ? `xroom:${roomId}` : "");
-        const role = safeInline(r?.role);
-        const scope = safeInline(r?.scope);
-        if (!roomId || !address || !role) {
-          droppedRooms += 1;
-          continue;
-        }
-        const nameStructured =
-          typeof r?.name === "string" &&
-          exactLiteral(r.name, MAX_DOMAIN_LITERAL)
-            ? structuredText(r.name, MAX_DOMAIN_LITERAL)
-            : undefined;
-        roomsStructured.push({
-          room_id: roomId,
-          address,
-          role,
-          ...(scope ? { scope } : {}),
-          archived: Boolean(r?.archived),
-          ...(nameStructured === undefined ? {} : { name: nameStructured }),
-        });
-      }
+      //
+      // The rules live in structuredRoomRows (top of this file), shared with
+      // memory_read's and memory_list_recent's `rooms_not_searched`.
+      const { rows: roomsStructured, dropped: droppedRooms } =
+        structuredRoomRows(list);
       if (droppedRooms > 0) {
         console.error(
           `Mnemoverse: memory_list_rooms dropped ${droppedRooms} malformed room ` +

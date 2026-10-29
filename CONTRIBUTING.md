@@ -23,7 +23,8 @@ Files that are **generated** (never edit by hand):
 | `docs/configs/claude-code-cli.sh` | `claude mcp add ...` shell command |
 | `server.json` | Official MCP Registry manifest |
 | `manifest.json` | Claude Desktop Extension manifest (the `.mcpb` bundle) |
-| `docs/snippets/claude-code.md` | Markdown partial — Claude Code install (consumed by README + docs site) |
+| `docs/snippets/claude-code-hosted.md` | Markdown partial — Claude Code, hosted server with browser sign-in (consumed by README; ready for the docs site) |
+| `docs/snippets/claude-code.md` | Markdown partial — Claude Code install, local server with an API key (consumed by README + docs site) |
 | `docs/snippets/cursor.md` | Markdown partial — Cursor install |
 | `docs/snippets/claude-desktop.md` | Markdown partial — Claude Desktop install |
 | `docs/snippets/vscode.md` | Markdown partial — VS Code install |
@@ -86,7 +87,7 @@ We deliberately avoid `husky` and `pre-commit` — those would add a dependency 
 `scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 18 artifacts:
 
 1. **9 machine-readable configs** — 7 in `docs/configs/` (Cursor, Claude Desktop, Windsurf, VS Code JSON + 2 deep-link strings + Claude Code CLI shell script), plus two at the repo root: `server.json` for the Official MCP Registry and `manifest.json` for the Claude Desktop Extension bundle. (Smithery's current publish model requires a framework rewrite or a hosted HTTPS endpoint — see the note in `scripts/generate-configs.mjs` where `genSmitheryYaml` used to live.)
-2. **8 Markdown partials** in `docs/snippets/` (Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
+2. **9 Markdown partials** in `docs/snippets/` (Claude Code hosted, Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
 3. **1 in-place rewrite** of the install section in `README.md`, between the `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->` HTML comment markers. The rest of the README is human-prose and is left untouched.
 
 Every count on this page is asserted against `OUTPUTS` by

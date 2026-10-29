@@ -2,30 +2,30 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mnemoverse/mcp-memory-server",
   "title": "Mnemoverse Memory",
-  "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
+  "description": "Hosted agent memory that learns from outcomes, with shared rooms. No key: mcp.mnemoverse.com/mcp",
   "websiteUrl": "https://mnemoverse.com",
   "repository": {
     "url": "https://github.com/mnemoverse/mcp-memory-server",
     "source": "github",
     "id": "1207193530"
   },
-  "version": "0.15.1",
+  "version": "0.16.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mnemoverse/mcp-memory-server",
-      "version": "0.15.1",
+      "version": "0.16.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "MNEMOVERSE_API_KEY",
-          "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
+          "description": "Mnemoverse API key (starts with mk_live_), for this local package only: the hosted server https://mcp.mnemoverse.com/mcp signs in with OAuth and takes no key. Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
           "isRequired": false,
           "format": "string",
           "isSecret": true,
-          "default": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          "placeholder": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         },
         {
           "name": "MNEMOVERSE_API_URL",

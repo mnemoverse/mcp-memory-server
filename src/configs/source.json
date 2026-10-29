@@ -3,8 +3,9 @@
   "name": "mnemoverse",
   "displayName": "Mnemoverse Memory",
   "title": "Mnemoverse Memory",
-  "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
+  "description": "Hosted agent memory that learns from outcomes, with shared rooms. No key: mcp.mnemoverse.com/mcp",
   "websiteUrl": "https://mnemoverse.com",
+  "signupUrl": "https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server",
   "type": "stdio",
   "command": "npx",
   "args": [
@@ -15,7 +16,7 @@
     "MNEMOVERSE_API_KEY": {
       "value": "mk_live_YOUR_KEY",
       "placeholder": "mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
+      "description": "Mnemoverse API key (starts with mk_live_), for this local package only: the hosted server https://mcp.mnemoverse.com/mcp signs in with OAuth and takes no key. Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
       "required": false,
       "secret": true
     },
@@ -55,6 +56,7 @@
   "mcpb": {
     "$comment": "Fields specific to the Claude Desktop Extension (MCPB) manifest.json. version + identity fields are derived from package.json + the source above; tools[] is derived from tools.json (generated from the built server); only MCPB-specific extras live here.",
     "name": "mnemoverse-memory",
+    "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
     "author": {
       "name": "Mnemoverse",
       "url": "https://github.com/mnemoverse"

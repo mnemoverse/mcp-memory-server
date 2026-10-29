@@ -45,11 +45,15 @@ beforeEach(() => {
 const RECENT = "POST /memory/recent";
 const ROOMS = "GET /memory/rooms";
 
-/** One live room, in the shape core returns (mirrors test/handlers.test.ts). */
+/** One live room, with every field core's RoomListItemSchema sends (see
+ *  test/read-structured.test.ts for why `role` matters here). */
 const ROOM = {
   room_id: "room_01ABC",
   name: "me-and-olya",
   address: "xroom:room_01ABC",
+  role: "member",
+  scope: "read_write",
+  archived: false,
 };
 
 describe("memory_list_recent: tools/list carries the output schema", () => {
@@ -67,9 +71,14 @@ describe("memory_list_recent: tools/list carries the output schema", () => {
       };
       required?: string[];
     };
-    // Exactly two top-level fields; only `items` is required (a
-    // memory_list_recent answer always carries a list, possibly empty).
-    expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["items", "next_cursor"]);
+    // Only `items` is required (a memory_list_recent answer always carries a
+    // list, possibly empty). `rooms_not_searched` was added in a MINOR and is
+    // optional, as on memory_read.
+    expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
+      "items",
+      "next_cursor",
+      "rooms_not_searched",
+    ]);
     // `next_cursor` is optional (OD-12): absent when the service sent a token
     // this client will not pass on; see the case at the end of this file.
     expect(schema.required).toEqual(["items"]);
@@ -241,7 +250,7 @@ describe("memory_list_recent: structuredContent on the zero-result branch", () =
     expect(result.text).toContain("No memories in your own domains yet.");
   });
 
-  it("a watermark with nothing new carries the same shape, with the unchanged 'Nothing new' text", async () => {
+  it("a watermark with nothing new carries the same shape plus the room it did not cover, with the unchanged 'Nothing new' text", async () => {
     mcp.on(RECENT, { items: [] }).on(ROOMS, [ROOM]);
 
     const result = await mcp.call("memory_list_recent", {
@@ -249,7 +258,15 @@ describe("memory_list_recent: structuredContent on the zero-result branch", () =
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toEqual({ items: [], next_cursor: null });
+    expect(result.structuredContent).toEqual({
+      items: [],
+      next_cursor: null,
+      rooms_not_searched: {
+        state: "live",
+        rooms: [ROOM],
+        note: expect.stringContaining('domain="xroom:room_01ABC"'),
+      },
+    });
     expect(result.text).toContain("Nothing new in your own domains since your watermark.");
   });
 });

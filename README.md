@@ -1,6 +1,12 @@
 # Mnemoverse Memory
 
-**Persistent memory for AI agents over MCP.** Tell it a recalled memory helped or misled, and it re-ranks what comes back next. Shared rooms let several agents work from one memory. One key or OAuth across Claude Code, Cursor, VS Code and ChatGPT.
+**Hosted long-term memory for AI agents over MCP.** Two calls cover the basics: `memory_write` saves a memory, and `memory_read` finds it again by a natural-language query. Pass `domain: "user:<id>"` on both to keep each user's memories apart (a namespace inside your account, not a permission boundary). Rating a recalled memory as helpful or misleading re-ranks what comes back next (`memory_feedback`).
+
+**Free plan, no credit card:** 1,000 queries a day (reads, writes and feedback combined), 10,000 atoms of storage, 60 requests a minute. Plans and limits: [mnemoverse.com/pricing](https://mnemoverse.com/pricing)
+
+**Connect** with an OAuth sign-in on the hosted endpoint `https://mcp.mnemoverse.com/mcp`, or run this package locally with an API key. Setup for Claude Code, Claude Desktop, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline, Gemini CLI and ChatGPT is below. Steps for other hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
+
+Shared rooms (beta) let several agents work from one memory.
 
 `@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
@@ -13,15 +19,13 @@
 
 ## What is Mnemoverse Memory?
 
-Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. Mnemoverse stores what your agents learn — decisions, preferences, lessons — and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an API key in a local config, or an OAuth sign-in on the hosted endpoint. Mnemoverse re-ranks recall from outcomes: report that a recalled memory helped and a Rescorla-Wagner update on the prediction error raises it, report that it misled and it sinks — a different mechanism from similarity scoring, usable alongside it.
+Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. It stores what your agents learn (decisions, preferences, lessons) and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an API key in a local config, or an OAuth sign-in on the hosted endpoint.
 
 **What is open source here, and what is not.** This repository, the MCP server, is MIT, and so is the Python SDK. The memory engine they talk to is a hosted service with a free tier. Self-hosting the engine is available on Enterprise plans by agreement, when security or compliance requirements call for it; by default we run it for you.
 
 ## How it compares
 
-Most agent memory today lives in one of three places. Per-tool instruction files — `CLAUDE.md`, `.cursorrules`, `AGENTS.md` — are versioned and readable, but each copy belongs to one repo and one tool, and nothing follows you to the next window. A vector store behind RAG retrieves by similarity, and similarity never changes because advice helped or misled. Local-first memory servers win on privacy and latency, and ask you to run and update the infrastructure yourself. Mnemoverse is the managed, cross-tool option in that landscape: nothing to deploy, one account everywhere, and ranking that moves with reported outcomes. If you need memory inside your own perimeter, a local-first server is the better choice; this one is hosted by default, with Enterprise self-hosting by agreement.
-
-The consolidation stage of the engine — HDBSCAN clustering with Von Restorff protection, so distinctive memories are not absorbed into the average — is designed in and currently switched off on the hosted service; our docs say so rather than hide it.
+Most agent memory today lives in one of three places. Per-tool instruction files (`CLAUDE.md`, `.cursorrules`, `AGENTS.md`) are versioned and readable, each new session reads them again, and a committed file travels with its repository; but a file reaches only the tools that look for its name, so a rule written for Claude Code is not there in a ChatGPT chat. A vector store behind RAG retrieves by similarity, and similarity never changes because advice helped or misled. Local-first memory servers win on privacy and latency, and ask you to run and update the infrastructure yourself. Mnemoverse is the managed, cross-tool option in that landscape: nothing to deploy, one account everywhere, and rating a recalled memory as helpful or misleading re-ranks what comes back next. If you need memory inside your own perimeter, a local-first server is the better choice; this one is hosted by default, with Enterprise self-hosting by agreement.
 
 > ⭐ If Mnemoverse saves you from re-explaining context to your agents, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
@@ -29,13 +33,13 @@ The consolidation stage of the engine — HDBSCAN clustering with Von Restorff p
 
 ### No key: the hosted endpoint
 
-If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
+If your client signs in over OAuth, you do not need a key at all. Create a free account at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) (no credit card), then connect the hosted endpoint.
 
 Claude Code:
 ```bash
-claude mcp add -s user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
+claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
 ```
-Then run `/mcp` in a session, select `mnemoverse` and choose **Authenticate**.
+Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticate**. A session that was already running when the command ran does not load the new server: exit and start `claude` again first.
 
 Cursor, in `.cursor/mcp.json`:
 ```json
@@ -46,7 +50,7 @@ Claude Desktop, Devin Desktop (formerly Windsurf), VS Code and ChatGPT: [Remote 
 
 ### 1. Get a free API key
 
-Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
+Sign up at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server) — takes 30 seconds, no credit card.
 
 **Check the key before you put it in a config.** Both forms ask for the key at a masked prompt and never pass it as a command argument, so it lands neither in your shell history nor in the process list.
 
@@ -76,14 +80,22 @@ In the JSON, `reason` sits inside the `details` object (`details.reason`), next 
 
 ### 2. Connect to your AI tool
 
-The two canonical setups, Claude Code and Cursor. Cursor's button adds the hosted server with a browser sign-in and no key; every setup that takes a key writes it **once, at user scope, covering every project**. Avoid a per-project config file for a key: it lives inside the repository and can be committed with it, and a key belongs outside:
+The two canonical setups, Claude Code and Cursor. Each starts with the hosted server: a browser sign-in and no key. Their key-based setups write the key **once, at user scope, covering every project**; each client further down says where its own config lives. Avoid a per-project config file for a key: it lives inside the repository and can be committed with it, and a key belongs outside:
 
 <!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->
 
-**Claude Code** — add via CLI:
+**Claude Code** — the hosted server, with a browser sign-in. No API key, nothing to install:
 
 ```bash
-claude mcp add mnemoverse -s user \
+claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
+```
+
+Then start Claude Code, run `/mcp`, select `mnemoverse` and choose **Authenticate**. If the command ran inside a Claude Code session (yours, or Claude ran it for you), that session does not load the new server: exit and start `claude` again first.
+
+To run the local server with an API key instead (Node.js 18 or later), put your own key in place of `mk_live_YOUR_KEY`. Use one or the other, not both: they share the name `mnemoverse`.
+
+```bash
+claude mcp add mnemoverse --scope user \
   -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY \
   -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 \
   -- npx -y @mnemoverse/mcp-memory-server@latest
@@ -92,7 +104,7 @@ claude mcp add mnemoverse -s user \
 On Windows (PowerShell), paste the same command as one line — PowerShell does not read the `\` line continuations:
 
 ```powershell
-claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
+claude mcp add mnemoverse --scope user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEMOVERSE_API_URL=https://core.mnemoverse.com/api/v1 -- npx -y @mnemoverse/mcp-memory-server@latest
 ```
 
 **Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:
@@ -101,7 +113,7 @@ claude mcp add mnemoverse -s user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e MNEM
 
 The button writes `{"url": "https://mcp.mnemoverse.com/mcp"}` under `mnemoverse` in `~/.cursor/mcp.json`, the global config that covers every project. Then click **Connect** next to `mnemoverse` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.
 
-To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
+To run the local server with an API key instead, add the JSON below to `~/.cursor/mcp.json`, merging it with any servers already there, and put your own key in place of `mk_live_YOUR_KEY`. Get one at [console.mnemoverse.com](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server). Do not put it in a project-level `.cursor/mcp.json`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name `mnemoverse`.
 
 ```json
 {
@@ -137,7 +149,7 @@ To run the local server with an API key instead, add the JSON below to `~/.curso
     {
       "type": "promptString",
       "id": "mnemoverse-api-key",
-      "description": "Mnemoverse API key (starts with mk_live_). Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
+      "description": "Mnemoverse API key (starts with mk_live_), for this local package only: the hosted server https://mcp.mnemoverse.com/mcp signs in with OAuth and takes no key. Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
       "password": true
     }
   ],
@@ -278,7 +290,7 @@ The test above works because you asked the agent to call the tool. In normal wor
 | `memory_write` | Store a memory — insight, preference, lesson learned |
 | `memory_read` | Search memories by natural language query (optional recency ordering, time bounds, author exclusion) |
 | `memory_list_recent` | List newest memories first — no query; `since`/`until` bounds (inclusive) + cursor paging |
-| `memory_feedback` | Rate memories as helpful or not (improves future recall) |
+| `memory_feedback` | Rate a recalled memory as helpful or misleading, which re-ranks what comes back next |
 | `memory_stats` | Check how many memories stored, which domains exist |
 | `memory_create_room` | Create a shared memory room; its address works as a `domain` on write/read |
 | `memory_invite_to_room` | Mint an invite (code + link) for a room you own; single-use unless `max_uses` allows more |
@@ -334,7 +346,9 @@ saw and diff it against what the server serves today, by version.
   `memory_list_rooms` and `vault_list`, which drop a row with no usable
   identity (`room_id`, `address`, `role`; `alias`, `context`) from the data,
   reported once on stderr, instead of emitting empty strings into required
-  fields.
+  fields; and `memory_read` and `memory_list_recent`, which carry an optional
+  `rooms_not_searched` field (the shared rooms an unscoped call did not
+  search) that the connector's schemas do not declare yet.
 - **Removing or renaming a tool or a tool's input parameter, or dropping or
   renaming a declared annotation field,** is announced one MINOR ahead: the
   tool (or parameter) stays, its description says
@@ -373,7 +387,7 @@ tool list is derived from it.
 
 ## Use cases
 
-The pattern that pays off first is cross-tool continuity: a decision made while pairing in Claude Code is there when you open Cursor an hour later, and the preference you stated in VS Code holds in a ChatGPT session that evening. Teams use shared rooms the same way — one place where an agent's lessons about a codebase accumulate instead of being re-taught per seat. And because recall re-ranks from feedback, the memories that keep proving useful surface first, which matters once a store grows past what anyone curates by hand.
+The pattern that pays off first is cross-tool continuity: a decision made while pairing in Claude Code is there when you open Cursor an hour later, and the preference you stated in VS Code holds in a ChatGPT session that evening. Teams use shared rooms the same way — one place where an agent's lessons about a codebase accumulate instead of being re-taught per seat. And rating a recalled memory as helpful or misleading re-ranks what comes back next, which matters once a store grows past what anyone curates by hand.
 
 Concrete things worth writing:
 
@@ -416,7 +430,7 @@ The retrieval model is published: [arXiv:2603.08965](https://arxiv.org/abs/2603.
 - [Cursor](https://mnemoverse.com/docs/api/cursor) · [VS Code](https://mnemoverse.com/docs/api/vs-code) · [Claude Code](https://mnemoverse.com/docs/api/claude) · [ChatGPT](https://mnemoverse.com/docs/api/chatgpt)
 - [Python SDK](https://mnemoverse.com/docs/api/python-sdk)
 - [API Reference](https://mnemoverse.com/docs/api/reference)
-- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server)
+- [Console (get API key)](https://console.mnemoverse.com/sign-up?utm_source=readme&utm_medium=readme&utm_campaign=mcp-memory-server)
 
 **Background reading**
 
@@ -470,7 +484,7 @@ What each tool sends:
 | `memory_graph` | the `seeds`, plus any of `depth`, `domain`, `min_weight`, `limit` you pass |
 | `memory_stats` / `memory_list_rooms` / `vault_list` | no request body — authenticated GETs |
 
-One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).
+One thing goes out that you did not explicitly request: since 0.8.1, when a search or feed comes back empty, the server sends one or two authenticated read-only GET probes (`/memory/rooms` and/or `/memory/stats`) so the empty answer can say what it did not cover. Since 0.16.0 a search or feed without `domain` that does return results also sends one, to `/memory/rooms`, so the answer can name the shared rooms it did not search. The probes carry your API key and nothing else, change no stored state, and are disclosed in the [CHANGELOG](CHANGELOG.md).
 
 | | |
 |---|---|

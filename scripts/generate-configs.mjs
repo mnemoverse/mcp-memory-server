@@ -329,39 +329,60 @@ function genVscodeDeepLink() {
 }
 
 /**
- * Claude Code CLI command.
+ * Claude Code CLI command for the hosted server: browser sign-in, no key, no
+ * Node.js. One line, so the same text runs in bash and in PowerShell.
  *
- * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args...
+ * Format: claude mcp add --scope user --transport http NAME URL
  *
- * `-s user` is LOAD-BEARING: the CLI's default scope is `local`, which
+ * `--scope user` is LOAD-BEARING for the same reason as in
+ * genClaudeCodeCli() below: without it the server lands in local scope, for
+ * the current directory only. In the 2026-10-18 rehearsal an agent asked to
+ * set up the memory first added it without the flag.
+ */
+function genClaudeCodeHostedCli() {
+  return `claude mcp add --scope user --transport http ${source.name} ${hostedMcpUrl()}\n`;
+}
+
+/**
+ * Claude Code CLI command, local server with an API key.
+ *
+ * Format: claude mcp add NAME --scope user -e KEY=VAL ... -- command args...
+ *
+ * `--scope user` is LOAD-BEARING: the CLI's default scope is `local`, which
  * registers the server for the current project directory only — memory
  * installed in one repo is silently absent in the next, the opposite of
  * cross-tool memory. The user scope registers it once for every project.
  * (History of how this shipped without the flag: git log on this function.)
+ *
+ * The long form, not `-s user`: the same flag (`claude mcp add --help` in
+ * Claude Code 2.1.302 lists `-s, --scope <scope>`), but the hosted command
+ * above and every hand-written page on mnemoverse.com/docs (docs#756,
+ * 2026-10-21) spell it `--scope user`, and a reader comparing two commands
+ * should not have to know that the two spellings are one flag.
  */
 function genClaudeCodeCli() {
   const envFlags = Object.entries(ENV_VALUES)
     .map(([k, v]) => `  -e ${k}=${v}`)
     .join(" \\\n");
-  return `claude mcp add ${source.name} -s user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
+  return `claude mcp add ${source.name} --scope user \\\n${envFlags} \\\n  -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
 /**
  * Claude Code CLI command — single-line PowerShell variant.
  *
- * Format: claude mcp add NAME -s user -e KEY=VAL ... -- command args... (one line, no `\` continuations)
+ * Format: claude mcp add NAME --scope user -e KEY=VAL ... -- command args... (one line, no `\` continuations)
  *
  * Same command as genClaudeCodeCli(), reflowed onto one line: PowerShell
  * (the default shell on Windows) does not read the bash-style `\` line
  * continuations, so a Windows user pasting the multiline block gets a
- * parse error instead of the intended command. `-s user` remains
+ * parse error instead of the intended command. `--scope user` remains
  * LOAD-BEARING here for the same reason as in genClaudeCodeCli() above.
  */
 function genClaudeCodeCliOneLine() {
   const envFlags = Object.entries(ENV_VALUES)
     .map(([k, v]) => `-e ${k}=${v}`)
     .join(" ");
-  return `claude mcp add ${source.name} -s user ${envFlags} -- ${source.command} ${source.args.join(" ")}\n`;
+  return `claude mcp add ${source.name} --scope user ${envFlags} -- ${source.command} ${source.args.join(" ")}\n`;
 }
 
 // NOTE: genSmitheryYaml() was removed on 2026-04-12 after an empirical
@@ -392,12 +413,36 @@ function genClaudeCodeCliOneLine() {
 const PARTIAL_HEADER =
   "<!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->\n\n";
 
-function snippetClaudeCodeCli() {
+/**
+ * Claude Code, hosted server first. The local-key command used to be the only
+ * Claude Code block here, and an agent told to "set up Mnemoverse memory"
+ * took it (and the directory listings copied from it), then asked for Node.js
+ * and a key that the hosted path needs neither of (rehearsal, 2026-10-18).
+ *
+ * The restart sentence is from the same run: a server added by `claude mcp
+ * add` from inside a session is not in that session's `/mcp` until Claude
+ * Code starts again.
+ */
+function snippetClaudeCodeHosted() {
+  return (
+    "**Claude Code** — the hosted server, with a browser sign-in. No API key, nothing to install:\n\n" +
+    "```bash\n" +
+    genClaudeCodeHostedCli().trim() +
+    "\n```\n\n" +
+    `Then start Claude Code, run \`/mcp\`, select \`${source.name}\` and choose **Authenticate**. ` +
+    "If the command ran inside a Claude Code session (yours, or Claude ran it for you), that session does not load the new server: exit and start `claude` again first.\n"
+  );
+}
+
+function snippetClaudeCodeCli(label = "**Claude Code** — add via CLI:") {
   // shell command, multiline with backslash continuations, plus a one-line
   // variant for Windows: PowerShell rejects the `\` continuations, and the
   // multiline block pasted there fails with a parse error.
+  // docs/snippets/claude-code.md keeps the default label: mnemoverse-docs
+  // mirrors that partial into the API-key section of its Claude Code page.
   return (
-    "**Claude Code** — add via CLI:\n\n" +
+    label +
+    "\n\n" +
     "```bash\n" +
     genClaudeCodeCli().trim() +
     "\n```\n\n" +
@@ -452,10 +497,9 @@ function snippetVscode() {
  * local server with an API key. The two are different servers under the same
  * name, so the prose says which is which and to pick one.
  *
- * The console link carries UTM tags: this block renders on npm's package
- * page, where the CHANGELOG's "two console links carry UTM tags" policy
- * applies because npm strips referrers. /sign-up, not the root: the root
- * redirects to /sign-in and drops the tags.
+ * The console link comes from source.json's signupUrl so README signup CTAs
+ * share the same attribution tags. /sign-up, not the root: the root redirects
+ * to /sign-in and drops the tags.
  *
  * The placeholder named in the prose is read from source.json (sampleValue),
  * not hardcoded, so it cannot drift from the JSON it describes.
@@ -463,8 +507,7 @@ function snippetVscode() {
 function snippetCursorReadme() {
   const json = JSON.stringify(genMcpServersFormat(), null, 2);
   const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
-  const consoleUrl =
-    "https://console.mnemoverse.com/sign-up?utm_source=npm&utm_medium=readme&utm_campaign=mcp-memory-server";
+  const consoleUrl = source.signupUrl;
   return (
     "**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:\n\n" +
     genCursorInstallButton() +
@@ -542,7 +585,14 @@ const WHY_LATEST_NOTE =
  * changes, and a hand-typed base64 blob is unreadable in review.
  */
 function readmeFeaturedBlock() {
-  return [snippetClaudeCodeCli(), snippetCursorReadme()].join("\n");
+  const placeholderKey = source.env.MNEMOVERSE_API_KEY.value;
+  return [
+    snippetClaudeCodeHosted(),
+    snippetClaudeCodeCli(
+      `To run the local server with an API key instead (Node.js 18 or later), put your own key in place of \`${placeholderKey}\`. Use one or the other, not both: they share the name \`${source.name}\`.`,
+    ),
+    snippetCursorReadme(),
+  ].join("\n");
 }
 
 /**
@@ -694,9 +744,14 @@ function genServerJson() {
       isSecret: meta.secret ?? false,
     };
     if (meta.placeholder) {
-      // `default` is the 2025-12-11 field for an example/placeholder value
-      // that clients can surface in their config UI.
-      entry.default = meta.placeholder;
+      // A secret's placeholder shows the shape of a key and works nowhere, so
+      // it goes in `placeholder`. The 2025-12-11 schema keeps `default` for
+      // "a valid value for the input" and sends examples to `placeholder`; a
+      // client that pre-fills `default` would write mk_live_xxx…, which the
+      // API refuses as placeholder_key. A non-secret placeholder here is the
+      // real default (MNEMOVERSE_API_URL), so it stays `default`.
+      if (meta.secret) entry.placeholder = meta.placeholder;
+      else entry.default = meta.placeholder;
     }
     return entry;
   });
@@ -769,7 +824,9 @@ function genMcpbManifest() {
     name: m.name,
     display_name: source.displayName,
     version: PACKAGE_VERSION,
-    description: source.description,
+    // The registry line names the hosted URL as the no-key path; this bundle
+    // is the local server and asks for a key, so it keeps its own line.
+    description: m.description ?? source.description,
     long_description: m.longDescription,
     // The MCPB directory submission requires `author` to point at a GitHub
     // profile — so this comes from source.mcpb.author (a github.com URL), not
@@ -854,6 +911,10 @@ const OUTPUTS = [
     content: TOOLS_MANIFEST ? JSON.stringify(genMcpbManifest(), null, 2) + "\n" : null,
   },
   // ─── Markdown partials (consumed by README + mnemoverse-docs) ──────────────
+  {
+    path: "docs/snippets/claude-code-hosted.md",
+    content: PARTIAL_HEADER + snippetClaudeCodeHosted(),
+  },
   {
     path: "docs/snippets/claude-code.md",
     content: PARTIAL_HEADER + snippetClaudeCodeCli(),

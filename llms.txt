@@ -124,6 +124,8 @@ Named shortcuts that ask the model to use the tools above; they call nothing the
 - memory://item/{memory_id}: one saved memory by its id, as JSON {memory_id, content, domain}. Your own store only; a memory from a shared room cannot be opened by id.
 
 ## Setup
+Hosted (no key, nothing to install): https://mcp.mnemoverse.com/mcp, streamable HTTP, OAuth sign-in, same tools. Claude Code: claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp, then start a new session, run /mcp, select mnemoverse and choose Authenticate.
+Local package (below): Node.js 18 or later and an API key.
 Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)
 Transport: stdio
 Command: npx -y @mnemoverse/mcp-memory-server@latest

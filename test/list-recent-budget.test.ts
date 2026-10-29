@@ -48,7 +48,10 @@ afterAll(async () => {
   await mcp.close();
 });
 beforeEach(() => {
-  mcp.reset();
+  // Every feed here is UNSCOPED, so each page also lists the rooms it did not
+  // search. None by default, which keeps every byte count about the page; the
+  // one case about rooms stubs its own.
+  mcp.reset().on("GET /memory/rooms", []);
 });
 
 interface Entry {
@@ -130,7 +133,7 @@ describe("a page of long entries is cut by the byte budget, not by the count", (
     expect(first).toContain("ITEM-9|");
     expect(first).not.toContain("ITEM-10|");
 
-    mcp.reset().on(RECENT, pagingFeed(feed));
+    mcp.reset().on(RECENT, pagingFeed(feed)).on("GET /memory/rooms", []);
     const second = await mcp.callText("memory_list_recent", {
       limit: 40,
       cursor: "cur_10",

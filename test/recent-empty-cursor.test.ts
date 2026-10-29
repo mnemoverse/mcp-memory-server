@@ -31,7 +31,9 @@ beforeAll(async () => {
   mcp = await startMemoryServer();
 });
 beforeEach(() => {
-  mcp.reset();
+  // Every call here is UNSCOPED, so each page also lists the rooms it did not
+  // search; there are none, which keeps the text about the cursor.
+  mcp.reset().on("GET /memory/rooms", []);
 });
 afterAll(async () => {
   await mcp.close();

@@ -60,6 +60,121 @@ git history and the GitHub releases are the record.
 
 - Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. Clarify that superseding a memory is not physical deletion, identify the personal-memory REST/support deletion path, and explain shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
 
+## [0.16.0] — 2026-10-23
+
+A MINOR: it adds an output field to two tools.
+
+### Added
+
+- **`memory_read` and `memory_list_recent` name the shared rooms they did not
+  search, as data and on a hit too.** Both declare a new optional output field,
+  `rooms_not_searched: {state, rooms?, note}`, present only on a call without
+  `domain` when the caller has rooms or the room list could not be checked.
+  `state` is `live` (the rooms listed can be read by passing an address as
+  `domain`), `archived-only` or `unknown`; `rooms` carries the live rooms in
+  memory_list_rooms's row shape (the two now share one schema and one row
+  builder, so memory_list_rooms's `tools/list` entry is unchanged); `note` is
+  the disclosure the text ends with. A scoped call, and a caller with no rooms,
+  get no field. Why: the disclosure lived in the text only, and only on an
+  empty result. A client that hands the model `structuredContent` instead of
+  the text (Claude Code, observed 2026-10-23) got `{"items":[]}` from an empty
+  unscoped read and nothing else, while twenty live rooms held the answer.
+  Room content is still NOT searched or mixed into the result; whether it
+  should be is a separate decision. A row missing `room_id`, `address` or
+  `role` is left out of `rooms` (still named in `note`), the rule
+  memory_list_rooms already applies. **Differs from the hosted connector:**
+  its `memory_read` and `memory_list_recent` schemas have no
+  `rooms_not_searched` yet.
+
+### Changed
+
+- **An unscoped `memory_read` hit and an unscoped `memory_list_recent` page now
+  end with the same room disclosure an empty result already carried.** A match
+  in your own domains says nothing about what a room holds. The 96,000-character
+  cap reserves the note, so a capped page plus the note still fits, and an
+  answer carries one escape legend, at its end.
+- **A capped `memory_read` or `memory_list_recent` page now fits the cap with its
+  escape legend too.** The legend (275 characters) was appended after the cap,
+  so a capped page with an escaped domain or author name ran past
+  `MAX_RESULT_CHARS` by its length, scoped calls included and before this
+  release. The cap now reserves it whenever a name on the page would print
+  escaped and the room note does not already carry the legend, so such a page
+  is cut up to 275 characters earlier than before. Pages with no escaped name
+  are cut exactly where they were. A `memory_list_recent` page can
+  exceed its 40,000-character page budget by the note, at most about 2,200
+  characters; the budget is a target, the cap is the limit.
+- **One added read-only probe:** `GET /memory/rooms` once per unscoped call
+  that returns results, issued after the read succeeds (an empty unscoped
+  result already made it, and a failed read still makes none). It spends rate
+  budget like any read, and it runs after the read rather than beside it, so
+  it adds the room list's response time to every unscoped hit: up to 4 seconds
+  when that endpoint is slow, the probe timeout, after which the note says the
+  room list could not be fetched. The README's privacy section, which lists the
+  probes, now names this one.
+- **Two descriptions name the new field.** `memory_read`'s `domain` parameter
+  points to `rooms_not_searched` next to memory_list_rooms as a place to find
+  room addresses, and `memory_list_recent`'s description says an unscoped call
+  names the rooms it does not cover. The server instructions are unchanged:
+  they sit at their 800-character ceiling.
+
+## [0.15.4] — 2026-10-22
+
+### Changed
+
+- Describe `memory_feedback` as a rating operation without directing clients to call it automatically after an answer. Retain ranking effects, unchanged saved text, personal and room scoping, and the read-only membership restriction. No handler, schema, annotation, or permission changes.
+
+### Documentation
+
+- **The local Claude Code command spells the scope flag `--scope user`**, as
+  the hosted command above it already did. It read `-s user`, the same flag
+  (`claude mcp add --help` in Claude Code 2.1.302 lists `-s, --scope <scope>`),
+  so nothing about what it installs changes. The change is in
+  `scripts/generate-configs.mjs`; the README block,
+  `docs/configs/claude-code-cli.sh` and `docs/snippets/claude-code.md`, which
+  mnemoverse.com/docs mirrors, are regenerated from it.
+
+## [0.15.3] — 2026-10-18
+
+### Documentation
+
+- **Claude Code starts with the hosted server, as Cursor already did.** Asked
+  to "set up Mnemoverse memory", an agent in Claude Code (rehearsal,
+  2026-10-18) took the npx command with `MNEMOVERSE_API_KEY`, from the README's
+  Claude Code block and the directory listings copied from it, and found the
+  hosted server only after the user said there was no Node.js and no key. The
+  README's Claude Code block now leads with
+  `claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp`
+  and keeps the local command below it as the API-key path. Both the block and
+  the Quick Start say that a session open when the command ran does not load
+  the server until Claude Code starts again. The block is generated from a new
+  partial, `docs/snippets/claude-code-hosted.md`; `docs/snippets/claude-code.md`,
+  which mnemoverse.com/docs mirrors, is unchanged.
+- **`llms-install.md` and `llms.txt` name the hosted server first.** The agent
+  install guide said the user needs Node.js and an API key; both are needed
+  only for the local package, and the guide now sends a client that can add a
+  remote server and sign in to `https://mcp.mnemoverse.com/mcp` before its
+  local steps.
+
+### Changed
+
+- **`server.json` publishes the key's example as `placeholder`, not `default`.**
+  The registry schema keeps `default` for a value that works and sends
+  examples to `placeholder`; `mk_live_xxx…` was published as the default of
+  `MNEMOVERSE_API_KEY`. `MNEMOVERSE_API_URL` keeps its real default.
+- **The key's description says it is for the local package only**, and that
+  the hosted server at `https://mcp.mnemoverse.com/mcp` signs in with OAuth
+  and takes no key. It is the line a registry consumer reads next to the npx
+  package, and the prompt text VS Code shows for the key input.
+- **The registry line names the no-key path.** It read "Hosted AI agent
+  memory that learns from outcomes, with shared rooms, in Claude, Cursor and
+  ChatGPT." and now reads "Hosted agent memory that learns from outcomes,
+  with shared rooms. No key: mcp.mnemoverse.com/mcp" (96 of 100 characters).
+  It is the field directories copy as the listing's summary. The Claude
+  Desktop bundle runs the local server and asks for a key, so `manifest.json`
+  keeps the old line through a new `mcpb.description` in `source.json`.
+
+## [0.15.2] — 2026-10-18
+
 ### Documentation
 
 - **The README's "Add to Cursor" button adds the hosted server with a browser
@@ -79,6 +194,36 @@ git history and the GitHub releases are the record.
   PR. `test/install-links.test.ts` decodes every install link in the README
   and fails on one that installs anything but the hosted server or carries
   a key.
+- **The npm line and the README's first screen say what the server does, and
+  the ranking mechanics are gone from the prose.** The `package.json`
+  description (the line npm search shows) no longer says "learns from
+  outcomes" or "feedback re-ranks recall": it names write and read, the four
+  main hosts, the canonical feedback sentence ("rating a recalled memory as
+  helpful or misleading re-ranks what comes back next"), the OAuth sign-in or
+  API key, and the free plan. The README opens with the two calls, the
+  per-user `domain`, the free plan's numbers from mnemoverse.com/pricing, the
+  two ways to connect and a link to the steps for other hosts. The two
+  passages that named the engine's internals (the ranking update rule and a
+  consolidation stage that is switched off on the hosted service) are
+  removed, three more paraphrases of the ranking now use the canonical
+  sentence, and the comparison no longer says that nothing in `CLAUDE.md`
+  follows you to the next window: a committed file travels with its
+  repository, and what it cannot do is reach a tool that does not read it.
+  Four keywords are added (`memory-layer`, `ai-memory`, `llm-memory`,
+  `feedback`). The registry line in `src/configs/source.json` is unchanged.
+  `test/listing-text.test.ts` now holds the npm line to the canonical
+  sentence and fails on a ranking mechanism named in the prose of any
+  listing surface, or of the newest `CHANGELOG.md` section that has
+  entries, which becomes the GitHub release body.
+
+### Security
+
+- **vitest range raised to `^4.1.11`.** The range was `^4.1.9`, which still
+  admitted 4.1.9 and 4.1.10, inside GHSA-82fw-gwwq-j7x9 (CVE-2026-84373,
+  `>= 2.1.0, < 4.1.11`). The lockfile already resolved 4.1.11, so installs
+  do not change; a scanner that reads the declared range has no vulnerable
+  version left to match. vitest is a dev dependency and does not ship in
+  the package.
 
 ## [0.15.1] — 2026-10-12
 

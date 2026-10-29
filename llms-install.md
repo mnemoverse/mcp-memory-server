@@ -2,9 +2,23 @@
 
 This file is for an AI agent such as Cline that installs `@mnemoverse/mcp-memory-server` on a user's behalf. Follow the steps in order. The human-facing version of the same steps is in `README.md`.
 
+## First: the hosted server needs no key
+
+If the client can add a remote MCP server by URL and run its browser sign-in, follow the hosted setup in this section, then skip the local-package sections after it: there is no key to ask for and nothing to install. The URL is `https://mcp.mnemoverse.com/mcp` (streamable HTTP, OAuth sign-in), and it serves the same tools as this package.
+
+In Claude Code, run:
+
+```bash
+claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp
+```
+
+Keep `--scope user`: without it the server is added for the current directory only. A Claude Code session that was running when the command ran does not load the new server, so tell the user to exit, start `claude` again, run `/mcp`, select `mnemoverse` and choose **Authenticate**.
+
+Use the local package below when the client has no remote-server support, or when the user asks for an API key.
+
 ## What you are installing
 
-Mnemoverse Memory is a hosted memory service for AI agents, reached over the Model Context Protocol. This package is a local MCP server (Node.js, stdio transport) that forwards tool calls to the hosted API at `https://core.mnemoverse.com/api/v1`. There is nothing to deploy and no database to run. The user needs two things: a Node.js runtime and an API key.
+Mnemoverse Memory is a hosted memory service for AI agents, reached over the Model Context Protocol. This package is a local MCP server (Node.js, stdio transport) that forwards tool calls to the hosted API at `https://core.mnemoverse.com/api/v1`. There is nothing to deploy and no database to run. For this local package the user needs two things: a Node.js runtime and an API key.
 
 ## Requirements
 
