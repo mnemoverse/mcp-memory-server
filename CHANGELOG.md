@@ -63,9 +63,14 @@ git history and the GitHub releases are the record.
   tools behind tool search by default, so at the start of a task the read could
   be out of context entirely; this flag (Claude Code 2.1.285,
   https://code.claude.com/docs/en/mcp.md) opts one tool out. Only `memory_read`
-  carries it; every other tool stays behind search. Clients that do not know
-  the key ignore `_meta`. No tool text changes: the flag is metadata, and the
-  descriptions stay as reviewed. Pinned in test/always-load.test.ts.
+  carries it; every other tool stays behind search. The flag takes effect once
+  the server has connected: per the same page, "Startup doesn't wait for your
+  server because of this value", and Claude Code connects servers in the
+  background by default, so a first prompt can still start before the tool
+  list arrives (`MCP_CONNECTION_NONBLOCKING=0` makes startup wait). Clients
+  that do not know the key ignore `_meta`. No tool text changes: the flag is
+  metadata, and the descriptions stay as reviewed. Pinned in
+  test/always-load.test.ts.
 
 ## [0.16.0] — 2026-10-23
 
