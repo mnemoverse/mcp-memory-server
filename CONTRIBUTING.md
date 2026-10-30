@@ -32,7 +32,14 @@ Files that are **generated** (never edit by hand):
 | `docs/snippets/zed.md` | Markdown partial — Zed install |
 | `docs/snippets/jetbrains.md` | Markdown partial — JetBrains install |
 | `docs/snippets/cline.md` | Markdown partial — Cline install |
-| `README.md` (only the section between `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->`) | Top-level install section, in-place rewritten by the generator |
+| `docs/snippets/cursor-hosted.md` | Markdown partial — Cursor, hosted server with browser sign-in (one-click button) |
+| `docs/snippets/vscode-hosted.md` | Markdown partial — VS Code, extension or hosted `http` entry with browser sign-in |
+| `docs/snippets/claude-desktop-hosted.md` | Markdown partial — Claude Desktop, custom connector or the `mcp-remote` bridge, browser sign-in |
+| `docs/snippets/cline-hosted.md` | Markdown partial — Cline, remote server entry with browser sign-in |
+| `docs/snippets/windsurf-hosted.md` | Markdown partial — Devin Desktop (ex-Windsurf), the `mcp-remote` bridge, browser sign-in |
+| `docs/snippets/zed-hosted.md` | Markdown partial — Zed, the `mcp-remote` bridge, browser sign-in |
+| `docs/snippets/jetbrains-hosted.md` | Markdown partial — JetBrains, the `mcp-remote` bridge, browser sign-in |
+| `README.md` (only the three regions between the `INSTALL_SNIPPETS`, `MORE_CLIENTS` and `LOCAL_KEY_SNIPPETS` `_START`/`_END` comment markers) | Install sections, in-place rewritten by the generator: keyless first, then the local package with an API key |
 
 This table is checked mechanically by `test/generated-inventory.test.ts`, against
 the `OUTPUTS` array in `scripts/generate-configs.mjs`. Step 4 of "How to add a
@@ -66,7 +73,7 @@ There are two layers of drift detection — they catch the same problem at diffe
 
 ### Layer 1: GitHub Actions (mandatory)
 
-Every PR runs [`.github/workflows/verify-configs.yml`](.github/workflows/verify-configs.yml), which executes `node scripts/generate-configs.mjs --check`. The job fails the build if any of the 18 generated artifacts (or the README install block) does not match what would be re-emitted from `src/configs/source.json`. **The job is required for merge into `main`.** This is the authoritative gate — it works for forks, blocks PRs, can't be bypassed by `--no-verify`, and protects you from your own typos.
+Every PR runs [`.github/workflows/verify-configs.yml`](.github/workflows/verify-configs.yml), which executes `node scripts/generate-configs.mjs --check`. The job fails the build if any of the 25 generated artifacts (or the README install regions) does not match what would be re-emitted from `src/configs/source.json`. **The job is required for merge into `main`.** This is the authoritative gate — it works for forks, blocks PRs, can't be bypassed by `--no-verify`, and protects you from your own typos.
 
 ### Layer 2: Local pre-push hook (recommended, opt-in)
 
@@ -84,11 +91,11 @@ We deliberately avoid `husky` and `pre-commit` — those would add a dependency 
 
 ## How `npm run generate:configs` works
 
-`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 18 artifacts:
+`scripts/generate-configs.mjs` reads `src/configs/source.json` and emits 25 artifacts:
 
 1. **9 machine-readable configs** — 7 in `docs/configs/` (Cursor, Claude Desktop, Windsurf, VS Code JSON + 2 deep-link strings + Claude Code CLI shell script), plus two at the repo root: `server.json` for the Official MCP Registry and `manifest.json` for the Claude Desktop Extension bundle. (Smithery's current publish model requires a framework rewrite or a hosted HTTPS endpoint — see the note in `scripts/generate-configs.mjs` where `genSmitheryYaml` used to live.)
-2. **9 Markdown partials** in `docs/snippets/` (Claude Code hosted, Claude Code, Cursor, Claude Desktop, VS Code, Windsurf, Zed, JetBrains, Cline) — these are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.).
-3. **1 in-place rewrite** of the install section in `README.md`, between the `<!-- INSTALL_SNIPPETS_START -->` and `<!-- INSTALL_SNIPPETS_END -->` HTML comment markers. The rest of the README is human-prose and is left untouched.
+2. **16 Markdown partials** in `docs/snippets/`, two per client: `<client>-hosted.md` is the keyless path (the hosted server with a browser sign-in, natively or through the `mcp-remote` bridge), `<client>.md` the local package with an API key. Claude Code, Cursor, Claude Desktop, VS Code, Windsurf (Devin Desktop), Zed, JetBrains and Cline each have both. These are the same install snippets, formatted for inclusion in any Markdown context (README, mnemoverse-docs site pages, llms.txt, etc.). mnemoverse-docs mirrors five of the API-key partials (`claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`) at build time and fails a clean-tree gate when one changes, so a change to those five needs a docs PR beside it.
+3. **1 in-place rewrite** of three regions in `README.md`, each between its own `_START`/`_END` HTML comment markers: `INSTALL_SNIPPETS` (keyless, featured clients), `MORE_CLIENTS` (keyless, every other client) and `LOCAL_KEY_SNIPPETS` (the local package with an API key). All three are required, in that order. The rest of the README is human-prose and is left untouched.
 
 Every count on this page is asserted against `OUTPUTS` by
 `test/generated-inventory.test.ts`, so a channel added without updating this
@@ -100,7 +107,7 @@ The generator is **idempotent**: running it twice in a row produces zero changes
 
 1. Add a new generator function in `scripts/generate-configs.mjs` that produces the channel's config from the data already in `source.json` (do NOT introduce a parallel data source — extend `source.json` instead if you need new fields).
 2. Add the new artifact to the `OUTPUTS` array.
-3. If the channel needs a Markdown install snippet, also add a `snippet*()` helper and a `docs/snippets/{channel}.md` entry. If the snippet should also appear in README, append it to `readmeInstallBlock()`.
+3. If the channel needs a Markdown install snippet, also add a `snippet*()` helper and a `docs/snippets/{channel}.md` entry. If the snippet should also appear in README, add it to `readmeHostedFeaturedBlock()`, `readmeHostedMoreBlock()` or `readmeLocalKeyBlock()`, by path.
 4. Update this `CONTRIBUTING.md` table above with the new file, and the counts in the section above it. (`test/generated-inventory.test.ts` fails until you do; it also checks that `.github/workflows/verify-configs.yml`'s push-path filter covers the new file.)
 5. Run `npm run generate:configs && npm run verify:configs`. Both must succeed.
 6. Commit everything together — the source change, the new generator function, the new generated files, and the updated `CONTRIBUTING.md`.

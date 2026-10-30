@@ -56,9 +56,47 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Added
+
+- **`memory_read` is kept loaded up front in Claude Code.** Its tools/list
+  entry carries `_meta: {"anthropic/alwaysLoad": true}`. Claude Code puts MCP
+  tools behind tool search by default, so at the start of a task the read could
+  be out of context entirely; this flag (Claude Code 2.1.285,
+  https://code.claude.com/docs/en/mcp.md) opts one tool out. Only `memory_read`
+  carries it; every other tool stays behind search. The flag takes effect once
+  the server has connected: per the same page, "Startup doesn't wait for your
+  server because of this value", and Claude Code connects servers in the
+  background by default, so a first prompt can still start before the tool
+  list arrives (`MCP_CONNECTION_NONBLOCKING=0` makes startup wait). Clients
+  that do not know the key ignore `_meta`. No tool text changes: the flag is
+  metadata, and the descriptions stay as reviewed. Pinned in
+  test/always-load.test.ts.
+
 ### Changed
 
 - Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. memory_read now says that a correction is a fresh memory_write, stored alongside the earlier memory, which is not deleted or hidden, and that no MCP deletion tool is exposed: a user can permanently delete an individual personal memory through the REST API or with help from support. memory_create_room explains shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
+
+### Documentation
+
+- **Every client starts with the keyless path; the API key has its own
+  section.** The README went from a short no-key block straight to "Get a free
+  API key", and showed Claude Desktop, Devin Desktop (formerly Windsurf), Zed,
+  JetBrains and Cline only with `MNEMOVERSE_API_KEY`; npm, GitHub and the
+  directories that copy the first `mcpServers` block passed that on. The Quick
+  Start now connects every client to the hosted server
+  `https://mcp.mnemoverse.com/mcp` with a browser sign-in: natively where the
+  client adds a remote URL (Claude Code, Cursor, VS Code, a Claude Desktop
+  custom connector, Cline), and through the `mcp-remote` bridge
+  (`npx -y mcp-remote@latest https://mcp.mnemoverse.com/mcp`) where it only
+  starts local commands (Claude Desktop's config file, Devin Desktop, Zed,
+  JetBrains). The README's first `mcpServers` block is that bridge entry, with
+  no key. "Local package with an API key" follows as its own section, with the
+  same key facts as before and one more: a client that can send a header can
+  use the hosted URL with `Authorization: Bearer mk_live_...`. Seven keyless
+  partials, `docs/snippets/<client>-hosted.md`, sit beside the API-key ones;
+  the five that mnemoverse.com/docs mirrors are unchanged. `llms-install.md`
+  and `llms.txt` give Cline's remote entry and the bridge before the local
+  steps.
 
 ## [0.16.0] — 2026-10-23
 

@@ -9,7 +9,7 @@
  *        scripts/generate-tools-manifest.mjs; the .mcpb manifest's tools[]
  *        is derived from it, never typed by hand)
  * Writes: docs/configs/*, docs/snippets/*, server.json, manifest.json,
- *         README.md install block
+ *         README.md install regions (keyless first, then the API-key ones)
  *
  * Usage:
  *   node scripts/generate-configs.mjs            # generate
@@ -205,6 +205,52 @@ function hostedMcpUrl() {
     );
   }
   return remote.url;
+}
+
+/**
+ * The keyless entry for a client that only starts local (stdio) commands:
+ * source.bridge (the mcp-remote package) with the hosted URL appended. The
+ * bridge runs the hosted server's browser sign-in itself, so the entry holds
+ * no key and no env. Verified live 2026-10-23 (see $comment_bridge in
+ * source.json).
+ */
+function bridgeServer() {
+  const bridge = source.bridge;
+  if (!bridge?.command || !Array.isArray(bridge.args) || bridge.args.length === 0 || !bridge.package || !bridge.node) {
+    throw new Error(
+      "source.json has no complete `bridge` {package, node, command, args}: the keyless entries for stdio-only clients need the mcp-remote command and the Node.js it needs",
+    );
+  }
+  return { command: bridge.command, args: [...bridge.args, hostedMcpUrl()] };
+}
+
+/** The bridge in the shared `mcpServers` shape (Claude Desktop, Devin Desktop, JetBrains, any stdio client). */
+function genBridgeMcpServersFormat() {
+  return { mcpServers: { [source.name]: bridgeServer() } };
+}
+
+/** The bridge in Zed's `context_servers` shape, with the same `"source": "custom"` as genZedFormat(). */
+function genBridgeZedFormat() {
+  return {
+    context_servers: {
+      [source.name]: { source: "custom", ...bridgeServer() },
+    },
+  };
+}
+
+/** A link to the bridge package's npm page, for prose that names it. */
+function bridgeLink() {
+  const pkg = source.bridge.package;
+  return `[\`${pkg}\`](https://www.npmjs.com/package/${pkg})`;
+}
+
+/**
+ * What the bridge needs, said once per entry that uses it, so each `-hosted`
+ * partial stands on its own. The Node.js minimum is source.bridge.node (see
+ * $comment_bridge for where it comes from).
+ */
+function bridgeNeeds() {
+  return `the ${bridgeLink()} bridge, which runs through \`npx\` (Node.js ${source.bridge.node} or later)`;
 }
 
 /**
@@ -404,11 +450,25 @@ function genClaudeCodeCliOneLine() {
 // ─── Markdown partials ────────────────────────────────────────────────────────
 //
 // These are the SAME install snippets that ship to:
-//   - mcp-memory-server/README.md (assembled into the INSTALL_SNIPPETS block)
-//   - mnemoverse-docs (synced via cross-repo workflow → docs/.snippets/)
+//   - mcp-memory-server/README.md (assembled into its three generated regions)
+//   - mnemoverse-docs (scripts/sync-mcp-snippets.mjs there fetches five of
+//     them at build time into docs/.mcp-snippets/)
+//
+// Two partials per client, one per path. `<client>-hosted.md` is the keyless
+// path: the hosted server with a browser sign-in, natively where the client
+// adds a remote URL, through the mcp-remote bridge where it only starts local
+// commands. `<client>.md` is the local package with an API key.
+//
+// The five `<client>.md` partials mnemoverse-docs mirrors (claude-code,
+// claude-desktop, cursor, vscode, windsurf) sit in the API-key sections of its
+// pages, below keyless sections those pages write themselves, and its
+// docs:build fails a clean-tree gate the moment a mirrored partial changes
+// upstream. So the keyless-first restructure (2026-10-23) leaves those five
+// byte for byte as they were and adds the `-hosted` partials beside them.
 //
 // One channel = one partial = one place to edit (source.json). The README's
-// install block is rebuilt from these partials in-place — never edit it by hand.
+// install regions are rebuilt from these partials in-place — never edit them
+// by hand.
 
 const PARTIAL_HEADER =
   "<!-- AUTO-GENERATED from src/configs/source.json. Run `npm run generate:configs`. Do not edit by hand. -->\n\n";
@@ -492,28 +552,177 @@ function snippetVscode() {
 }
 
 /**
- * The README's Cursor entry: the one-click button adds the HOSTED server with
- * a browser sign-in (no key), and the JSON below it is the other path, the
- * local server with an API key. The two are different servers under the same
- * name, so the prose says which is which and to pick one.
- *
- * The console link comes from source.json's signupUrl so README signup CTAs
- * share the same attribution tags. /sign-up, not the root: the root redirects
- * to /sign-in and drops the tags.
- *
- * The placeholder named in the prose is read from source.json (sampleValue),
- * not hardcoded, so it cannot drift from the JSON it describes.
+ * Cursor, keyless: the one-click button adds the HOSTED server, whose sign-in
+ * Cursor runs itself. No JSON block on purpose: the sentence under the button
+ * names the one-line entry it writes, and the first `mcpServers` block of the
+ * README (which directory scrapers copy as "the config") is the bridge entry
+ * of snippetAnyClientHosted(), which works in every client that starts local
+ * commands, rather than a `url` entry that a config-file-only client ignores.
  */
-function snippetCursorReadme() {
-  const json = JSON.stringify(genMcpServersFormat(), null, 2);
-  const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
-  const consoleUrl = source.signupUrl;
+function snippetCursorHosted() {
   return (
     "**Cursor** — click to add the hosted server. Cursor signs you in through the browser, so there is no key to paste:\n\n" +
     genCursorInstallButton() +
     "\n\n" +
-    `The button writes \`{"url": "${hostedMcpUrl()}"}\` under \`${source.name}\` in \`~/.cursor/mcp.json\`, the global config that covers every project. Then click **Connect** next to \`${source.name}\` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.\n\n` +
-    `To run the local server with an API key instead, add the JSON below to \`~/.cursor/mcp.json\`, merging it with any servers already there, and put your own key in place of \`${placeholderKey}\`. Get one at [console.mnemoverse.com](${consoleUrl}). Do not put it in a project-level \`.cursor/mcp.json\`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key. Use one entry or the other, not both: they share the name \`${source.name}\`.\n\n` +
+    `The button writes \`{"url": "${hostedMcpUrl()}"}\` under \`${source.name}\` in \`~/.cursor/mcp.json\`, the global config that covers every project. Then click **Connect** next to \`${source.name}\` in Cursor's MCP settings (**Customize** in the sidebar; **Cursor Settings → Tools & MCPs** in Cursor 3.21.16) and approve in the browser. Cursor runs the sign-in and keeps the token itself.\n`
+  );
+}
+
+/**
+ * Cursor, the README's API-key entry: the JSON only, no install button (the
+ * old placeholder button survives in docs/snippets/cursor.md alone, see
+ * genCursorLocalInstallButton()).
+ *
+ * The placeholder named in the prose is read from source.json (sampleValue),
+ * not hardcoded, so it cannot drift from the JSON it describes.
+ */
+function snippetCursorKeyReadme() {
+  const json = JSON.stringify(genMcpServersFormat(), null, 2);
+  const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
+  return (
+    `**Cursor** — add the JSON below to \`~/.cursor/mcp.json\`, the global config that covers every project, merging it with any servers already there, and put your own key in place of \`${placeholderKey}\`. Do not put it in a project-level \`.cursor/mcp.json\`: that file lives inside the repository and is committed with it unless you exclude it, and this config holds your key.\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+/**
+ * Any MCP client, keyless. Two sentences for the two kinds of client, and the
+ * bridge entry as JSON. This is the README's first `mcpServers` block, the one
+ * npm, GitHub and the directory scrapers copy (packaging lane, 2026-10-23), so
+ * it is the entry that works with no key in any client that starts a local
+ * command.
+ *
+ * The ~/.mcp-auth sentence is mcp-remote's own troubleshooting advice (its
+ * README, "Clear your ~/.mcp-auth directory"), read 2026-10-23.
+ */
+function snippetAnyClientHosted() {
+  const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
+  return (
+    `**Any MCP client** — a client that adds a remote server by URL and runs the MCP sign-in (OAuth) itself takes \`${hostedMcpUrl()}\`. Any other client takes the entry below: ${bridgeLink()}, a separate open-source bridge, runs through \`npx\` (Node.js ${source.bridge.node} or later), forwards to the same URL and opens the same browser sign-in on first start. Neither way needs a key:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n\n" +
+    `The bridge keeps its sign-ins in \`~/.mcp-auth\`. If a sign-in gets stuck, its README says to delete that folder and restart the client.\n`
+  );
+}
+
+/**
+ * VS Code, keyless: the extension, or the hosted server as an `http` entry in
+ * `.vscode/mcp.json`. The `http` entry and its browser sign-in are the shape
+ * mnemoverse-docs /api/vs-code records as verified on VS Code Desktop. The
+ * entry holds no key, so unlike the API-key entry it may be committed.
+ */
+function snippetVscodeHosted() {
+  const json = JSON.stringify(
+    { servers: { [source.name]: { type: "http", url: hostedMcpUrl() } } },
+    null,
+    2,
+  );
+  return (
+    "**VS Code** — the [VS Code extension](https://github.com/mnemoverse/mnemoverse-vscode) signs in through the browser, with no key to paste: install it and run **Mnemoverse: Sign In**. Without the extension, add the hosted server to `.vscode/mcp.json` (VS Code 1.102 or later; VS Code uses `servers`, not `mcpServers`). VS Code opens the browser sign-in on first use, and the entry holds no key, so the file is safe to commit:\n\n" +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+/**
+ * VS Code, the README's API-key entry. Same JSON as snippetVscode() (the
+ * `inputs` prompt, see genVscodeInputs()), shorter prose: the extension is
+ * already the first sentence of the keyless entry. snippetVscode() keeps its
+ * own wording because mnemoverse-docs mirrors docs/snippets/vscode.md.
+ */
+function snippetVscodeKeyReadme() {
+  const json = JSON.stringify(genVscodeFormat(), null, 2);
+  return (
+    "**VS Code** — add to `.vscode/mcp.json` (VS Code uses `servers`, not `mcpServers`). Never put a literal `mk_live_` key in that file: it is committed with the repository. The `inputs` entry below prompts for the key instead; VS Code masks what you type and keeps it in its own secret storage, not in the file. VS Code's non-interactive Agent Host mode does not start a server that prompts for inputs, so for unattended use there, leave out the `inputs` entry and the `MNEMOVERSE_API_KEY` line, and set `MNEMOVERSE_API_KEY` in the environment of the process that launches VS Code:\n\n" +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+/**
+ * Claude Desktop, keyless: a custom connector (no file, no Node.js), or the
+ * bridge in claude_desktop_config.json. Steps and the free-plan limit as
+ * mnemoverse-docs /api/claude-apps and /api/install-by-host state them, from
+ * Anthropic's custom-connector guide.
+ */
+function snippetClaudeDesktopHosted() {
+  const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
+  return (
+    `**Claude Desktop** — add the hosted server as a custom connector: **Customize → Connectors**, then **+** and **Add custom connector**, paste \`${hostedMcpUrl()}\` and sign in when the browser opens. The connector also works on claude.ai and in the Claude mobile apps; free Claude plans allow one custom connector. To use \`claude_desktop_config.json\` instead, add ${bridgeNeeds()}, and restart Claude Desktop; the bridge opens the same browser sign-in:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n"
+  );
+}
+
+/**
+ * Cline, keyless: its own remote-server entry and sign-in. Steps, the JSON
+ * shape and the `streamableHttp` note as mnemoverse-docs /api/install-by-host
+ * records them (Cline's MCP overview and source at v4.1.25, read 2026-10-21;
+ * sign-in verified by replay against production on 2026-10-18).
+ */
+function snippetClineHosted() {
+  const json = JSON.stringify(
+    { mcpServers: { [source.name]: { type: "streamableHttp", url: hostedMcpUrl() } } },
+    null,
+    2,
+  );
+  return (
+    `**Cline** — in the Cline panel, open **MCP Servers**, then the **Remote Servers** tab. Enter \`${source.name}\` as the server name and \`${hostedMcpUrl()}\` as the URL, choose **Streamable HTTP**, click **Add Server**, then click **Authenticate** on the server's row and sign in in the browser. The same entry by hand, in \`cline_mcp_settings.json\`:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n\n" +
+    'Keep `"type": "streamableHttp"`: without it Cline uses the older SSE transport.\n'
+  );
+}
+
+/**
+ * Devin Desktop (formerly Windsurf), keyless: the bridge. Devin documents a
+ * plain `url` entry with its own sign-in, but mnemoverse-docs /api/windsurf
+ * records that sign-in as not verified against Mnemoverse, and the bridge is.
+ */
+function snippetDevinHosted() {
+  const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
+  return (
+    `**Devin Desktop (formerly Windsurf)** — add ${bridgeNeeds()}, to \`~/.config/devin/mcp_config.json\` (\`%APPDATA%\\devin\\mcp_config.json\` on Windows) and restart Devin Desktop; the bridge opens the browser sign-in on first start:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n\n" +
+    'Devin also documents a remote entry with only `"url"` and its own sign-in; that sign-in has not been tested with Mnemoverse yet.\n'
+  );
+}
+
+/**
+ * Zed, keyless: the bridge. Zed's docs (docs/src/ai/mcp.md on main, read
+ * 2026-10-23) also describe a remote entry with only `url`, for which Zed runs
+ * the MCP OAuth flow itself; nobody has run that against Mnemoverse, so it is
+ * named as untested rather than offered as the path.
+ */
+function snippetZedHosted() {
+  const json = JSON.stringify(genBridgeZedFormat(), null, 2);
+  return (
+    `**Zed** — add ${bridgeNeeds()}, to \`~/.config/zed/settings.json\` (Zed uses \`context_servers\`); the bridge opens the browser sign-in on first start:\n\n` +
+    "```json\n" +
+    json +
+    "\n```\n\n" +
+    `Zed also accepts the URL itself (\`"url": "${hostedMcpUrl()}"\`) and runs its own sign-in; that route has not been tested with Mnemoverse yet.\n`
+  );
+}
+
+/**
+ * JetBrains AI Assistant, keyless: the bridge. Its MCP page (read 2026-10-23)
+ * documents a `url` entry for Streamable HTTP and says nothing about a sign-in
+ * for one, so the browser sign-in comes from the bridge.
+ */
+function snippetJetBrainsHosted() {
+  const json = JSON.stringify(genBridgeMcpServersFormat(), null, 2);
+  return (
+    `**JetBrains** (AI Assistant) — *Settings → Tools → AI Assistant → Model Context Protocol (MCP)*, then paste ${bridgeNeeds()}; the bridge opens the browser sign-in on first start:\n\n` +
     "```json\n" +
     json +
     "\n```\n"
@@ -576,139 +785,127 @@ const WHY_LATEST_NOTE =
   "> Why `@latest`? Bare `npx @mnemoverse/mcp-memory-server` is cached indefinitely by npm and stops re-checking the registry. The `@latest` suffix forces a metadata lookup on every Claude Code / Cursor / VS Code session start (~100-300ms), so you always pick up new releases.";
 
 /**
- * The FEATURED clients: the two this README leads with, above any fold.
+ * README region 1, INSTALL_SNIPPETS: the keyless path for the two featured
+ * clients, then the keyless rule for any client, above any fold.
  *
- * They are generated rather than hand-written for one reason. The Cursor entry
- * carries the install button, built from source.json's hosted endpoint, AND
- * the paragraph that tells it apart from the API-key JSON below it. A README
- * that hand-copies either one drifts from source.json the first time it
- * changes, and a hand-typed base64 blob is unreadable in review.
+ * Keyless first for every client, and the API key in a section of its own
+ * (packaging lane, room atom 1865727c, 2026-10-23): the README used to go from
+ * a short no-key block straight to "Get a free API key", and showed Claude
+ * Desktop, Devin Desktop, Zed, JetBrains and Cline only with
+ * MNEMOVERSE_API_KEY. npm, GitHub and the directories that copy the first
+ * `mcpServers` block all passed that on. The first `mcpServers` block is now
+ * snippetAnyClientHosted()'s bridge entry, which carries no key.
+ *
+ * Generated rather than hand-written: the Cursor entry carries the install
+ * button, built from source.json's hosted endpoint, and a hand-typed base64
+ * blob is unreadable in review.
  */
-function readmeFeaturedBlock() {
-  const placeholderKey = source.env.MNEMOVERSE_API_KEY.value;
+function readmeHostedFeaturedBlock() {
+  return [snippetClaudeCodeHosted(), snippetCursorHosted(), snippetAnyClientHosted()].join("\n");
+}
+
+/** README region 2, MORE_CLIENTS: the keyless path for every other client. */
+function readmeHostedMoreBlock() {
   return [
-    snippetClaudeCodeHosted(),
-    snippetClaudeCodeCli(
-      `To run the local server with an API key instead (Node.js 18 or later), put your own key in place of \`${placeholderKey}\`. Use one or the other, not both: they share the name \`${source.name}\`.`,
-    ),
-    snippetCursorReadme(),
+    snippetVscodeHosted(),
+    snippetClaudeDesktopHosted(),
+    snippetClineHosted(),
+    snippetDevinHosted(),
+    snippetZedHosted(),
+    snippetJetBrainsHosted(),
   ].join("\n");
 }
 
 /**
- * Every other client, plus the @latest note. A README may fold this region
- * behind a <details> — see rewriteReadme.
+ * README region 3, LOCAL_KEY_SNIPPETS: the local package with an API key, for
+ * the same clients in the same order, plus the @latest note. The Claude
+ * Desktop, Devin Desktop, Zed, JetBrains and Cline entries are the very
+ * functions their docs/snippets/<client>.md partials use.
  */
-function readmeMoreClientsBlock() {
+function readmeLocalKeyBlock() {
+  const placeholderKey = sampleValue("MNEMOVERSE_API_KEY");
   return [
-    snippetVscode(),
+    snippetClaudeCodeCli(`**Claude Code** — put your own key in place of \`${placeholderKey}\`:`),
+    snippetCursorKeyReadme(),
+    snippetVscodeKeyReadme(),
+    snippetMcpServersJson("Claude Desktop", "claude_desktop_config.json"),
+    snippetCline(),
     snippetMcpServersJson("Devin Desktop (formerly Windsurf)", "~/.config/devin/mcp_config.json"),
-    "**More MCP clients** — same server, different config file:\n",
     snippetZed(),
     snippetJetBrains(),
-    snippetCline(),
     WHY_LATEST_NOTE,
   ].join("\n");
 }
 
-/**
- * Build the README install block contents (without the START/END markers).
- * The order here matches the README — change here, README rewrites itself.
- *
- * A README with only the INSTALL_SNIPPETS markers gets everything in one
- * region, byte-identical to what this function emitted before the featured
- * split existed. A README that also carries the MORE_CLIENTS markers gets the
- * two featured clients here and the rest there.
- */
-function readmeInstallBlock() {
-  return [readmeFeaturedBlock(), readmeMoreClientsBlock()].join("\n");
-}
-
 // ─── README in-place rewriter ─────────────────────────────────────────────────
 
-const README_START =
-  "<!-- INSTALL_SNIPPETS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->";
-const README_END = "<!-- INSTALL_SNIPPETS_END -->";
+/**
+ * The README's generated regions, in the order they must appear. Every one is
+ * required: a README that lost a marker pair has no place for that content,
+ * and a region left behind without its generator would sail through the
+ * --check drift gate because nothing compares it to anything.
+ */
+const README_REGIONS = [
+  { name: "INSTALL_SNIPPETS", build: readmeHostedFeaturedBlock },
+  { name: "MORE_CLIENTS", build: readmeHostedMoreBlock },
+  { name: "LOCAL_KEY_SNIPPETS", build: readmeLocalKeyBlock },
+];
 
-// Optional second region. A README that carries these markers folds every
-// non-featured client behind them (typically inside a <details>); one that
-// does not keeps the single-region layout and this pair is simply absent.
-const MORE_START =
-  "<!-- MORE_CLIENTS_START — generated from src/configs/source.json. Run `npm run generate:configs` to refresh. Do not edit by hand. -->";
-const MORE_END = "<!-- MORE_CLIENTS_END -->";
+const regionStart = (name) =>
+  `<!-- ${name}_START — generated from src/configs/source.json. Run \`npm run generate:configs\` to refresh. Do not edit by hand. -->`;
+const regionEnd = (name) => `<!-- ${name}_END -->`;
 
 /**
- * Take current README content + the freshly assembled install block and return
- * the rewritten README content. Idempotent.
+ * Replace one region of `text`, searching from `from`. Returns the new text
+ * and the index just past the region's end marker, so the next region can be
+ * required to come after it.
  *
- * Throws if the markers are missing — that means a contributor stripped them
- * out and we don't know where to inject the snippets, so we fail loudly
- * instead of silently doing the wrong thing.
+ * Throws if a marker is missing or out of order: that means a contributor
+ * stripped or moved one and we don't know where to inject the snippets, so we
+ * fail loudly instead of silently doing the wrong thing.
  */
-function replaceRegion(text, openPrefix, openMarker, closeMarker, fresh) {
+function replaceRegion(text, from, name, fresh) {
+  const openPrefix = `<!-- ${name}_START`;
+  const closeMarker = regionEnd(name);
   const startIdx = text.indexOf(openPrefix);
   const endIdx = text.indexOf(closeMarker);
 
   if (startIdx === -1 || endIdx === -1) {
     throw new Error(
-      `README.md is missing the ${openPrefix.replace("<!-- ", "")} / ` +
-        `${closeMarker.replace("<!-- ", "").replace(" -->", "")} markers.\n` +
+      `README.md is missing the ${name}_START / ${name}_END markers ` +
+        `(found START: ${startIdx !== -1}, END: ${endIdx !== -1}).\n` +
         "These markers tell the generator where to inject the install snippets.\n" +
-        "Restore them around the install section and re-run `npm run generate:configs`.",
+        "Restore them and re-run `npm run generate:configs`.",
     );
   }
   if (startIdx >= endIdx) {
+    throw new Error(`README.md ${closeMarker} appears before ${openPrefix}.`);
+  }
+  if (startIdx < from) {
     throw new Error(
-      `README.md ${closeMarker} appears before ${openPrefix.replace("<!-- ", "")}.`,
+      `README.md ${openPrefix} appears before the end of the region above it; ` +
+        `the regions go in this order: ${README_REGIONS.map((r) => r.name).join(", ")}.`,
     );
   }
 
   const before = text.slice(0, startIdx);
   const after = text.slice(endIdx + closeMarker.length);
+  const region = `${regionStart(name)}\n\n${fresh}\n\n${closeMarker}`;
 
-  return `${before}${openMarker}\n\n${fresh}\n\n${closeMarker}${after}`;
+  return { text: `${before}${region}${after}`, next: before.length + region.length };
 }
 
+/**
+ * Take the current README and return it with every generated region rebuilt.
+ * Idempotent.
+ */
 function rewriteReadme(currentReadme) {
-  // A README that folds the long tail declares a second region. Without it,
-  // everything goes in the first region and the output is unchanged from
-  // before the featured/more split existed.
-  //
-  // Half a pair is always a mistake, and a silent one: with only the END
-  // marker left behind, `folded` would be false, the second region would never
-  // be rewritten, and a stale block of client snippets would sail through the
-  // --check drift gate because nothing compares it to anything. Fail loudly.
-  const hasMoreStart = currentReadme.includes("<!-- MORE_CLIENTS_START");
-  const hasMoreEnd = currentReadme.includes(MORE_END);
-  if (hasMoreStart !== hasMoreEnd) {
-    throw new Error(
-      "README.md carries only one of the MORE_CLIENTS_START / MORE_CLIENTS_END markers.\n" +
-        `Found START: ${hasMoreStart}, END: ${hasMoreEnd}.\n` +
-        "Either both are present, and the non-featured clients are generated between them,\n" +
-        "or neither is, and every client is generated in the INSTALL_SNIPPETS region.",
-    );
+  let text = currentReadme;
+  let from = 0;
+  for (const { name, build } of README_REGIONS) {
+    ({ text, next: from } = replaceRegion(text, from, name, build()));
   }
-  const folded = hasMoreStart;
-
-  let out = replaceRegion(
-    currentReadme,
-    "<!-- INSTALL_SNIPPETS_START",
-    README_START,
-    README_END,
-    folded ? readmeFeaturedBlock() : readmeInstallBlock(),
-  );
-
-  if (folded) {
-    out = replaceRegion(
-      out,
-      "<!-- MORE_CLIENTS_START",
-      MORE_START,
-      MORE_END,
-      readmeMoreClientsBlock(),
-    );
-  }
-
-  return out;
+  return text;
 }
 
 /**
@@ -954,6 +1151,35 @@ const OUTPUTS = [
     path: "docs/snippets/cline.md",
     content: PARTIAL_HEADER + snippetCline(),
   },
+  // ─── Keyless partials: the hosted server, natively or through the bridge ──
+  {
+    path: "docs/snippets/cursor-hosted.md",
+    content: PARTIAL_HEADER + snippetCursorHosted(),
+  },
+  {
+    path: "docs/snippets/vscode-hosted.md",
+    content: PARTIAL_HEADER + snippetVscodeHosted(),
+  },
+  {
+    path: "docs/snippets/claude-desktop-hosted.md",
+    content: PARTIAL_HEADER + snippetClaudeDesktopHosted(),
+  },
+  {
+    path: "docs/snippets/cline-hosted.md",
+    content: PARTIAL_HEADER + snippetClineHosted(),
+  },
+  {
+    path: "docs/snippets/windsurf-hosted.md",
+    content: PARTIAL_HEADER + snippetDevinHosted(),
+  },
+  {
+    path: "docs/snippets/zed-hosted.md",
+    content: PARTIAL_HEADER + snippetZedHosted(),
+  },
+  {
+    path: "docs/snippets/jetbrains-hosted.md",
+    content: PARTIAL_HEADER + snippetJetBrainsHosted(),
+  },
 ];
 
 // ─── Write files ─────────────────────────────────────────────────────────────
@@ -988,10 +1214,10 @@ for (const { path, content } of OUTPUTS) {
   written++;
 }
 
-// ─── README install block (in-place rewrite) ────────────────────────────────
+// ─── README install regions (in-place rewrite) ──────────────────────────────
 //
 // Special-cased because README is read-modify-write — we can only update the
-// region between the INSTALL_SNIPPETS markers, the rest of the file is human-
+// regions between the README_REGIONS markers, the rest of the file is human-
 // authored prose.
 
 const README_PATH = resolve(ROOT, "README.md");
@@ -1006,7 +1232,7 @@ let freshReadme;
 try {
   freshReadme = rewriteReadme(currentReadme);
 } catch (err) {
-  console.error("✗ Cannot rewrite README.md install block:");
+  console.error("✗ Cannot rewrite README.md install regions:");
   console.error("  " + (err.message || err).split("\n").join("\n  "));
   process.exit(1);
 }
@@ -1014,21 +1240,18 @@ try {
 if (currentReadme === freshReadme) {
   unchanged++;
 } else if (checkMode) {
-  console.error("✗ Drift detected: README.md install block is stale");
+  console.error("✗ Drift detected: README.md install regions are stale");
   console.error(
-    "  A generated region in README.md (INSTALL_SNIPPETS, and MORE_CLIENTS",
+    `  A generated region in README.md (${README_REGIONS.map((r) => r.name).join(", ")})`,
   );
   console.error(
-    "  if present) does not match",
-  );
-  console.error(
-    "  what the generator would emit from src/configs/source.json.",
+    "  does not match what the generator would emit from src/configs/source.json.",
   );
   console.error("  Run `npm run generate:configs` and commit the result.");
   process.exit(1);
 } else {
   writeFileSync(README_PATH, freshReadme, "utf8");
-  console.log("✓ Generated README.md (install block)");
+  console.log("✓ Generated README.md (install regions)");
   written++;
 }
 
