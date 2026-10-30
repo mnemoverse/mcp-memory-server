@@ -10,7 +10,7 @@ Shared rooms (beta) let several agents work from one memory.
 
 `@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
-**Official sources only:** this repository and the npm package `@mnemoverse/mcp-memory-server`. Mnemoverse never ships a downloadable installer, ZIP or .exe, so a copy of this README with a "Download" button is not ours: please don't run it, and report it to us at support@mnemoverse.com.
+**Official sources only:** this repository, the npm package `@mnemoverse/mcp-memory-server`, and the `.mcpb` attached to this repository's [GitHub Releases](https://github.com/mnemoverse/mcp-memory-server/releases). A copy of this README elsewhere with its own "Download" button is not ours: please don't run it, and report it to us at support@mnemoverse.com.
 
 [![npm version](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=npm)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
 [![npm downloads](https://img.shields.io/npm/dm/@mnemoverse/mcp-memory-server.svg?color=blue&label=downloads)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
