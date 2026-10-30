@@ -26,7 +26,7 @@ CI runs the tests in three time zones, so do not assume UTC in tests that touch 
 2. `npm run verify:configs`
 3. Commit the source change together with every regenerated file.
 
-Do not edit generated files by hand. They are `server.json`, `manifest.json`, everything under `docs/configs/` and `docs/snippets/`, and the README regions between the `INSTALL_SNIPPETS` and `MORE_CLIENTS` HTML comment markers. A hand edit is overwritten on the next run and fails `verify-configs.yml` in the meantime. If a diff appears in one of these files and `source.json` did not change, discard it.
+Do not edit generated files by hand. They are `server.json`, `manifest.json`, everything under `docs/configs/` and `docs/snippets/`, and the README regions between the `INSTALL_SNIPPETS` and `MORE_CLIENTS` HTML comment markers. A hand edit is overwritten on the next run and fails `verify-configs.yml` in the meantime. If a diff appears in one of these files and `source.json` did not change, discard it unless it is a regenerated tool-description change in `manifest.json`: the generator reads those descriptions from `tools.json`, which is built from `src/tools.ts`. For tool-description changes, run `npm run build` and commit the source plus regenerated `tools.json` and `manifest.json`.
 
 Do not hard-code distribution metadata in `src/`, and do not add a parallel config file next to `source.json`.
 

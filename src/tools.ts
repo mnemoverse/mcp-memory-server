@@ -2504,7 +2504,7 @@ export function registerMemoryTools(
     "memory_create_room",
     {
       description:
-        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across the AI tools members connect to Mnemoverse. Members can access the room's existing history, including memories saved before they joined; joining does not expose their private account memory. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and my teammate'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
+        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their membership scope is read_write, across the AI tools members connect to Mnemoverse. Members can access the room's existing history, including memories saved before they joined; joining does not expose their private account memory. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and my teammate'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
       inputSchema: {
         name: z
           .string()

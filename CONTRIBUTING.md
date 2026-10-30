@@ -39,7 +39,7 @@ the `OUTPUTS` array in `scripts/generate-configs.mjs`. Step 4 of "How to add a
 new distribution channel" below used to be a step you could skip for free — the
 table lost five rows that way — and now it is not.
 
-If your editor pops up a diff in any of these files and you didn't change `src/configs/source.json`, the diff is wrong. Discard it.
+If your editor pops up a diff in any of these files and you didn't change `src/configs/source.json`, discard it unless it is a regenerated tool-description change in `manifest.json`. Those descriptions come from `tools.json`, built from `src/tools.ts`, rather than distribution metadata. Run `npm run build` and commit the source with regenerated `tools.json` and `manifest.json`; never edit either generated file by hand.
 
 ## How to change a distribution config
 
