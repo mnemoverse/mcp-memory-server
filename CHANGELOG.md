@@ -72,6 +72,10 @@ git history and the GitHub releases are the record.
   metadata, and the descriptions stay as reviewed. Pinned in
   test/always-load.test.ts.
 
+### Changed
+
+- Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. memory_read now says that a correction is a fresh memory_write, stored alongside the earlier memory, which is not deleted or hidden, and that no MCP deletion tool is exposed: a user can permanently delete an individual personal memory through the REST API or with help from support. memory_create_room explains shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
+
 ### Documentation
 
 - **Every client starts with the keyless path; the API key has its own

@@ -677,7 +677,7 @@ export function registerMemoryTools(
     "memory_write",
     {
       description:
-        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse (Claude, ChatGPT, Cursor, VS Code). Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse. Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
       inputSchema: {
         content: z
           .string()
@@ -1000,7 +1000,7 @@ export function registerMemoryTools(
     "memory_read",
     {
       description:
-        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected (Claude, ChatGPT, Cursor, VS Code). It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A wrong or stale memory is corrected by writing a fresh one with memory_write, not by deleting it.",
+        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write: the new memory is stored alongside the earlier one, which is not deleted or hidden. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support.",
       inputSchema: {
         query: z
           .string()
@@ -2512,7 +2512,7 @@ export function registerMemoryTools(
     "memory_create_room",
     {
       description:
-        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their invite granted read_write (the default scope), across Claude/ChatGPT/Cursor. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and my teammate'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
+        "Create a SHARED memory room — a space OTHER people's assistants can read, and write too when their membership scope is read_write, across the AI tools members connect to Mnemoverse. Members can access the room's existing history, including memories saved before they joined; joining does not expose their private account memory. Use when the user wants to share context or collaborate with someone else (e.g. 'make a room for me and my teammate'). Returns the room's address; pass that address as the `domain` on memory_write/memory_read to use it, and on memory_list_recent to catch up on what others added. People join through an invite minted with memory_invite_to_room.",
       inputSchema: {
         name: z
           .string()
