@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mnemoverse-memory",
   "display_name": "Mnemoverse Memory",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Hosted AI agent memory that learns from outcomes, with shared rooms, in Claude, Cursor and ChatGPT.",
   "long_description": "Mnemoverse gives your AI assistant long-term memory that persists across sessions and across tools, and learns from outcomes: tell it a recalled memory helped or misled, and it re-ranks what comes back next. Store preferences, decisions, and lessons with memory_write; recall them by natural-language search with memory_read; share a memory pool with other agents through rooms. The same memory is shared everywhere you use your Mnemoverse account — Claude, Cursor, VS Code, and any MCP client. The server starts and lists its tools without a key; every tool call needs a free API key from https://console.mnemoverse.com.",
   "author": {
@@ -72,7 +72,7 @@
     },
     {
       "name": "memory_read",
-      "description": "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write: the new memory is stored alongside the earlier one, which is not deleted or hidden. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support."
+      "description": "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write: it is stored alongside the earlier memory, which is not deleted or hidden, unless it is too close to an existing memory, in which case the write is refused. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support."
     },
     {
       "name": "memory_stats",

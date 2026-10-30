@@ -56,6 +56,11 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-10-30
+
+A MINOR: `memory_read`'s `tools/list` entry gains a `_meta` field. The other
+changes are tool description text and documentation.
+
 ### Added
 
 - **`memory_read` is kept loaded up front in Claude Code.** Its tools/list
@@ -74,10 +79,13 @@ git history and the GitHub releases are the record.
 
 ### Changed
 
-- Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. memory_read now says that a correction is a fresh memory_write, stored alongside the earlier memory, which is not deleted or hidden, and that no MCP deletion tool is exposed: a user can permanently delete an individual personal memory through the REST API or with help from support. memory_create_room explains shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
+- Make memory_read, memory_write and memory_create_room descriptions agent-agnostic for Anthropic Directory review. memory_read now says that a correction is a fresh memory_write, stored alongside the earlier memory (which is not deleted or hidden) unless it is too close to an existing memory, and that no MCP deletion tool is exposed: a user can permanently delete an individual personal memory through the REST API or with help from support. memory_create_room explains shared-room history access and private-memory isolation. Tool behavior, schemas, permissions and defaults are unchanged.
 
 ### Documentation
 
+- **The README names the official sources.** This repository, the npm
+  package and the `.mcpb` attached to GitHub Releases; a copy of the README
+  elsewhere with its own "Download" button is not ours (#233).
 - **Every client starts with the keyless path; the API key has its own
   section.** The README went from a short no-key block straight to "Get a free
   API key", and showed Claude Desktop, Devin Desktop (formerly Windsurf), Zed,
