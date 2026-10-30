@@ -1087,6 +1087,14 @@ export function registerMemoryTools(
         idempotentHint: true,
         openWorldHint: false,
       },
+      // Claude Code defers MCP tools behind tool search by default, so at the
+      // start of a task memory_read may not be in context at all. This flag
+      // keeps this one tool loaded up front
+      // (https://code.claude.com/docs/en/mcp.md, "anthropic/alwaysLoad",
+      // Claude Code 2.1.285). Only memory_read carries it: the read is what a
+      // task needs first, and every other tool stays behind search
+      // (test/always-load.test.ts).
+      _meta: { "anthropic/alwaysLoad": true },
     },
     async ({
       query,
