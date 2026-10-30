@@ -56,6 +56,11 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-10-30
+
+A MINOR: `memory_read`'s `tools/list` entry gains a `_meta` field. The other
+changes are tool description text and documentation.
+
 ### Added
 
 - **`memory_read` is kept loaded up front in Claude Code.** Its tools/list
