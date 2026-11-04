@@ -1,10 +1,16 @@
 # Installing Mnemoverse Memory (instructions for AI agents)
 
-This file is for an AI agent such as Cline that installs `@mnemoverse/mcp-memory-server` on a user's behalf. Follow the steps in order. The human-facing version of the same steps is in `README.md`.
+Choose the user's current app before configuring a server. This file then explains hosted and local MCP setup for an agent such as Cline. The human-facing version is in `README.md`.
+
+## ChatGPT: install the published plugin
+
+Open [Mnemoverse Memory](https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33), select **Install plugin**, and let the user complete ChatGPT login and Mnemoverse browser sign-in. Follow the [ChatGPT guide](https://mnemoverse.com/docs/api/chatgpt), then stop here: the local-package steps below are not needed. Start a new chat, select the plugin and check an actual `memory_stats` response before a user-requested write and read-back. If installation is unavailable, report the actual message; custom-server creation limits do not establish published-plugin eligibility.
+
+For other apps, use the recommended route in [Install by host](https://mnemoverse.com/docs/api/install-by-host). Never ask for passwords, API keys or OAuth codes in chat.
 
 ## First: the hosted server needs no key
 
-If the client can add a remote MCP server by URL and run its browser sign-in, follow the hosted setup in this section, then skip the local-package sections after it: there is no key to ask for and nothing to install. The URL is `https://mcp.mnemoverse.com/mcp` (streamable HTTP, OAuth sign-in), and it serves the same tools as this package.
+If the client can add a remote MCP server by URL and run its browser sign-in, follow the hosted setup in this section, then skip the local-package sections after it: there is no key to ask for and nothing to install. The URL is `https://mcp.mnemoverse.com/mcp` (streamable HTTP, OAuth sign-in). Host-specific differences are listed in [tool availability](https://mnemoverse.com/docs/api/tool-availability).
 
 In Claude Code, run:
 
@@ -44,7 +50,7 @@ A client that only starts local commands reaches the same hosted server through 
 }
 ```
 
-Use the local package below when the user asks for an API key, or when the browser sign-in cannot complete on this machine.
+Use the local package below when the user deliberately chooses it, needs an unattended connection, or their MCP client cannot complete browser sign-in. An unavailable ChatGPT install button is not a reason to run a local package: use the ChatGPT guide to diagnose that account's actual restriction.
 
 ## What you are installing
 
@@ -53,11 +59,11 @@ Mnemoverse Memory is a hosted memory service for AI agents, reached over the Mod
 ## Requirements
 
 - Node.js 18 or newer. `npx` ships with npm, so no global install is needed; `npx -y @mnemoverse/mcp-memory-server@latest` downloads and runs the current release.
-- A Mnemoverse API key. It starts with `mk_live_`. The user gets one at https://console.mnemoverse.com (free tier, no credit card). Ask the user for the key; do not invent one. The server starts and lists its tools without a key, but every tool call is refused until a real key is set.
+- A Mnemoverse API key. It starts with `mk_live_`. The user gets one at https://console.mnemoverse.com (free tier, no credit card) and enters it in the client's protected settings or a private user-level configuration. Do not ask them to paste it into chat or invent one. The server starts and lists its tools without a key, but every tool call is refused until a real key is set.
 
 ## Step 1: add the server to the client config
 
-For Cline, open MCP Servers, then Configure, or edit `cline_mcp_settings.json` directly. Merge this object with any servers already present. Cline reads `env` values literally, so put the real key in place of `mk_live_YOUR_KEY`, not a `${VAR}` reference.
+For Cline, open MCP Servers, then Configure, or edit `cline_mcp_settings.json` directly. Merge this object with any servers already present. Cline reads `env` values literally, so have the user replace `mk_live_YOUR_KEY` privately in that config, not with a `${VAR}` reference. Do not print or commit the completed config.
 
 ```json
 {
@@ -87,9 +93,10 @@ MCP servers are picked up on client startup. After editing the config, restart t
 
 ## Step 3: verify
 
-1. Ask the assistant: "Remember that my favourite TypeScript framework is Hono, and call memory_write to save it." Expected: a `memory_write` call that reports the memory as stored. If it answers `NOT STORED`, the engine judged it a near-duplicate of something already in this account (typical when this guide is run a second time): the connection works, go to step 2.
-2. Start a new session and ask: "What's my favourite TypeScript framework?" Expected: a `memory_read` call and the answer "Hono".
-3. If step 1 or 2 returns an authentication error, read it: the message says which problem it is (no key set, the placeholder still in place, a key cut short or wrapped in quotes, a key that does not exist, or a revoked key). Fix the `MNEMOVERSE_API_KEY` value accordingly (a revoked key needs a new one from the console) and restart the client again.
+1. Call `memory_stats` and inspect the actual response. Visible tool names alone do not verify an authenticated connection.
+2. If setup was the only request, report verified read access and stop; writes have not been tested. Do not create a test memory just to finish setup. If the user already requested saving a fact or testing persistence, continue that task. For a persistence test, let the user choose a harmless true fact and a domain such as `setup-check`.
+3. For that requested save, call `memory_write` with the fact and domain, and inspect the result. Report saved only when it confirms storage. `NOT STORED` or `stored: false` means no new memory was saved: retain the returned reason if present, do not assume it was a duplicate, and do not retry writes blindly. For a requested persistence test, start a new session and verify that `memory_read` returns the fact from the same domain. A natural-language answer without the tool result does not establish persistence. If a read finds a pre-existing matching memory after a refused write, report that distinction.
+4. If a call returns an authentication error, read it: the message says which problem it is (no key set, the placeholder still in place, a key cut short or wrapped in quotes, a key that does not exist, or a revoked key). Have the user fix `MNEMOVERSE_API_KEY` in their private configuration (a revoked key needs a new one from the console) and restart the client again. Keep secrets out of troubleshooting output.
 
 ## Environment variables
 
@@ -100,7 +107,7 @@ MCP servers are picked up on client startup. After editing the config, restart t
 
 ## Tools
 
-Eleven tools. The same set is served by the hosted endpoint, so memories written here are readable from every other client the user connects to the same account.
+Eleven tools in this local package. The hosted endpoint has [host-specific tool availability](https://mnemoverse.com/docs/api/tool-availability); ChatGPT deliberately does not receive every local tool. Memories are shared by clients connected to the same Mnemoverse account.
 
 | Tool | What it does |
 |---|---|

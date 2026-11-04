@@ -6,8 +6,9 @@ Instructions for AI coding agents working in this repository. The human-facing v
 
 You do not need to change this repository. Use one of these:
 
+- ChatGPT: install the published Mnemoverse Memory plugin and complete browser sign-in. Start with https://mnemoverse.com/docs/api/chatgpt; no local package or custom MCP setup is needed for this route.
 - Hosted endpoint, no key to paste: `https://mcp.mnemoverse.com/mcp` (Streamable HTTP, OAuth sign-in in the browser). Per-client setup: https://mnemoverse.com/docs/api/install-by-host
-- Local stdio server: follow `llms-install.md`, which is written for an agent installing on a user's behalf. Ask the user for their key; never invent one and never write a literal `mk_live_` key into a file that gets committed.
+- Local stdio server: follow `llms-install.md`, which is written for an agent installing on a user's behalf. Have the user enter their key in the client's protected settings or a private user-level configuration, not in chat. Never invent a key or write a literal `mk_live_` key into a file that gets committed.
 
 ## Setup and checks
 
