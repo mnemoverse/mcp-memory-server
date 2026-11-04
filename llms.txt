@@ -5,7 +5,7 @@
 ## Choose your app first
 
 ChatGPT: install the published Mnemoverse Memory plugin at https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33 and complete browser sign-in. Follow https://mnemoverse.com/docs/api/chatgpt; no local package or custom MCP setup is needed for this route. Start a new chat, select the plugin, then check a successful memory_stats response before a user-requested write and read-back. Diagnose missing installation from the actual account message, not custom-server creation rules.
-Other apps: https://mnemoverse.com/docs/api/install-by-host. The tool and stdio setup reference below describes this local package; host differences: https://mnemoverse.com/docs/api/tool-availability.
+Other apps: https://mnemoverse.com/docs/api/install-by-host. The tool and stdio setup reference below describes this local package; host differences: https://mnemoverse.com/docs/api/tool-availability. For local setup, have the user enter their API key in the client's protected settings or a private user-level configuration, not in chat or a committed file; follow llms-install.md.
 
 ## Tools
 
