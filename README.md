@@ -506,8 +506,8 @@ saw and diff it against what the server serves today, by version.
   client should look for. Because a MINOR may add a field but not remove one, a
   renamed annotation field is declared under both names until the announced
   version.
-- Any difference between two servers of the same version is a bug. Report it
-  with both `tools/list` outputs. One exception, by configuration: a server
+- Any difference between two unfiltered registrations of this package at the
+  same version is a bug. Report it with both `tools/list` outputs. One exception, by configuration: a server
   built on the `/shared` entry point may ask for its own noun in the three
   descriptions that name the server (`wording.serverNoun`, below), which
   changes those three description strings and nothing else; tool names,
@@ -517,8 +517,12 @@ Every `inputSchema` and `outputSchema` is JSON Schema 2020-12, the dialect MCP
 assumes when a schema names none, and names none (#189).
 
 The list above is the current surface: eleven tools, each declaring all four hints.
-The hosted connector at `mcp.mnemoverse.com/mcp` serves the same surface, registered
-from this package at the version it pins. The list itself is published as
+The hosted connector at `mcp.mnemoverse.com/mcp` registers tools from this package
+at the version it pins, then applies its own host profile. For ChatGPT that profile
+withholds `vault_list`; it is a connector-layer filter, not a configurable tool
+list in this package. Compare the same package version and host profile when
+checking parity; see [tool availability by host](https://mnemoverse.com/docs/api/tool-availability).
+The package's unfiltered list is published as
 [`tools.json`](./tools.json), generated from the built server (name, title,
 description and annotations per tool); the test suite and the release workflow
 fail when it does not list what the server registers, and the `.mcpb` manifest's
