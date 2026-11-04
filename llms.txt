@@ -2,6 +2,11 @@
 
 > Persistent AI memory via Model Context Protocol. Store and recall memories across sessions.
 
+## Choose your app first
+
+ChatGPT: install the published Mnemoverse Memory plugin at https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33 and complete browser sign-in. Follow https://mnemoverse.com/docs/api/chatgpt; no local package or custom MCP setup is needed for this route. Start a new chat, select the plugin, then check a successful memory_stats response before a user-requested write and read-back. Diagnose missing installation from the actual account message, not custom-server creation rules.
+Other apps: https://mnemoverse.com/docs/api/install-by-host. The tool and stdio setup reference below describes this local package; host differences: https://mnemoverse.com/docs/api/tool-availability. For local setup, have the user enter their API key in the client's protected settings or a private user-level configuration, not in chat or a committed file; follow llms-install.md.
+
 ## Tools
 
 ### memory_write
@@ -124,7 +129,8 @@ Named shortcuts that ask the model to use the tools above; they call nothing the
 - memory://item/{memory_id}: one saved memory by its id, as JSON {memory_id, content, domain}. Your own store only; a memory from a shared room cannot be opened by id.
 
 ## Setup
-Hosted (no key, nothing to install): https://mcp.mnemoverse.com/mcp, streamable HTTP, OAuth sign-in, same tools. Claude Code: claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp, then start a new session, run /mcp, select mnemoverse and choose Authenticate.
+For ChatGPT, use the published-plugin route above. The following hosted/manual and local commands are for clients that need those integrations.
+Hosted (no key, nothing to install): https://mcp.mnemoverse.com/mcp, streamable HTTP, OAuth sign-in; see tool availability above for host-specific differences. Claude Code: claude mcp add --scope user --transport http mnemoverse https://mcp.mnemoverse.com/mcp, then start a new session, run /mcp, select mnemoverse and choose Authenticate.
 Hosted from a client that only starts local commands (still no key; Node.js 20.18.1 or later): command npx, args ["-y", "mcp-remote@latest", "https://mcp.mnemoverse.com/mcp"]. The mcp-remote bridge opens the same browser sign-in on first start.
 Local package (below): Node.js 18 or later and an API key. A client that can send a fixed header can instead use the hosted URL with Authorization: Bearer mk_live_YOUR_KEY.
 Environment: MNEMOVERSE_API_KEY — optional to install and inspect (the server starts and lists its tools without it), but every tool call fails without one; get a free key at https://console.mnemoverse.com. MNEMOVERSE_API_URL (optional, default https://core.mnemoverse.com/api/v1)

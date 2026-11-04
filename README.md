@@ -4,7 +4,9 @@
 
 **Free plan, no credit card:** 1,000 queries a day (reads, writes and feedback combined), 10,000 atoms of storage, 60 requests a minute. Plans and limits: [mnemoverse.com/pricing](https://mnemoverse.com/pricing)
 
-**Connect** with an OAuth sign-in on the hosted endpoint `https://mcp.mnemoverse.com/mcp`, or run this package locally with an API key. Setup for Claude Code, Claude Desktop, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline, Gemini CLI and ChatGPT is below. Steps for other hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
+**Using ChatGPT?** [Install the published Mnemoverse Memory plugin](https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33), then complete browser sign-in. Follow the [ChatGPT guide](https://mnemoverse.com/docs/api/chatgpt) to verify the connection; no local package or custom MCP setup is needed for this route.
+
+**Other clients:** connect with an OAuth sign-in on the hosted endpoint `https://mcp.mnemoverse.com/mcp`, or run this package locally with an API key. Setup for Claude Code, Claude Desktop, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline and Gemini CLI is below. Steps for other hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
 
 Shared rooms (beta) let several agents work from one memory.
 
@@ -186,25 +188,21 @@ Zed also accepts the URL itself (`"url": "https://mcp.mnemoverse.com/mcp"`) and 
 
 </details>
 
-**Gemini CLI**: `gemini extensions install https://github.com/mnemoverse/gemini-extension` connects the same hosted server. **ChatGPT**: [add it as a custom MCP server](https://mnemoverse.com/docs/api/chatgpt). Steps for more hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
+**Gemini CLI**: `gemini extensions install https://github.com/mnemoverse/gemini-extension` connects the same hosted server. **ChatGPT**: [install the published plugin](https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33) and follow the [ChatGPT guide](https://mnemoverse.com/docs/api/chatgpt); [custom MCP setup](https://mnemoverse.com/docs/api/chatgpt-custom-mcp) remains a separate advanced alternative. Steps for more hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
 
 > ⚠️ **Restart your AI client** after editing the config. MCP servers are only picked up on client startup.
 
 ### 2. Try it — 30 seconds to verify it works
 
-Paste this in your AI chat:
+First ask the agent to call `memory_stats` and inspect the actual response. A successful result confirms read access, including an empty account. Visible tools alone do not. If you only wanted to connect memory, you can stop here; writing has not been tested.
 
-> **"Remember that my favourite TypeScript framework is Hono, and please call `memory_write` to save it."**
+For a save-and-recall test you want to run, choose a harmless true fact, then ask the agent to save it with `memory_write` in a domain such as `setup-check`. Check the tool result before treating the fact as saved. `NOT STORED` or `stored: false` means no new memory was saved: keep the returned reason, do not assume it was a duplicate, and do not retry writes blindly.
 
-Your agent should call `memory_write` and confirm the memory was stored.
+After a successful write, open a **new chat / new session** and ask the agent to call `memory_read` for that fact in the same domain.
 
-Then open a **new chat / new session** (this is the whole point — memory survives restarts), and ask:
+Verify that the actual `memory_read` result contains your fact. An answer without the tool result does not prove persistence. If writing succeeded but read-back failed, saving is confirmed and verification remains incomplete.
 
-> **"What's my favourite TypeScript framework?"**
-
-Your agent should call `memory_read`, find the entry, and answer "Hono". If it does — you're wired up. Write whatever you want next.
-
-If it doesn't remember: check that the client was fully restarted and that the browser sign-in finished (in Claude Code, `/mcp`; in Cursor, **Connect** next to `mnemoverse`). With the [local package](#local-package-with-an-api-key), check that the config has your real `mk_live_...` key, not the placeholder.
+If a call fails, keep the actual error. Check that the client was fully restarted and that browser sign-in finished (in Claude Code, `/mcp`; in Cursor, **Connect** next to `mnemoverse`). With the [local package](#local-package-with-an-api-key), check the key privately in the client configuration; do not paste it into chat or troubleshooting output. An existing matching memory found after a refused write is not a newly saved test fact.
 
 > ⭐ If the second session remembered, [star the repo](https://github.com/mnemoverse/mcp-memory-server). It helps other builders find it.
 
@@ -508,8 +506,8 @@ saw and diff it against what the server serves today, by version.
   client should look for. Because a MINOR may add a field but not remove one, a
   renamed annotation field is declared under both names until the announced
   version.
-- Any difference between two servers of the same version is a bug. Report it
-  with both `tools/list` outputs. One exception, by configuration: a server
+- Any difference between two unfiltered registrations of this package at the
+  same version is a bug. Report it with both `tools/list` outputs. One exception, by configuration: a server
   built on the `/shared` entry point may ask for its own noun in the three
   descriptions that name the server (`wording.serverNoun`, below), which
   changes those three description strings and nothing else; tool names,
@@ -519,8 +517,12 @@ Every `inputSchema` and `outputSchema` is JSON Schema 2020-12, the dialect MCP
 assumes when a schema names none, and names none (#189).
 
 The list above is the current surface: eleven tools, each declaring all four hints.
-The hosted connector at `mcp.mnemoverse.com/mcp` serves the same surface, registered
-from this package at the version it pins. The list itself is published as
+The hosted connector at `mcp.mnemoverse.com/mcp` registers tools from this package
+at the version it pins, then applies its own host profile. For ChatGPT that profile
+withholds `vault_list`; it is a connector-layer filter, not a configurable tool
+list in this package. Compare the same package version and host profile when
+checking parity; see [tool availability by host](https://mnemoverse.com/docs/api/tool-availability).
+The package's unfiltered list is published as
 [`tools.json`](./tools.json), generated from the built server (name, title,
 description and annotations per tool); the test suite and the release workflow
 fail when it does not list what the server registers, and the `.mcpb` manifest's
