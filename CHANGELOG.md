@@ -56,6 +56,22 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-11-05
+
+Documentation-only patch. Tool behavior, descriptions, schemas, annotations,
+permissions and dependencies are unchanged from 0.17.0.
+
+### Documentation
+
+- Make the published Mnemoverse Memory plugin the first ChatGPT setup route
+  in the README and agent installation guides, with custom MCP setup retained
+  as an advanced alternative (#238).
+- Verify read access with an actual `memory_stats` result. For a user-requested
+  save, inspect the write result and read the fact back from the same domain;
+  visible tools or a conversational answer alone do not prove persistence.
+- Keep API keys in private client settings, and distinguish the local package's
+  tool list from the hosted connector's host-specific profile.
+
 ## [0.17.0] — 2026-10-30
 
 A MINOR: `memory_read`'s `tools/list` entry gains a `_meta` field. The other
