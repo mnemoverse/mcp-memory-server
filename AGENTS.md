@@ -39,6 +39,8 @@ Any change to what a tool does, returns or says about itself, including a descri
 
 The version lives only in `package.json`; `src/index.ts` reads it and `server.json` is generated from it. Releases are cut by pushing a `vX.Y.Z` tag, and `.github/workflows/release.yml` publishes to npm and the MCP Registry. Do not bump versions, tag or publish unless a maintainer asks you to.
 
+After an authorized package release, follow the [wave tracker and deployment checks](CONTRIBUTING.md#the-wave-tracker-what-happens-after-the-release). A successful publication does not prove the docs or hosted connector updated, and does not authorize an otherwise excluded production deployment.
+
 ## Pull requests
 
 Keep one concern per PR, run `npm test` and `npm run verify:configs` before pushing, and say in the description which of the checks above you ran.

@@ -201,12 +201,13 @@ same as "nothing partial gets published": whatever already succeeded stays publi
   `Release did not complete` issue when a release fails, and nothing closes it
   automatically: close it by hand once the resumed run is green.
 
-  `release-sync check` also stays red after the pipeline above is fully green: it gates
-  two follow-up surfaces (the docs site's `llms-full.txt`, the marketing site's
-  `server-card.json`) that a human updates by merging a small bump PR in a *different*
-  repository (`mnemoverse-docs`, `mnemoverse-marketing`). That is reported as follow-up
-  lag, not drift, and closing it means merging those PRs, not touching this release
-  pipeline.
+  `release-sync check` can stay red after npm, the MCP Registry and the GitHub
+  release are confirmed: it also gates the three public follow-up probes in
+  `scripts/consumers.json` — the docs site's `llms-full.txt`, the marketing
+  server card and the hosted connector's `/health`. An older version there is
+  follow-up lag, not a failed package publication. Follow the deployment steps
+  below instead of rerunning the package release. An unreadable probe is unknown,
+  not proof of either drift or lag.
 
 ### The wave tracker: what happens after the release
 
@@ -222,6 +223,29 @@ Two things read it:
   checklist line per consumer.
 - `release-sync-check.yml` (daily) probes every probed consumer, ticks its line,
   closes the wave when every line is green, and labels it `stale-wave` if it is still open three days after the release.
+
+After each package release, verify the follow-up deployments separately:
+
+1. **Docs:** review and merge the existing `bot/mcp-version-<version>` PR in
+   `mnemoverse-docs`, wait for its deployment, then check the version served by
+   `https://mnemoverse.com/docs/llms-full.txt`. A merged PR alone does not prove
+   the public page updated.
+2. **Hosted connector:** update its package pin in `mnemoverse-mcp-remote`, run
+   its checks and deploy only within the maintainer-approved production scope.
+   Publishing this npm package does not deploy Railway. Check the live
+   `/health` response and connector server card after deployment. If production
+   was excluded from the release approval, record the served version and leave
+   this follow-up pending; a lagging probe is not permission to deploy.
+3. **Marketing server card:**
+   `https://mnemoverse.com/.well-known/mcp/server-card.json` redirects to the
+   connector's live card. Verify that redirect and the target's `package.version`.
+   It follows the hosted deployment; do not create a separate marketing version
+   stamp or deployment just to make this probe match the npm version.
+
+Keep the wave open until its probes confirm the deployments. Do not manually
+mark a consumer complete based only on a successful package publish or PR merge.
+The public wave covers the registered public endpoints; other release surfaces
+still need their separately tracked follow-up and verification.
 
 Adding a consumer: one entry in `scripts/consumers.json`, only for a public
 endpoint of ours with a live probe; `test/wave.test.ts` validates the shape.
