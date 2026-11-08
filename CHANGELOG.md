@@ -56,6 +56,16 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The key's description no longer says the hosted server takes no key.** It
+  said the hosted server at `https://mcp.mnemoverse.com/mcp` "signs in with
+  OAuth and takes no key", while that server also accepts an API key as a
+  bearer token (`Authorization: Bearer mk_live_…`). It now says the hosted
+  server needs no key, signs in with OAuth, and also accepts this key as a
+  bearer token. The line is published in `server.json` next to the npx
+  package and is the prompt text VS Code shows for the key input.
+
 ## [0.17.1] — 2026-11-05
 
 Documentation-only patch. Tool behavior, descriptions, schemas, annotations,
