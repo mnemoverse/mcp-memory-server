@@ -114,6 +114,25 @@ describe("the README's install sections", () => {
   });
 });
 
+describe("the key's description in source.json", () => {
+  // The registry entry and the VS Code prompt are generated from this text, so the
+  // README test above does not catch it going back to "takes no key" (#243).
+  const description = (JSON.parse(read("src/configs/source.json")) as {
+    env: Record<string, { description: string }>;
+  }).env.MNEMOVERSE_API_KEY.description;
+
+  it("says the hosted server also accepts the key as a bearer token", () => {
+    expect(description).toContain(HOSTED_URL);
+    expect(description).toContain("accepts this key as a bearer token");
+    expect(description).not.toMatch(/takes no key|for this local package only/);
+  });
+
+  it("puts the tool-call requirement on the local package, not on OAuth calls to the hosted server", () => {
+    expect(description).toContain("this local package starts and lists its tools without a key");
+    expect(description).not.toContain("every actual tool call requires one");
+  });
+});
+
 describe("the bridge entries", () => {
   it("are source.json's bridge with the hosted URL appended, and nothing else", () => {
     const entries: Entry[] = [];

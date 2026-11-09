@@ -63,8 +63,11 @@ git history and the GitHub releases are the record.
   OAuth and takes no key", while that server also accepts an API key as a
   bearer token (`Authorization: Bearer mk_live_…`). It now says the hosted
   server needs no key, signs in with OAuth, and also accepts this key as a
-  bearer token. The line is published in `server.json` next to the npx
-  package and is the prompt text VS Code shows for the key input.
+  bearer token. Its last clause now says that this local package needs the
+  key for every tool call it makes, so the line no longer reads as if OAuth
+  calls to the hosted server need one. The line is published in `server.json`
+  next to the npx package and is the prompt text VS Code shows for the key
+  input.
 
 ## [0.17.1] — 2026-11-05
 

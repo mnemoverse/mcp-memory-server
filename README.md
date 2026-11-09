@@ -298,7 +298,7 @@ claude mcp add mnemoverse --scope user -e MNEMOVERSE_API_KEY=mk_live_YOUR_KEY -e
     {
       "type": "promptString",
       "id": "mnemoverse-api-key",
-      "description": "Mnemoverse API key (starts with mk_live_), for this local package. The hosted server https://mcp.mnemoverse.com/mcp needs no key: it signs in with OAuth, and it also accepts this key as a bearer token. Optional to install and inspect — the server starts and lists its tools without a key; every actual tool call requires one. Get one free in ~30s at https://console.mnemoverse.com",
+      "description": "Mnemoverse API key (starts with mk_live_), for this local package. The hosted server https://mcp.mnemoverse.com/mcp needs no key: it signs in with OAuth, and it also accepts this key as a bearer token. Optional to install and inspect: this local package starts and lists its tools without a key, and every tool call it makes requires one. Get one free in ~30s at https://console.mnemoverse.com",
       "password": true
     }
   ],
