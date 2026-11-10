@@ -8,7 +8,7 @@
 
 **Other clients:** connect with an OAuth sign-in on the hosted endpoint `https://mcp.mnemoverse.com/mcp`, or run this package locally with an API key. Setup for Claude Code, Claude Desktop, Cursor, VS Code, Devin Desktop (formerly Windsurf), Zed, JetBrains, Cline and Gemini CLI is below. Steps for other hosts: [mnemoverse.com/docs/api/install-by-host](https://mnemoverse.com/docs/api/install-by-host)
 
-Shared rooms (beta) let several agents work from one memory.
+Shared rooms let several agents work from one memory.
 
 `@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
