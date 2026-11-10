@@ -58,6 +58,9 @@ git history and the GitHub releases are the record.
 
 ### Documentation
 
+- **Shared rooms are no longer labelled beta.** Owner decision of 2026-11-10.
+  The README said "Shared rooms (beta)"; it now says "Shared rooms". Text only:
+  no tool, description, schema or behaviour changed.
 - **The key's description no longer says the hosted server takes no key.** It
   said the hosted server at `https://mcp.mnemoverse.com/mcp` "signs in with
   OAuth and takes no key", while that server also accepts an API key as a
