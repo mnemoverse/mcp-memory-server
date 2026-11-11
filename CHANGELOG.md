@@ -56,6 +56,11 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.17.2] — 2026-11-11
+
+Text-only patch. Tool behavior, schemas, annotations, permissions and
+dependencies are unchanged from 0.17.1.
+
 ### Documentation
 
 - **Shared rooms are no longer labelled beta.** Owner decision of 2026-11-10.
