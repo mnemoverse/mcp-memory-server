@@ -1177,7 +1177,7 @@ function explainSupersedeFailure(f: ApiFailure, env: ErrorEnvelope): string | un
     const by =
       env.supersededBy === undefined
         ? ""
-        : ` It is already replaced by ${env.supersededBy}; replace that one instead.`;
+        : ` It is already replaced by ${env.supersededBy}. Read that memory first; if it is also outdated, write the correction with supersedes set to ${env.supersededBy}.`;
     return (
       `Mnemoverse: nothing was stored and nothing was replaced (409). Memory ${target} ` +
       `could not be replaced.${why}${by} Retrying the same request will conflict again.`

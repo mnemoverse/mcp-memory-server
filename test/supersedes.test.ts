@@ -218,6 +218,49 @@ describe("memory_write: the superseded answer", () => {
   });
 });
 
+describe("memory_write: requested ids the answer does not confirm", () => {
+  const NOTE = (idsText: string) =>
+    `\nNot confirmed as replaced: ${idsText}; they may still appear in reads.`;
+  const base = `Stored (importance: 0.80). ID: ${NEW_ID}`;
+
+  it("a missing superseded array: every requested id is unconfirmed", async () => {
+    mcp.on(WRITE, { stored: true, atom_id: NEW_ID, importance: 0.8 });
+    const r = await mcp.call("memory_write", { content: "x", supersedes: [ID_A, ID_B] });
+    expect(r.isError).toBeFalsy();
+    expect(r.text).toBe(base + NOTE(`${ID_A}, ${ID_B}`));
+    expect(r.structuredContent).not.toHaveProperty("superseded");
+  });
+
+  it("an empty superseded array: every requested id is unconfirmed", async () => {
+    mcp.on(WRITE, stored);
+    const r = await mcp.call("memory_write", { content: "x", supersedes: [ID_A] });
+    expect(r.text).toBe(base + NOTE(ID_A));
+    expect(r.structuredContent).not.toHaveProperty("superseded");
+  });
+
+  it("a partial list: Replaced names the confirmed, the note names the rest", async () => {
+    mcp.on(WRITE, { ...stored, superseded: [ID_A] });
+    const r = await mcp.call("memory_write", { content: "x", supersedes: [ID_A, ID_B] });
+    expect(r.text).toBe(`${base}\nReplaced: ${ID_A}${NOTE(ID_B)}`);
+    expect((r.structuredContent as { superseded: string[] }).superseded).toEqual([ID_A]);
+  });
+
+  it("compares exactly: a different letter case is not a confirmation", async () => {
+    mcp.on(WRITE, { ...stored, superseded: ["Ab"] });
+    const r = await mcp.call("memory_write", { content: "x", supersedes: ["aB"] });
+    expect(r.text).toContain(NOTE("aB").trimStart());
+  });
+
+  it("all confirmed, or no supersedes passed: no note", async () => {
+    mcp.on(WRITE, { ...stored, superseded: [ID_A] });
+    const ok = await mcp.call("memory_write", { content: "x", supersedes: [ID_A] });
+    expect(ok.text).not.toContain("Not confirmed");
+    mcp.reset().on(WRITE, stored);
+    const plain = await mcp.call("memory_write", { content: "x" });
+    expect(plain.text).not.toContain("Not confirmed");
+  });
+});
+
 describe("memory_write: core's refusals of a supersede write, in core's own shapes", () => {
   it("400 for a room domain: replacing is not supported in a room", async () => {
     mcp.on(
@@ -271,7 +314,10 @@ describe("memory_write: core's refusals of a supersede write, in core's own shap
     expect(r.isError).toBe(true);
     expect(r.text).toContain(ID_A);
     expect(r.text).toContain("already_superseded");
-    expect(r.text).toContain(`already replaced by ${ID_B}; replace that one instead`);
+    expect(r.text).toContain(
+      `already replaced by ${ID_B}. Read that memory first; if it is also outdated, write the correction with supersedes set to ${ID_B}.`,
+    );
+    expect(r.text).not.toContain("replace that one instead");
     expect(r.text).not.toContain("Raw detail");
   });
 
@@ -327,7 +373,7 @@ describe("memory_write: core's refusals of a supersede write, in core's own shap
     });
     expect(text).toContain(ID_A);
     expect(text).toContain("Reason: already superseded.");
-    expect(text).toContain("already replaced by atom_9;");
+    expect(text).toContain("already replaced by atom_9.");
     expect(text).not.toMatch(/[\n\u202e]/);
   });
 

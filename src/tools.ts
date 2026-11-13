@@ -941,6 +941,20 @@ export function registerMemoryTools(
             return clean === undefined ? [] : [clean];
           })
         : [];
+      // Requested ids the answer does not confirm (exact string equality: ids
+      // are opaque). The write itself is stored, so this is a sentence in the
+      // text, not an error; `superseded` stays what core confirmed.
+      const confirmed = new Set(
+        Array.isArray(r.superseded)
+          ? r.superseded.filter((id): id is string => typeof id === "string")
+          : [],
+      );
+      const unconfirmed = (supersedes ?? [])
+        .filter((id) => !confirmed.has(id))
+        .flatMap((id) => {
+          const clean = structuredText(id, MAX_ID_CHARS);
+          return clean === undefined ? [] : [clean];
+        });
       const optionalStructured = {
         ...(reasonStructured === undefined ? {} : { reason: reasonStructured }),
         ...(importanceStructured === undefined
@@ -970,8 +984,10 @@ export function registerMemoryTools(
         }
         return structured(
           `Stored (importance: ${importance}). ID: ${r.atom_id}` +
-            (superseded.length > 0 ? `
-Replaced: ${superseded.join(", ")}` : ""),
+            (superseded.length > 0 ? `\nReplaced: ${superseded.join(", ")}` : "") +
+            (unconfirmed.length > 0
+              ? `\nNot confirmed as replaced: ${unconfirmed.join(", ")}; they may still appear in reads.`
+              : ""),
           {
             stored: true,
             memory_id: r.atom_id,

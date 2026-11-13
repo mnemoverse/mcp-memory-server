@@ -73,7 +73,9 @@ passes neither parameter sends the same request as before.
 - **`memory_write` reports what it replaced.** When the write replaced at least
   one memory, the text gains a line `Replaced: <ids>` and `structuredContent`
   gains `superseded: string[]` (declared in `outputSchema`, optional). Nothing
-  is added for an ordinary write.
+  is added for an ordinary write. When the answer does not confirm every id that was
+  passed, a further line, `Not confirmed as replaced: <ids>; they may still appear
+  in reads.`, names the rest; `superseded` stays what the service confirmed.
 - **Refused replacements say why, in the agent's terms.** A 400 for a room
   domain ("In a shared room a correction is written next to the old memory;
   replacing is not supported."), a 404 for an id not found in this account's
