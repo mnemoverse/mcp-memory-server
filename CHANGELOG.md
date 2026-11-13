@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.18.1] — 2026-11-13
+
 A patch: a dependency floor, no tool, schema or behaviour change.
 
 ### Security
