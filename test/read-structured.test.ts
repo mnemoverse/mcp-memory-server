@@ -84,6 +84,7 @@ describe("memory_read: tools/list carries the output schema", () => {
       "created_at",
       "domain",
       "memory_id",
+      "superseded_by",
     ]);
     // Exactly the three fields core's MemoryItemSchema always sends; the
     // other two (created_at, author) are conditional on the wire.

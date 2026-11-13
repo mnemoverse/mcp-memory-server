@@ -52,6 +52,7 @@ describe("memory_write: tools/list carries the output schema", () => {
       "memory_id",
       "reason",
       "stored",
+      "superseded",
     ]);
     expect(schema.required).toEqual(["stored", "memory_id"]);
   });

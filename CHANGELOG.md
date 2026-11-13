@@ -56,6 +56,48 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+Minor: two optional parameters are added, and one output field. No tool, no
+existing parameter and no annotation is removed, renamed or retyped; a call that
+passes neither parameter sends the same request as before.
+
+### Added
+
+- **`memory_write` takes `supersedes`.** An optional array of 1 to 32 distinct
+  `memory_id` values (opaque strings) of memories this write corrects or replaces.
+  It is forwarded to the memory service, which stores the new memory and marks
+  every listed one as replaced in a single transaction: all of it or none. It is
+  not accepted in shared rooms (`xroom:` domains). The ids are checked here
+  before anything is sent (an empty list, more than 32, a repeat or an empty
+  string is refused by the tool's schema; the format of an id is not checked,
+  since this package treats ids as opaque, and the service re-validates it).
+- **`memory_write` reports what it replaced.** When the write replaced at least
+  one memory, the text gains a line `Replaced: <ids>` and `structuredContent`
+  gains `superseded: string[]` (declared in `outputSchema`, optional). Nothing
+  is added for an ordinary write. When the answer does not confirm every id that was
+  passed, a further line, `Not confirmed as replaced: <ids>; they may still appear
+  in reads.`, names the rest; `superseded` stays what the service confirmed.
+- **Refused replacements say why, in the agent's terms.** A 400 for a room
+  domain ("In a shared room a correction is written next to the old memory;
+  replacing is not supported."), a 404 for an id not found in this account's
+  memory, and a 409 naming the id, the reason and, when there is one, the memory
+  that already replaced it. These three answers print only those fields of the
+  service's reply, with no raw tail. A refused write that carried `supersedes`
+  also says that nothing was replaced.
+- **`memory_read` takes `include_history`.** An optional boolean, forwarded when
+  passed. It also returns memories that a later write replaced, each marked
+  `replaced by <id>` in the text and with `superseded_by` in `structuredContent`
+  (an optional field of `memory_read`'s items; `memory_list_recent`'s items are
+  unchanged). It makes replaced memories eligible under normal ranking and
+  `top_k`; it is not a promise of the complete history. Whether replaced
+  memories are hidden from an ordinary read depends on the account's setting,
+  and the `memory_read` description says only that.
+- **Descriptions say the same thing in both cases.** `memory_write`'s description
+  now ends with one clause pointing at `supersedes`. `memory_read`'s sentence
+  about corrections no longer says the earlier memory is never hidden: without
+  `supersedes` it stays as it was; with it, it is marked replaced, hidden from
+  reads when the account hides replaced memories, and returned by
+  `include_history`.
+
 ## [0.17.2] — 2026-11-11
 
 Text-only patch. Tool behavior, schemas, annotations, permissions and

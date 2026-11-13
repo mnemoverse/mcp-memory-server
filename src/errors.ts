@@ -69,6 +69,8 @@
  * opener, same `MNEMOVERSE_API_KEY` variable name, same console origin.
  */
 
+import { structuredText } from "./names.js";
+
 /** Where the raw detail stops. A gateway can answer with a megabyte of HTML,
  *  and an error message is not a place to spend a model's context — but the
  *  first few hundred characters are where the useful part of any real error
@@ -198,6 +200,16 @@ export interface ErrorEnvelope {
    * branch falls back to {@link KEYS_URL} when this is undefined.
    */
   keysUrl?: string;
+  /**
+   * `details.failed_target_id` on a supersede failure (POST /memory/write with
+   * `supersedes`: 404 `not_found`, 409 for any other refusal of one target).
+   * Present only when it is a UUID: it is quoted back to the agent, so a body
+   * that is not core's cannot smuggle prose through it. Never defaulted.
+   */
+  failedTargetId?: string;
+  /** `details.superseded_by` on the same 409 (the target is already replaced
+   *  by this atom), UUID-validated for the same reason. */
+  supersededBy?: string;
 }
 
 /**
@@ -280,6 +292,14 @@ export function parseErrorEnvelope(body: string): ErrorEnvelope {
       ...(typeof o.message === "string" ? { message: o.message } : {}),
       ...(typeof o.retryable === "boolean" ? { retryable: o.retryable } : {}),
       ...(typeof details?.reason === "string" ? { reason: details.reason } : {}),
+      ...(() => {
+        const id = structuredText(details?.failed_target_id, 200);
+        return id !== undefined ? { failedTargetId: id } : {};
+      })(),
+      ...(() => {
+        const id = structuredText(details?.superseded_by, 200);
+        return id !== undefined ? { supersededBy: id } : {};
+      })(),
       ...(() => {
         const keysUrl = validatedKeysUrl(details?.keys_url);
         return keysUrl !== undefined ? { keysUrl } : {};
@@ -813,6 +833,14 @@ export function explainApiFailure(f: ApiFailure, wording?: Wording): string {
   const env = parseErrorEnvelope(f.body);
   let guidance: string;
 
+  // A refused `supersedes` write (core: routes._supersede_http_error and
+  // _reject_supersede_in_room_domain). These three answers are complete in
+  // themselves, and the body's `details` is deliberately NOT echoed: the
+  // sentence names the fields the agent needs (the target id, the reason,
+  // what replaced it) and nothing else, so no raw tail is appended.
+  const supersede = explainSupersedeFailure(f, env);
+  if (supersede !== undefined) return supersede;
+
   if (f.status === 401) {
     guidance = explain401(env, resolved);
   } else if (f.status === 403) {
@@ -1104,6 +1132,58 @@ export class UnreadableBodyError extends Error {
     if (this.bodyPreview !== undefined) f.bodyPreview = this.bodyPreview;
     return new UnreadableBodyError(f, wording);
   }
+}
+
+/**
+ * The three ways core refuses a write that carries `supersedes`, or undefined
+ * when this failure is not one of them (so every other 400/404/409 keeps its
+ * existing explanation).
+ *
+ *  - 400, message "supersedes is not supported for room (xroom:) domains …":
+ *    matched on that phrase, since the 400 carries no `details` and a bare
+ *    400 on /memory/write is any validation error.
+ *  - 404, `details.failed_target_id`, reason "not_found": the target is not in
+ *    the caller's organisation. Core answers the same for another tenant's
+ *    atom, so "not found in this account's memory" is all that is known.
+ *  - 409, `details.failed_target_id` and `details.reason`, and
+ *    `details.superseded_by` when the target is already replaced.
+ *
+ * A 404/409 is claimed only when `failed_target_id` is present: the room-join
+ * and room-create 409s and every other 404 have none, and stay as they were.
+ */
+function explainSupersedeFailure(f: ApiFailure, env: ErrorEnvelope): string | undefined {
+  if (f.method !== "POST" || f.path !== "/memory/write") return undefined;
+  if (f.status === 400 && has(env.message, "supersedes is not supported for room")) {
+    return (
+      "Mnemoverse: nothing was stored and nothing was replaced (400). In a shared " +
+      "room a correction is written next to the old memory; replacing is not " +
+      "supported. Write the correction again WITHOUT `supersedes`, or write it " +
+      "to a domain of your own."
+    );
+  }
+  const target = env.failedTargetId;
+  if (target === undefined) return undefined;
+  if (f.status === 404) {
+    return (
+      `Mnemoverse: nothing was stored and nothing was replaced (404). Memory ${target} ` +
+      "was not found in this account's memory, so it cannot be replaced. Check the " +
+      "id (the `id:` line of a memory_read result) and write again with the right " +
+      "one, or without `supersedes`."
+    );
+  }
+  if (f.status === 409) {
+    const reason = structuredText(env.reason, 80);
+    const why = reason === undefined ? "" : ` Reason: ${reason}.`;
+    const by =
+      env.supersededBy === undefined
+        ? ""
+        : ` It is already replaced by ${env.supersededBy}. Read that memory first; if it is also outdated, write the correction with supersedes set to ${env.supersededBy}.`;
+    return (
+      `Mnemoverse: nothing was stored and nothing was replaced (409). Memory ${target} ` +
+      `could not be replaced.${why}${by} Retrying the same request will conflict again.`
+    );
+  }
+  return undefined;
 }
 
 /**

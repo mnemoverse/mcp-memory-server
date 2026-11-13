@@ -625,8 +625,8 @@ What each tool sends:
 
 | Tool | Data sent |
 |---|---|
-| `memory_write` | the `content`, `concepts`, and `domain` you pass |
-| `memory_read` | the `query`, plus any filters: `domain`, `since`/`until`, `exclude_author`, `top_k`, `order_by` |
+| `memory_write` | the `content`, `concepts`, and `domain` you pass, and the `supersedes` ids when you pass them |
+| `memory_read` | the `query`, plus any filters: `domain`, `since`/`until`, `exclude_author`, `top_k`, `order_by`, `include_history` |
 | `memory_list_recent` | the feed filters: `domain`, `since`/`until`, `exclude_author`, `limit`, `cursor` |
 | `memory_feedback` | the `memory_ids` being rated (sent to the API as `atom_ids`), the `outcome` score, and the `domain` when you pass one (a shared room's address) |
 | `memory_create_room` | the room `name` and `description` |

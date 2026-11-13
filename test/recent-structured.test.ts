@@ -104,8 +104,13 @@ describe("memory_list_recent: tools/list carries the output schema", () => {
       };
     };
     const readItemSchema = readSchema.properties?.items?.items;
+    // memory_read's item carries one more field, `superseded_by` (core sends
+    // it on a replaced revision, which only a history read returns); the feed
+    // does not request history, so it does not declare it.
     expect(Object.keys(itemSchema?.properties ?? {}).sort()).toEqual(
-      Object.keys(readItemSchema?.properties ?? {}).sort(),
+      Object.keys(readItemSchema?.properties ?? {})
+        .filter((k) => k !== "superseded_by")
+        .sort(),
     );
     expect(itemSchema?.required).toEqual(readItemSchema?.required);
   });

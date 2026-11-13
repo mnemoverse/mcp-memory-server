@@ -22,6 +22,7 @@ import {
   rawAuthorName,
   safeInline,
   structuredItem,
+  structuredReadItem,
   type ReadItem,
   type RecentItem,
 } from "./render.js";
@@ -398,6 +399,20 @@ function roomScopeVerdict(
 const PROBE_TIMEOUT_MS = 4000;
 
 /**
+ * Most ids one write may replace: core's SUPERSEDES_MAX_ITEMS
+ * (mnemoverse-core src/mnemo/api/schemas.py, WriteRequestSchema.supersedes,
+ * `max_length`). Not in src/limits.ts: that file is generated from the live
+ * OpenAPI document and `npm run limits:refresh` overwrites it, so a hand-added
+ * entry would not survive; core's published document does not carry the field
+ * until the release that ships it.
+ */
+const SUPERSEDES_MAX_ITEMS = 32;
+
+/** Longest id printed back from the service; ids are opaque strings here
+ *  (OD-7), so there is no format to check, only inline safety. */
+const MAX_ID_CHARS = 200;
+
+/**
  * The memory-item shape shared by memory_read's `outputSchema` and
  * memory_list_recent's (S5, structured-output plan): copied from the
  * connector's `memoryItemOutput` (mnemoverse-mcp-remote, src/tools/index.ts),
@@ -432,6 +447,21 @@ const MEMORY_ITEM_OUTPUT = {
     .optional()
     .describe(
       "Sanitized AGENT identity of the writer (never the human principal) — attribution in shared rooms.",
+    ),
+};
+
+/**
+ * memory_read's item: the shared shape plus `superseded_by`, which core sends on
+ * a replaced revision. Declared here and not in MEMORY_ITEM_OUTPUT because
+ * memory_list_recent shares that shape and its feed does not request history.
+ */
+const READ_ITEM_OUTPUT = {
+  ...MEMORY_ITEM_OUTPUT,
+  superseded_by: z
+    .string()
+    .optional()
+    .describe(
+      "Id of the memory that replaced this one. Present only on a replaced memory, which a read returns when include_history is true or when the account does not hide replaced memories.",
     ),
 };
 
@@ -677,7 +707,7 @@ export function registerMemoryTools(
     "memory_write",
     {
       description:
-        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse. Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse. Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context. To correct a memory you have checked is outdated, pass its memory_id in supersedes.",
       inputSchema: {
         content: z
           .string()
@@ -708,6 +738,23 @@ export function registerMemoryTools(
               " memory_stats rather than retyping one. To write into a shared room, pass its" +
               " address here instead (e.g. 'xroom:room_01ABC'). Find room addresses with" +
               " memory_list_rooms.",
+          ),
+        supersedes: z
+          // Opaque strings, not UUIDs (OD-7, owner, 2026-09-22: see
+          // MEMORY_ITEM_OUTPUT): core re-validates the format and answers 422.
+          .array(z.string().min(1))
+          .min(1)
+          .max(SUPERSEDES_MAX_ITEMS)
+          .refine(
+            (ids) => new Set(ids).size === ids.length,
+            { message: "supersedes must not list the same memory_id twice" },
+          )
+          .optional()
+          .describe(
+            "Pass the memory_id values of memories this write corrects or replaces." +
+              " Use only for memories you have checked are outdated or wrong; the" +
+              " replaced memories stay recoverable with include_history. Not supported" +
+              " in shared rooms (xroom: domains). 1 to 32 distinct ids.",
           ),
       },
       // Copied from the connector's `memoryWriteOutput` (mnemoverse-mcp-remote,
@@ -745,6 +792,12 @@ export function registerMemoryTools(
           .describe(
             "Novelty score for this write (0-1): how much it adds over the nearest memories already saved in the same domain. Outside shared rooms, a write that scores below the service's importance threshold is not stored, and `reason` says why when the service sends one. The score is approximate and can read lower for non-English text. It is not a verdict on whether the memory was worth keeping. Absent when the service sent no score.",
           ),
+        superseded: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "The memory_id values this write replaced, in request order. Present only when the write replaced at least one memory.",
+          ),
       },
       annotations: {
         title: "Store Memory",
@@ -754,7 +807,7 @@ export function registerMemoryTools(
         openWorldHint: false,
       },
     },
-    async ({ content, concepts, domain }) => {
+    async ({ content, concepts, domain, supersedes }) => {
       // NO NORMALISATION HERE — deliberately, after a review found two ways it
       // breaks (2026-08-08). Trimming looked like an obvious win: domain names
       // are matched byte-for-byte in core, so " engineering" opens a permanent
@@ -801,10 +854,11 @@ export function registerMemoryTools(
         atom_id?: string | null;
         importance?: number;
         reason?: string;
+        superseded?: unknown;
       }>("/memory/write", {
         method: "POST",
         body: JSON.stringify(
-          writeRequestBody({ content, concepts, domain }, author),
+          writeRequestBody({ content, concepts, domain, supersedes }, author),
         ),
       });
 
@@ -871,12 +925,36 @@ export function registerMemoryTools(
       // string field, not a literal it must decode. Computed once and used on
       // BOTH verdict branches below, since core can send either on a stored
       // write too. Core's `superseded` array (the ids this write replaced) is
-      // deliberately not carried in this slice.
+      // carried since `supersedes` became a parameter: see `superseded` below.
       const reasonStructured = structuredText(r.reason, 400);
       const importanceStructured =
         typeof r.importance === "number" && Number.isFinite(r.importance)
           ? r.importance
           : undefined;
+      // Only well-formed ids, and only a non-empty list: an ordinary write
+      // answers `superseded: []`, which is not worth a line or a field.
+      const superseded = Array.isArray(r.superseded)
+        ? r.superseded.flatMap((id) => {
+            // Same treatment as `reason`: control, bidi and zero-width
+            // characters normalised, one value for text and structure.
+            const clean = structuredText(id, MAX_ID_CHARS);
+            return clean === undefined ? [] : [clean];
+          })
+        : [];
+      // Requested ids the answer does not confirm (exact string equality: ids
+      // are opaque). The write itself is stored, so this is a sentence in the
+      // text, not an error; `superseded` stays what core confirmed.
+      const confirmed = new Set(
+        Array.isArray(r.superseded)
+          ? r.superseded.filter((id): id is string => typeof id === "string")
+          : [],
+      );
+      const unconfirmed = (supersedes ?? [])
+        .filter((id) => !confirmed.has(id))
+        .flatMap((id) => {
+          const clean = structuredText(id, MAX_ID_CHARS);
+          return clean === undefined ? [] : [clean];
+        });
       const optionalStructured = {
         ...(reasonStructured === undefined ? {} : { reason: reasonStructured }),
         ...(importanceStructured === undefined
@@ -905,11 +983,16 @@ export function registerMemoryTools(
           );
         }
         return structured(
-          `Stored (importance: ${importance}). ID: ${r.atom_id}`,
+          `Stored (importance: ${importance}). ID: ${r.atom_id}` +
+            (superseded.length > 0 ? `\nReplaced: ${superseded.join(", ")}` : "") +
+            (unconfirmed.length > 0
+              ? `\nNot confirmed as replaced: ${unconfirmed.join(", ")}; they may still appear in reads.`
+              : ""),
           {
             stored: true,
             memory_id: r.atom_id,
             ...optionalStructured,
+            ...(superseded.length > 0 ? { superseded } : {}),
           },
         );
       }
@@ -961,6 +1044,9 @@ export function registerMemoryTools(
       // (2026-08-20), so this message never suggests it at all.
       return structured(
         `NOT STORED — nothing was saved.` +
+          (supersedes !== undefined
+            ? ` Nothing was replaced either: the memories listed in \`supersedes\` are unchanged.`
+            : ``) +
           (reasonQuote ? ` Server reason: ${reasonQuote}.` : ``) +
           (importance === "unknown"
             ? ``
@@ -1000,7 +1086,7 @@ export function registerMemoryTools(
     "memory_read",
     {
       description:
-        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write: it is stored alongside the earlier memory, which is not deleted or hidden, unless it is too close to an existing memory, in which case the write is refused. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support.",
+        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write. Without supersedes it is stored alongside the earlier memory, which stays as it was, unless it is too close to an existing memory, in which case the write is refused; with supersedes, the earlier memory is marked replaced, is hidden from reads when the account hides replaced memories, and include_history returns it. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support.",
       inputSchema: {
         query: z
           .string()
@@ -1070,13 +1156,23 @@ export function registerMemoryTools(
               "back, not their scores, and applies only when there are more " +
               "matches than top_k and top_k is below 200.",
           ),
+        include_history: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also return memories that were replaced by a later write; each one is" +
+              " marked with the id that replaced it. History is returned in the" +
+              " domain where the replaced memory is stored. This makes replaced" +
+              " memories eligible to appear under normal ranking and top_k; it is" +
+              " not a promise of the complete history.",
+          ),
       },
       // Item shape is MEMORY_ITEM_OUTPUT (above), shared with
       // memory_list_recent's outputSchema as of S5; see that constant's
       // comment for provenance and the OD-7 id-type note.
       outputSchema: {
         items: z
-          .array(z.object(MEMORY_ITEM_OUTPUT))
+          .array(z.object(READ_ITEM_OUTPUT))
           .describe("Matching memories, ordered per order_by."),
         rooms_not_searched: ROOMS_NOT_SEARCHED_OUTPUT,
       },
@@ -1105,6 +1201,7 @@ export function registerMemoryTools(
       until,
       exclude_author,
       diversity,
+      include_history,
     }) => {
       // ONE value, used for the request AND for every decision about it.
       //
@@ -1139,6 +1236,7 @@ export function registerMemoryTools(
             until,
             exclude_author,
             diversity,
+            include_history,
           }),
         ),
       });
@@ -1315,7 +1413,7 @@ export function registerMemoryTools(
           ...legendNames,
         ),
         {
-          items: items.map(structuredItem),
+          items: items.map(structuredReadItem),
           ...roomsNotSearchedField(scope, "memory_read"),
         },
       );

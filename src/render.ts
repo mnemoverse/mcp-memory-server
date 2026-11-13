@@ -31,6 +31,9 @@ export type ReadItem = {
   domain?: string;
   created_at?: string;
   provenance?: Provenance | null;
+  /** Set by core on a replaced revision, which a read returns only with
+   *  `include_history` (or while the account does not hide replaced ones). */
+  superseded_by?: string | null;
 };
 
 export type RecentItem = {
@@ -298,7 +301,33 @@ export function formatReadItem(item: ReadItem, index: number): string {
   const head = `${index + 1}. ${content}${concepts}${formatDomainTag(
     item?.domain,
   )}${formatAuthorTag(item?.provenance)}${formatDateTag(item?.created_at)}`;
-  return item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head;
+  const replacedBy = replacedById(item);
+  return (
+    (item?.atom_id ? `${head}\n   id: ${item.atom_id}` : head) +
+    (replacedBy === undefined ? "" : `\n   replaced by ${replacedBy}`)
+  );
+}
+
+/** The id of the memory that replaced this one, or undefined. An opaque
+ *  string (OD-7), normalised like `reason` (structuredText) so one value serves
+ *  the text and the structure; a non-string or empty value is no id. */
+function replacedById(item: ReadItem): string | undefined {
+  return structuredText(item?.superseded_by, 200);
+}
+
+/**
+ * {@link structuredItem} for memory_read, plus `superseded_by` on a replaced
+ * revision. Separate from structuredItem on purpose: memory_list_recent shares
+ * that function and its outputSchema does not declare the field.
+ */
+export function structuredReadItem(item: ReadItem): ReturnType<typeof structuredItem> & {
+  superseded_by?: string;
+} {
+  const replacedBy = replacedById(item);
+  return {
+    ...structuredItem(item),
+    ...(replacedBy === undefined ? {} : { superseded_by: replacedBy }),
+  };
 }
 
 /**
