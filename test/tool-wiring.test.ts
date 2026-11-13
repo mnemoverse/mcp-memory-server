@@ -63,6 +63,8 @@ const SENTINEL: Record<string, unknown> = {
   top_k: 7,
   limit: 11,
   cursor: "sentinel-cursor",
+  supersedes: ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+  include_history: true,
 };
 
 /** The parameter names a model is shown — from the wire, not from the source. */

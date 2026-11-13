@@ -46,6 +46,7 @@ export interface ReadArgs {
   until?: string;
   exclude_author?: string;
   diversity?: number;
+  include_history?: boolean;
 }
 
 export interface RecentArgs {
@@ -61,6 +62,7 @@ export interface WriteArgs {
   content: string;
   concepts?: string[];
   domain?: string;
+  supersedes?: string[];
 }
 
 export interface GraphArgs {
@@ -123,6 +125,12 @@ export function readRequestBody(a: ReadArgs): Record<string, unknown> {
     // (core#656), and leaving the field out keeps the body byte-identical to
     // what a deployment that predates it accepts.
     ...(a.diversity ? { diversity: a.diversity } : {}),
+    // Sent exactly when the caller passed a boolean (true or false), so every
+    // body for a caller that never passes it stays byte-identical. Core's
+    // default is false; a core that predates the field ignores it.
+    ...(typeof a.include_history === "boolean"
+      ? { include_history: a.include_history }
+      : {}),
   };
 }
 
@@ -178,6 +186,11 @@ export function writeRequestBody(a: WriteArgs, author?: WriteAuthor): Record<str
     concepts: a.concepts || [],
     domain: a.domain || "general",
     ...(author === undefined ? {} : { author }),
+    // `supersedes` (core: WriteRequestSchema.supersedes): the ids this write
+    // replaces, sent verbatim and ONLY when the caller passed it, so every
+    // existing write body stays byte-identical. The tool's schema already
+    // bounds it to 1-32 distinct UUIDs; core re-validates.
+    ...(a.supersedes === undefined ? {} : { supersedes: a.supersedes }),
   };
 }
 

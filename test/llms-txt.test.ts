@@ -38,6 +38,7 @@ interface Listed {
 const LISTED_TYPES: Record<string, string> = {
   string: "string",
   "string[]": "array",
+  boolean: "boolean",
   integer: "integer",
   number: "number",
   "ISO-8601 string": "string",
