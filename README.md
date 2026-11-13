@@ -10,6 +10,8 @@
 
 Shared rooms let several agents work from one memory.
 
+All the MCP tools of this server: `memory_write`, `memory_read`, `memory_list_recent`, `memory_feedback`, `memory_stats`, `memory_graph`, `memory_create_room`, `memory_invite_to_room`, `memory_join_room`, `memory_list_rooms` and `vault_list`. [Tools](#tools) says what each one does, and [`tools.json`](./tools.json) lists them with their full descriptions.
+
 `@mnemoverse/mcp-memory-server` is the MIT-licensed MCP server for the hosted Mnemoverse memory engine.
 
 **Official sources only:** this repository, the npm package `@mnemoverse/mcp-memory-server`, and the `.mcpb` attached to this repository's [GitHub Releases](https://github.com/mnemoverse/mcp-memory-server/releases). A copy of this README elsewhere with its own "Download" button is not ours: please don't run it, and report it to us at support@mnemoverse.com.
