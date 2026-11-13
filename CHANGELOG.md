@@ -100,6 +100,16 @@ passes neither parameter sends the same request as before.
   reads when the account hides replaced memories, and returned by
   `include_history`.
 
+### Security
+
+- **zod is 4.6.7, and the range no longer admits 4.6.5.** zod before 4.6.6 can
+  exhaust memory while validating an oversized constrained collection
+  ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+  high). The lockfile pinned 4.6.5 and the range was `^4.6.5`; it is now
+  `^4.6.7`. A fresh `npx` install already resolved a patched zod, so this
+  mostly moves the floor and the lockfile that CI and trust scanners read. No
+  tool, schema or behaviour changes.
+
 ## [0.17.2] — 2026-11-11
 
 Text-only patch. Tool behavior, schemas, annotations, permissions and
