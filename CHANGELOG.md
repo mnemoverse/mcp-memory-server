@@ -56,6 +56,18 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+A patch: a dependency floor, no tool, schema or behaviour change.
+
+### Security
+
+- **zod is 4.6.7, and the range no longer admits 4.6.5.** zod before 4.6.6 can
+  exhaust memory while validating an oversized constrained collection
+  ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+  high). The lockfile pinned 4.6.5 and the range was `^4.6.5`; it is now
+  `^4.6.7`. A fresh `npx` install already resolved a patched zod, so this
+  mostly moves the floor and the lockfile that CI and trust scanners read. No
+  tool, schema or behaviour changes.
+
 ## [0.18.0] — 2026-11-13
 
 Minor: two optional parameters are added, and one output field. No tool, no
@@ -99,16 +111,6 @@ passes neither parameter sends the same request as before.
   `supersedes` it stays as it was; with it, it is marked replaced, hidden from
   reads when the account hides replaced memories, and returned by
   `include_history`.
-
-### Security
-
-- **zod is 4.6.7, and the range no longer admits 4.6.5.** zod before 4.6.6 can
-  exhaust memory while validating an oversized constrained collection
-  ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
-  high). The lockfile pinned 4.6.5 and the range was `^4.6.5`; it is now
-  `^4.6.7`. A fresh `npx` install already resolved a patched zod, so this
-  mostly moves the floor and the lockfile that CI and trust scanners read. No
-  tool, schema or behaviour changes.
 
 ## [0.17.2] — 2026-11-11
 
