@@ -56,6 +56,8 @@ git history and the GitHub releases are the record.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-11-13
+
 Minor: two optional parameters are added, and one output field. No tool, no
 existing parameter and no annotation is removed, renamed or retyped; a call that
 passes neither parameter sends the same request as before.
