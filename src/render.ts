@@ -308,14 +308,11 @@ export function formatReadItem(item: ReadItem, index: number): string {
   );
 }
 
-const UUID_SHAPE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-/** The id of the memory that replaced this one, or undefined. Printed and
- *  structured only when it is a UUID-shaped string: it is quoted back to the
- *  agent as an id it may pass to memory_read or `supersedes`. */
+/** The id of the memory that replaced this one, or undefined. An opaque
+ *  string (OD-7), normalised like `reason` (structuredText) so one value serves
+ *  the text and the structure; a non-string or empty value is no id. */
 function replacedById(item: ReadItem): string | undefined {
-  const v = item?.superseded_by;
-  return typeof v === "string" && UUID_SHAPE.test(v) ? v : undefined;
+  return structuredText(item?.superseded_by, 200);
 }
 
 /**

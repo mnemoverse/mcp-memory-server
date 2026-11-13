@@ -63,12 +63,13 @@ passes neither parameter sends the same request as before.
 ### Added
 
 - **`memory_write` takes `supersedes`.** An optional array of 1 to 32 distinct
-  `memory_id` values (UUID strings) of memories this write corrects or replaces.
+  `memory_id` values (opaque strings) of memories this write corrects or replaces.
   It is forwarded to the memory service, which stores the new memory and marks
   every listed one as replaced in a single transaction: all of it or none. It is
   not accepted in shared rooms (`xroom:` domains). The ids are checked here
-  before anything is sent (an empty list, more than 32, a repeat or a value that
-  is not a UUID is refused by the tool's schema).
+  before anything is sent (an empty list, more than 32, a repeat or an empty
+  string is refused by the tool's schema; the format of an id is not checked,
+  since this package treats ids as opaque, and the service re-validates it).
 - **`memory_write` reports what it replaced.** When the write replaced at least
   one memory, the text gains a line `Replaced: <ids>` and `structuredContent`
   gains `superseded: string[]` (declared in `outputSchema`, optional). Nothing
@@ -88,6 +89,12 @@ passes neither parameter sends the same request as before.
   `top_k`; it is not a promise of the complete history. Whether replaced
   memories are hidden from an ordinary read depends on the account's setting,
   and the `memory_read` description says only that.
+- **Descriptions say the same thing in both cases.** `memory_write`'s description
+  now ends with one clause pointing at `supersedes`. `memory_read`'s sentence
+  about corrections no longer says the earlier memory is never hidden: without
+  `supersedes` it stays as it was; with it, it is marked replaced, hidden from
+  reads when the account hides replaced memories, and returned by
+  `include_history`.
 
 ## [0.17.2] — 2026-11-11
 

@@ -408,9 +408,9 @@ const PROBE_TIMEOUT_MS = 4000;
  */
 const SUPERSEDES_MAX_ITEMS = 32;
 
-/** An id as core serialises its UUIDs; a `superseded` entry that is not one is
- *  not core speaking and is dropped rather than printed. */
-const UUID_ID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+/** Longest id printed back from the service; ids are opaque strings here
+ *  (OD-7), so there is no format to check, only inline safety. */
+const MAX_ID_CHARS = 200;
 
 /**
  * The memory-item shape shared by memory_read's `outputSchema` and
@@ -707,7 +707,7 @@ export function registerMemoryTools(
     "memory_write",
     {
       description:
-        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse. Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context.",
+        "Store a long-term memory that persists across sessions and across every AI tool the user has connected to Mnemoverse. Suited to durable information: a stated preference, a decision, a fact about people, roles or project setup, a lesson learned; transient chatter that only matters this turn does not belong here. Never store passwords, API keys, payment data, MFA codes, government IDs, or health records. Behavior: outside shared rooms, a novelty gate refuses a write the embedder cannot tell apart from a memory already stored in the same domain, so the result tells you whether the memory was stored or refused. Write `content` as a self-contained statement that still makes sense when recalled out of context. To correct a memory you have checked is outdated, pass its memory_id in supersedes.",
       inputSchema: {
         content: z
           .string()
@@ -740,12 +740,13 @@ export function registerMemoryTools(
               " memory_list_rooms.",
           ),
         supersedes: z
-          .array(z.guid())
+          // Opaque strings, not UUIDs (OD-7, owner, 2026-09-22: see
+          // MEMORY_ITEM_OUTPUT): core re-validates the format and answers 422.
+          .array(z.string().min(1))
           .min(1)
           .max(SUPERSEDES_MAX_ITEMS)
           .refine(
-            (ids) =>
-              new Set(ids.map((id) => id.toLowerCase())).size === ids.length,
+            (ids) => new Set(ids).size === ids.length,
             { message: "supersedes must not list the same memory_id twice" },
           )
           .optional()
@@ -933,9 +934,12 @@ export function registerMemoryTools(
       // Only well-formed ids, and only a non-empty list: an ordinary write
       // answers `superseded: []`, which is not worth a line or a field.
       const superseded = Array.isArray(r.superseded)
-        ? r.superseded.filter(
-            (id): id is string => typeof id === "string" && UUID_ID.test(id),
-          )
+        ? r.superseded.flatMap((id) => {
+            // Same treatment as `reason`: control, bidi and zero-width
+            // characters normalised, one value for text and structure.
+            const clean = structuredText(id, MAX_ID_CHARS);
+            return clean === undefined ? [] : [clean];
+          })
         : [];
       const optionalStructured = {
         ...(reasonStructured === undefined ? {} : { reason: reasonStructured }),
@@ -1066,7 +1070,7 @@ Replaced: ${superseded.join(", ")}` : ""),
     "memory_read",
     {
       description:
-        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write: it is stored alongside the earlier memory, which is not deleted or hidden, unless it is too close to an existing memory, in which case the write is refused. Replaced memories are hidden when the account hides them; include_history returns them. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support.",
+        "Search long-term memory for user preferences, past decisions, project setup, people, or earlier context. The memory persists across sessions and across every AI tool the user has connected. It applies when an answer may depend on something from an earlier session or another tool; it is not needed for general world knowledge. Returns matches ranked by relevance (or newest-first with order_by: 'recency'); each result carries an id; after the answer, memory_feedback takes these ids to record which memories helped. A correction is a fresh memory_write. Without supersedes it is stored alongside the earlier memory, which stays as it was, unless it is too close to an existing memory, in which case the write is refused; with supersedes, the earlier memory is marked replaced, is hidden from reads when the account hides replaced memories, and include_history returns it. No MCP deletion tool is exposed; a user can permanently delete an individual personal memory through the REST API or with help from support.",
       inputSchema: {
         query: z
           .string()

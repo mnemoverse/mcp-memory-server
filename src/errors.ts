@@ -69,6 +69,8 @@
  * opener, same `MNEMOVERSE_API_KEY` variable name, same console origin.
  */
 
+import { structuredText } from "./names.js";
+
 /** Where the raw detail stops. A gateway can answer with a megabyte of HTML,
  *  and an error message is not a place to spend a model's context — but the
  *  first few hundred characters are where the useful part of any real error
@@ -210,10 +212,6 @@ export interface ErrorEnvelope {
   supersededBy?: string;
 }
 
-/** A canonical 8-4-4-4-12 hex id, the only shape core's UUID fields serialise
- *  to. Anything else is not core speaking and is never printed. */
-const UUID_SHAPE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
 /**
  * Is `details.keys_url` safe to put in front of a user?
  *
@@ -294,14 +292,14 @@ export function parseErrorEnvelope(body: string): ErrorEnvelope {
       ...(typeof o.message === "string" ? { message: o.message } : {}),
       ...(typeof o.retryable === "boolean" ? { retryable: o.retryable } : {}),
       ...(typeof details?.reason === "string" ? { reason: details.reason } : {}),
-      ...(typeof details?.failed_target_id === "string" &&
-      UUID_SHAPE.test(details.failed_target_id)
-        ? { failedTargetId: details.failed_target_id }
-        : {}),
-      ...(typeof details?.superseded_by === "string" &&
-      UUID_SHAPE.test(details.superseded_by)
-        ? { supersededBy: details.superseded_by }
-        : {}),
+      ...(() => {
+        const id = structuredText(details?.failed_target_id, 200);
+        return id !== undefined ? { failedTargetId: id } : {};
+      })(),
+      ...(() => {
+        const id = structuredText(details?.superseded_by, 200);
+        return id !== undefined ? { supersededBy: id } : {};
+      })(),
       ...(() => {
         const keysUrl = validatedKeysUrl(details?.keys_url);
         return keysUrl !== undefined ? { keysUrl } : {};
@@ -1174,12 +1172,8 @@ function explainSupersedeFailure(f: ApiFailure, env: ErrorEnvelope): string | un
     );
   }
   if (f.status === 409) {
-    // `reason` is a short snake_case code in core; anything else is not
-    // printed, since it is quoted into model-facing text.
-    const why =
-      env.reason !== undefined && /^[a-z][a-z_]{0,39}$/.test(env.reason)
-        ? ` Reason: ${env.reason}.`
-        : "";
+    const reason = structuredText(env.reason, 80);
+    const why = reason === undefined ? "" : ` Reason: ${reason}.`;
     const by =
       env.supersededBy === undefined
         ? ""
