@@ -23,6 +23,8 @@ All the MCP tools of this server: `memory_write`, `memory_read`, `memory_list_re
 [![Research: SLoD arXiv](https://img.shields.io/badge/Research-arXiv%3A2603.08965-b31b1b)](https://arxiv.org/abs/2603.08965)
 [![Glama quality](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server/badges/score.svg)](https://glama.ai/mcp/servers/mnemoverse/mcp-memory-server)
 
+<a href="https://www.tinylaunch.com/launch/25287-mnemoverse"><img src="https://www.tinylaunch.com/tinylaunch_badge_live_now.svg" alt="Live on TinyLaunch" width="202"></a>
+
 ## What is Mnemoverse Memory?
 
 Mnemoverse is a hosted memory engine for AI agents, reached over the Model Context Protocol. It stores what your agents learn (decisions, preferences, lessons) and returns it in any connected tool, so one memory follows you across Claude Code, Cursor, VS Code and ChatGPT with one account: an OAuth sign-in on the hosted endpoint, or an API key in a local config.
