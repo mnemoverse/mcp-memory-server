@@ -37,3 +37,6 @@ GEMINI.md
 AGENTS.md
 tsconfig.test.json
 *.mcpb
+# DeepWiki steering file (2026-11-19): tells deepwiki.com which pages to build
+# for this repository. Not for the bundle.
+.devin/

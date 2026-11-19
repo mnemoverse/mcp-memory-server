@@ -1,0 +1,41 @@
+{
+  "repo_notes": [
+    {
+      "content": "This repository is the public stdio MCP server for Mnemoverse, published on npm as @mnemoverse/mcp-memory-server. It does not contain the memory engine: a tool call is checked locally first (apiFetch in src/index.ts refuses to run without an API key, with a documentation placeholder key, or with an unsafe API URL) and is then sent to the hosted Mnemoverse API with the user's API key. Document what is in this repository: the tools defined in src/tools.ts and listed in tools.json, the resources and prompts, the request and error handling, the per-host setup snippets in docs/snippets and docs/configs, and the release metadata files. Do not describe how the hosted service stores, ranks, consolidates or forgets memories, and do not estimate its limits or performance; that code is not in this repository, and the public documentation at https://mnemoverse.com/docs is the source for the service's behaviour. When a tool's behaviour depends on the service, say that it calls the API and link the documentation instead of guessing.",
+      "author": "Mnemoverse"
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "What the package is (a stdio MCP server that connects an MCP host to the hosted Mnemoverse API), how it is installed with npx and an API key, and how it differs from connecting to the hosted remote MCP endpoint directly. Mention the /shared entry point (src/shared.ts), which exports the same tool surface for other servers. Sources: README.md, llms.txt, llms-install.md, package.json, manifest.json, src/index.ts, src/shared.ts."
+    },
+    {
+      "title": "Tools",
+      "purpose": "Each memory tool exposed by the server: its name, input fields and what it returns, as defined in src/tools.ts and tools.json. Note which tools read and which write. Include how read results are rendered (src/render.ts, src/names.ts) and that tool schemas are published in JSON Schema 2020-12 (src/schema-dialect.ts).",
+      "parent": "Overview"
+    },
+    {
+      "title": "Resources and prompts",
+      "purpose": "The MCP resources and prompts the server registers, from src/resources.ts and src/prompts.ts, and the guidance text that tells a connected model how to use the memory (src/teaching.ts).",
+      "parent": "Overview"
+    },
+    {
+      "title": "Requests, scope and errors",
+      "purpose": "How the server builds API requests (src/requests.ts), how a domain or scope is passed (src/scope.ts), how a timestamp without an offset is read as UTC (src/time.ts), the client-side limits it enforces (src/limits.ts, scripts/generate-limits.mjs) and how API errors reach the host (src/errors.ts).",
+      "parent": "Overview"
+    },
+    {
+      "title": "Setup by host",
+      "purpose": "Configuration for each supported host from docs/snippets and docs/configs: Claude Code, Claude Desktop, Cursor, VS Code, Devin Desktop (formerly Windsurf; its files keep the windsurf name), Cline, JetBrains and Zed, both the local npx server and the hosted variant, plus Gemini CLI through gemini-extension.json. Explain that the configs are generated from src/configs/source.json by scripts/generate-configs.mjs and must not be edited by hand (CONTRIBUTING.md)."
+    },
+    {
+      "title": "Releases and registry metadata",
+      "purpose": "How a release keeps package.json, server.json, manifest.json, glama.json, context7.json and gemini-extension.json in step (scripts/check-release-sync.mjs, scripts/generate-tools-manifest.mjs), and where CHANGELOG.md records user-visible changes."
+    },
+    {
+      "title": "Contributing",
+      "purpose": "How to build, test and propose changes, from CONTRIBUTING.md, AGENTS.md, tsconfig.json and the scripts folder."
+    }
+  ]
+}
